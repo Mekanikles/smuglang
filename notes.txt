@@ -1,0 +1,35 @@
+Notes
+
+strings hurt in C++
+	way too easy to be super inefficient with strings
+		Copies everywhere, concatenation inefficient, how did D to it?
+	built-in string type?
+
+grammar should have unambiguous uniform function delcaration
+	func(int, int, ... -> bool, float)
+
+	func is implicit pointer type? May do not mix data and function types in terms of pointers, when ever to use non-pointer functions?
+
+
+support raw strings
+	syntax? #raw_string(hej det här är en \\\\\\ konstig string)
+
+= should not be an expression?
+	Removes if (a = 5) mistake and other ambiguities
+
+	solve local assignment bodies:
+		if (Val* x = getValPtr())
+		{
+			x->doStuff();
+		}
+
+
+should support macros?
+	Good usage of macros:
+		LINE, PLATFORM
+		LOG(tex)
+			used because you want callsite info in logging
+		PROFILE_SCOPE
+			used because you want to inject scope objects in outer scope
+
+

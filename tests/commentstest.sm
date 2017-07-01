@@ -1,0 +1,24 @@
+
+// Comment
+
+// Comment // Nested comment
+
+/* Block comment
+	// Nested comment
+*/
+
+/* Block comment
+	Ignore this
+*/
+
+// Outer comment /* nested block comment */
+
+/* Outer block comment
+	/* Nested Block comment 
+		*/
+*/
+
+printf("Hello world" /* Inline block comment */);
+
+
+

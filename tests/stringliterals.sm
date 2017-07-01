@@ -1,0 +1,16 @@
+
+pass("Hello world", 
+	 	"Hello 'world'",
+		"Hello\nworld") // Fails, should escape backslash
+		
+//fail("Hello
+//world");
+
+//fail("hello);
+
+//fail('hello');
+
+
+
+
+
