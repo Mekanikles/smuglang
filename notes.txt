@@ -23,6 +23,14 @@ support raw strings
 			x->doStuff();
 		}
 
+explitic pointer arithmatic
+	maybe operators should work on either object or object pointer
+		explitic syntax about pointer arithmatic
+		can help avoid references
+
+slices
+	Current foreach syntax in c++ makes it difficult to do [1..] or [..n-1] ranges
+	introduce slice operators? native on arrays
 
 should support macros?
 	Good usage of macros:

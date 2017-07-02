@@ -1,0 +1,7 @@
+
+// Import c lib
+#import("c") "stdio.h"; // Require semi-colon?
+
+// Use c lib
+printf("Hello world");
+

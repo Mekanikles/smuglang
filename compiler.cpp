@@ -2,6 +2,8 @@
 #include <vector>
 #include <string>
 #include <iostream>
+#include <sstream>
+
 #include <fstream>
 #include <cctype>
 
@@ -9,17 +11,21 @@ template<typename T>
 using vector = std::vector<T>;
 using string = std::string;
 
-void print(const string& str, int indent = 0)
+void printIndent(int indent)
 {
 	for (int i = 0; i < indent; ++i)
 		std::clog << "    ";	
+}
+
+void print(const string& str, int indent = 0)
+{
+	printIndent(indent);
 	std::clog << str;
 }
 
 void printLine(const string& str, int indent = 0)
 {
-	for (int i = 0; i < indent; ++i)
-		std::clog << "    ";
+	printIndent(indent);
 	std::clog << str << std::endl;
 }
 
@@ -35,12 +41,13 @@ void printError(const string& str)
 enum class TokenType
 {
 	Import,
-	OpenParantesis,
-	CloseParantesis,
+	OpenParenthesis,
+	CloseParenthesis,
 	StringLiteral,
 	IntegerLiteral,
 	FloatLiteral,
 	Symbol,
+	CompilerDirective,
 	EndOfScan,
 	Invalid,
 };
@@ -62,13 +69,14 @@ string toString(const Token& t)
 	switch (t.type)
 	{
 		case TokenType::Import: return "Import";
-		case TokenType::OpenParantesis: return "OpenParantesis";
-		case TokenType::CloseParantesis: return "CloseParantesis";
+		case TokenType::OpenParenthesis: return "OpenParenthesis";
+		case TokenType::CloseParenthesis: return "CloseParenthesis";
 		case TokenType::StringLiteral: return string("StringLiteral(") + t.symbol + ")";
 		case TokenType::IntegerLiteral: return string("IntegerLiteral(") + t.symbol + ")";
 		case TokenType::FloatLiteral: return string("FloatLiteral(") + t.symbol + ")";
 		case TokenType::Symbol: return string("Symbol(") + t.symbol + ")";
 		case TokenType::EndOfScan: return "EndOfScan";
+		case TokenType::CompilerDirective: return string("CompilerDirective(") + t.symbol + ")";
 		default: return "UknownToken";
 	};
 }
@@ -208,6 +216,18 @@ public:
 			if (c == ' ' || c == '\t' || c == ';' || c == '\n')
 				continue;
 
+			if (c == '#')
+			{
+				m_inStream.get(c);
+				string w = parseWord(c);
+				// TODO: Add error for no symbol
+				if (w != "")
+				{
+					*outToken = Token(TokenType::CompilerDirective, w);
+					return true;
+				}
+			}
+
 			if (isalpha(c))
 			{
 				string w = parseWord(c);
@@ -224,13 +244,13 @@ public:
 
 			if (c == '(')
 			{
-				*outToken = Token(TokenType::OpenParantesis);
+				*outToken = Token(TokenType::OpenParenthesis);
 				return true;
 			}
 
 			if (c == ')')
 			{
-				*outToken = Token(TokenType::CloseParantesis);
+				*outToken = Token(TokenType::CloseParenthesis);
 				return true;
 			}
 		}
@@ -259,20 +279,66 @@ struct AST
 	{
 		vector<Node*> children;
 		virtual ~Node() = default;
+
+		void addChild(AST::Node* child)
+		{
+			children.push_back(child);
+		}
+
+		virtual string toString() = 0;
+		virtual void generateC(std::ostream& out) {}
 	};
 
 	struct Module : Node
 	{
+		string toString() override { return "Module"; }
+		void generateC(std::ostream& out) override
+		{
+			for (auto* child : children)
+			{
+				child->generateC(out);
+				out << ";\n"; 
+			}
+		}
 	};
 
 	struct Import : Node
 	{	
 		string file;
+		string toString() override { return string("Import(file:") + file + ")"; }
+
+		void generateC(std::ostream& out) override
+		{
+			out << "#include <" << file << ">";
+		}		
 	};
 
 	struct Call : Node
 	{
-		string name;
+		string function;
+		vector<string> args;
+		string toString() override 
+		{ 
+			string s = "Call(";
+			s += function;
+			for (auto& a : args)
+				s += string(", ") + a;
+			s += ")";
+			return s; 
+		}
+
+		void generateC(std::ostream& out) override
+		{
+			out << function << "(";
+			int argCount = args.size();
+			if (argCount > 0)
+			{
+				out << args[0];
+				for (int i = 1; i < argCount; ++i)
+					out << ", " << args[i];
+			}
+			out << ")";
+		}
 	};
 
 	Node* root = nullptr;
@@ -288,25 +354,76 @@ NodeT* createNode(Args... args)
 	return n;
 }
 
+vector<Token> s_tokens;
 
-bool parseTopLevel(ScannerFactory* scannerFactory, AST* ast, ParseError* outError)
+bool parseTopLevel(ScannerFactory* scannerFactory, AST::Node* root, ParseError* outError)
 {
-	assert(!ast->root);
-
-	ast->root = createNode<AST::Module>();
-
 	auto s = scannerFactory->scanTopLevel();
-
-	vector<Token> tokens;
 
 	Token token;
 	while(1)
 	{
 		if (s.getToken(&token, outError))
 		{
-			tokens.push_back(std::move(token));
-			if (token.type == TokenType::EndOfScan)
-				break;
+			s_tokens.push_back(token);
+
+			switch (token.type)
+			{
+				case TokenType::EndOfScan:
+					return true;
+				case TokenType::CompilerDirective:
+				{
+					if (token.symbol == "import")
+					{
+						Token t;
+						s.getToken(&t, outError);
+						s_tokens.push_back(t);
+						assert(t.type == TokenType::OpenParenthesis);
+
+						s.getToken(&t, outError);
+						s_tokens.push_back(t);
+						assert(t.type == TokenType::StringLiteral);
+
+						s.getToken(&t, outError);
+						s_tokens.push_back(t);
+						assert(t.type == TokenType::CloseParenthesis);
+
+						s.getToken(&t, outError);
+						s_tokens.push_back(t);
+						assert(t.type == TokenType::StringLiteral);
+
+						auto node = createNode<AST::Import>();
+						node->file = t.symbol;
+						root->addChild(node);
+					}
+
+					break;
+				}
+				case TokenType::Symbol:
+				{
+					Token t;
+					s.getToken(&t, outError);
+					s_tokens.push_back(t);
+
+					// Function call
+					if (t.type == TokenType::OpenParenthesis)
+					{
+						auto node = createNode<AST::Call>();
+						node->function = token.symbol;
+
+						s.getToken(&t, outError);
+						s_tokens.push_back(t);
+						assert(t.type == TokenType::StringLiteral);
+						
+						node->args.push_back(string("\"") + t.symbol + "\"");
+
+						root->addChild(node);					
+					}
+				}
+
+				default:
+					break;
+			}
 		}
 		else
 		{
@@ -314,11 +431,73 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST* ast, ParseError* outErro
 		}
 	}
 
-	printLine("Tokens:");
-	for (auto& t : tokens)
-		printLine(toString(t), 1);
-
 	return true;
+}
+
+
+bool parse(ScannerFactory* scannerFactory, AST* ast, ParseError* outError)
+{
+	assert(!ast->root);	
+	ast->root = createNode<AST::Module>();
+
+	return parseTopLevel(scannerFactory, ast->root, outError);
+}
+
+void printAST(AST* ast, int indent = 0)
+{
+	/*
+		Module
+		|-Function1
+		| |-Expr
+		|   |-Expr1
+		| 	| |-Op1
+		| 	| |-Op2
+		|	|-Epxr2
+		|	  |-Op1
+		|	  |-Op2
+		|-Function2
+	*/
+
+	vector<bool> depthStack;
+	std::function<void(AST::Node*)> rec = [&](AST::Node* node)
+	{
+		printIndent(indent);
+		const int depth = depthStack.size();
+		if (depth > 0)
+		{
+			for (int i = 0; depth - 1; ++i)
+			{
+				if (depthStack[i])
+					print("| ");
+				else
+					print("  ");
+			}
+			print("|-");
+		}
+
+		printLine(node->toString());
+
+		const int childCount = node->children.size();
+		if (childCount > 0)
+		{
+			depthStack.push_back(true);
+			for (int i = 0; i < childCount - 1; ++i)
+			{
+				rec(node->children[i]);
+			}
+			depthStack.back() = false;
+			rec(node->children.back());
+			depthStack.pop_back();
+		}
+	};
+
+	rec(ast->root);
+}
+
+void generateC(AST* ast, std::ostream* out)
+{
+	
+	ast->root->generateC(*out);
 }
 
 int main(int argc, char** argv)
@@ -334,13 +513,29 @@ int main(int argc, char** argv)
 	AST ast;
 	ParseError error;
 
-	if (!parseTopLevel(&scannerFactory, &ast, &error))
+	if (!parse(&scannerFactory, &ast, &error))
 	{
 		LOG(error.error);
 	}
 	else
 	{
 		LOG("Parse success!");
+		printLine("Tokens:");
+			for (auto& t : s_tokens)
+				printLine(toString(t), 1);
+
+		printLine("AST:");
+		printAST(&ast, 1);
+
+		std::stringstream output;
+		generateC(&ast, &output);
+
+		printLine("Generated C:");
+		string l;
+		while (getline(output, l))
+		{
+			printLine(l, 1);
+		}
 	}
 }
 
