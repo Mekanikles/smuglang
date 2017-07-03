@@ -1,5 +1,10 @@
 Notes
 
+Reserver some ascii symbol for internal name mangling, like @?
+
+
+Everything is public by default, if not otherwise specified
+
 strings hurt in C++
 	way too easy to be super inefficient with strings
 		Copies everywhere, concatenation inefficient, how did D to it?
@@ -9,6 +14,17 @@ grammar should have unambiguous uniform function delcaration
 	func(int, int, ... -> bool, float)
 
 	func is implicit pointer type? May do not mix data and function types in terms of pointers, when ever to use non-pointer functions?
+
+
+namespaces and types should be first-class object supporting reflection
+	#import should import a namespace
+		with something like "using", you can import everything into the local namespace
+		you should also be able to import (and rename) individual symbols/functions, using regular compile-time reflection
+			something like 
+				#func myImport (namespace) { 
+					for each s in namespace.functions 
+					{ %import s as #concat("prefix", s); }}
+				#myImport(#load("stdio.h", "c"));
 
 
 support raw strings
@@ -31,6 +47,10 @@ explitic pointer arithmatic
 slices
 	Current foreach syntax in c++ makes it difficult to do [1..] or [..n-1] ranges
 	introduce slice operators? native on arrays
+
+possibly to solve virtual functions in "template" types?
+	Problem is that number of templates if only known when all usages has been determined
+	Should be doable, code generation might require multiple passes
 
 should support macros?
 	Good usage of macros:

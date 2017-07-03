@@ -275,45 +275,57 @@ private:
 
 struct AST
 {
+	struct Module;
+	struct Import;
+	struct Call;
+
+	struct Visitor;
+
 	struct Node
 	{
 		vector<Node*> children;
-		virtual ~Node() = default;
-
 		void addChild(AST::Node* child)
 		{
 			children.push_back(child);
 		}
 
-		virtual string toString() = 0;
-		virtual void generateC(std::ostream& out) {}
-	};
-
-	struct Module : Node
-	{
-		string toString() override { return "Module"; }
-		void generateC(std::ostream& out) override
+		void acceptChildren(Visitor* v)
 		{
 			for (auto* child : children)
-			{
-				child->generateC(out);
-				out << ";\n"; 
-			}
+				child->accept(v);
 		}
+
+		virtual ~Node() = default;
+
+		virtual void accept(Visitor* v) = 0;
+		virtual string toString() = 0;	
 	};
 
-	struct Import : Node
+	struct Visitor
+	{
+		virtual void visit(Module* node) { node->acceptChildren(this); }
+		virtual void visit(Import* node) { node->acceptChildren(this); }
+		virtual void visit(Call* node) { node->acceptChildren(this); }
+	};
+
+	template<typename T>
+	struct NodeImpl : Node
+	{
+		void accept(Visitor* v) override { v->visit((T*)this); }
+	};
+
+	struct Module : NodeImpl<Module>
+	{
+		string toString() override { return "Module"; }
+	};
+
+	struct Import : NodeImpl<Import>
 	{	
 		string file;
-		string toString() override { return string("Import(file:") + file + ")"; }
-
-		void generateC(std::ostream& out) override
-		{
-			out << "#include <" << file << ">";
-		}		
+		string toString() override { return string("Import(file:") + file + ")"; }	
 	};
 
-	struct Call : Node
+	struct Call : NodeImpl<Call>
 	{
 		string function;
 		vector<string> args;
@@ -325,19 +337,6 @@ struct AST
 				s += string(", ") + a;
 			s += ")";
 			return s; 
-		}
-
-		void generateC(std::ostream& out) override
-		{
-			out << function << "(";
-			int argCount = args.size();
-			if (argCount > 0)
-			{
-				out << args[0];
-				for (int i = 1; i < argCount; ++i)
-					out << ", " << args[i];
-			}
-			out << ")";
 		}
 	};
 
@@ -494,11 +493,48 @@ void printAST(AST* ast, int indent = 0)
 	rec(ast->root);
 }
 
-void generateC(AST* ast, std::ostream* out)
+struct CGenerator : AST::Visitor
 {
+	CGenerator(std::ostream* out)
+		: m_out(out)
+	{}
+
+	void run(AST* ast)
+	{
+		ast->root->accept(this);
+
+		auto& out = *m_out;
 	
-	ast->root->generateC(*out);
-}
+		out << m_head.str();
+		out << "main(){\n";
+		out << m_body.str();
+		out << "}\n";
+	}
+
+	void visit(AST::Import* node) override
+	{
+		auto& out = m_head;
+		out << "#include <" << node->file << ">\n";
+	}
+
+	void visit(AST::Call* node) override
+	{
+		auto& out = m_body;
+		out << node->function << "(";
+		int argCount = node->args.size();
+		if (argCount > 0)
+		{
+			out << node->args[0];
+			for (int i = 1; i < argCount; ++i)
+				out << ", " << node->args[i];
+		}
+		out << ");";
+	};
+
+	std::ostream* m_out;
+	std::stringstream m_head;
+	std::stringstream m_body;
+}; 
 
 int main(int argc, char** argv)
 {
@@ -528,7 +564,8 @@ int main(int argc, char** argv)
 		printAST(&ast, 1);
 
 		std::stringstream output;
-		generateC(&ast, &output);
+		CGenerator generator(&output);
+		generator.run(&ast);
 
 		printLine("Generated C:");
 		string l;
@@ -538,6 +575,4 @@ int main(int argc, char** argv)
 		}
 	}
 }
-
-
 
