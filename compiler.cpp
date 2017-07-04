@@ -3,6 +3,7 @@
 #include <string>
 #include <iostream>
 #include <sstream>
+#include <regex>
 
 #include <fstream>
 #include <cctype>
@@ -567,11 +568,22 @@ int main(int argc, char** argv)
 		CGenerator generator(&output);
 		generator.run(&ast);
 
-		printLine("Generated C:");
-		string l;
-		while (getline(output, l))
+		std::regex filenameRegex(R"((.*[\\\/])?(.+)$))");
+		std::smatch matches;
+
+		assert(std::regex_search(args[0], matches, filenameRegex));
 		{
-			printLine(l, 1);
+			string outFileName = string(".smug/") + matches[2].str() + ".smc";
+			std::ofstream outFile(outFileName);
+
+			printLine("Generated C:");
+			string l;
+			while (getline(output, l))
+			{
+				printLine(l, 1);
+				outFile << l << std::endl;
+			}
+			std::cout << outFileName;
 		}
 	}
 }
