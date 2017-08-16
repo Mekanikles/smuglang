@@ -12,21 +12,41 @@ template<typename T>
 using vector = std::vector<T>;
 using string = std::string;
 
-void printIndent(int indent)
+class Indenter
 {
-	for (int i = 0; i < indent; ++i)
-		std::clog << "    ";	
+public:
+	Indenter(int indent) : m_indent(indent) {}
+    friend std::ostream& operator<<(std::ostream& out, const Indenter& indenter);  
+private:
+	int m_indent;
+};
+
+std::ostream& operator<<(std::ostream& out, const Indenter& indenter)  
+{  
+	for (int i = 0; i < indenter.m_indent; ++i)
+		out << "    ";	
+    return out;  
+} 
+
+Indenter indent(int i)
+{
+	return Indenter(i);
 }
 
-void print(const string& str, int indent = 0)
+void printIndent(int i)
 {
-	printIndent(indent);
+	std::clog << indent(i);	
+}
+
+void print(const string& str, int i = 0)
+{
+	printIndent(i);
 	std::clog << str;
 }
 
-void printLine(const string& str, int indent = 0)
+void printLine(const string& str, int i = 0)
 {
-	printIndent(indent);
+	printIndent(i);
 	std::clog << str << std::endl;
 }
 
@@ -49,6 +69,8 @@ enum class TokenType
 	FloatLiteral,
 	Symbol,
 	CompilerDirective,
+	SemiColon,
+	Comma,
 	EndOfScan,
 	Invalid,
 };
@@ -76,6 +98,8 @@ string toString(const Token& t)
 		case TokenType::IntegerLiteral: return string("IntegerLiteral(") + t.symbol + ")";
 		case TokenType::FloatLiteral: return string("FloatLiteral(") + t.symbol + ")";
 		case TokenType::Symbol: return string("Symbol(") + t.symbol + ")";
+		case TokenType::SemiColon: return string("SemiColon");
+		case TokenType::Comma: return string("Comma");
 		case TokenType::EndOfScan: return "EndOfScan";
 		case TokenType::CompilerDirective: return string("CompilerDirective(") + t.symbol + ")";
 		default: return "UknownToken";
@@ -214,8 +238,20 @@ public:
 			else if (scanRes == ScanResult::Skip)
 				continue;
 
-			if (c == ' ' || c == '\t' || c == ';' || c == '\n')
+			if (c == ' ' || c == '\t' || c == '\n')
 				continue;
+
+			if (c == ';')
+			{
+				*outToken = Token(TokenType::SemiColon);
+				return true;
+			}
+
+			if (c == ',')
+			{
+				*outToken = Token(TokenType::Comma);
+				return true;
+			}
 
 			if (c == '#')
 			{
@@ -229,10 +265,15 @@ public:
 				}
 			}
 
+			// Symbols
 			if (isalpha(c))
 			{
 				string w = parseWord(c);
-				*outToken = Token(TokenType::Symbol, w);
+				// TODO: Difference between toplevel scan and body scan?
+				if (w == "import")
+					*outToken = Token(TokenType::Import);
+				else	
+					*outToken = Token(TokenType::Symbol, w);
 				return true;
 			}
 
@@ -322,6 +363,13 @@ struct AST
 
 	struct Import : NodeImpl<Import>
 	{	
+		enum Type
+		{
+			Type_Native,
+			Type_C,
+		}; 
+		Type type;
+
 		string file;
 		string toString() override { return string("Import(file:") + file + ")"; }	
 	};
@@ -371,32 +419,50 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Node* root, ParseError* 
 			{
 				case TokenType::EndOfScan:
 					return true;
-				case TokenType::CompilerDirective:
+				case TokenType::Import:
 				{
-					if (token.symbol == "import")
+					Token t;
+					s.getToken(&t, outError);
+
+					AST::Import::Type importType = AST::Import::Type_Native;
+
+					// optional import params
+					// TODO: invoke new parameter list scanner?
+					if (t.type == TokenType::OpenParenthesis)
 					{
-						Token t;
-						s.getToken(&t, outError);
 						s_tokens.push_back(t);
-						assert(t.type == TokenType::OpenParenthesis);
 
 						s.getToken(&t, outError);
 						s_tokens.push_back(t);
 						assert(t.type == TokenType::StringLiteral);
+
+						assert(t.symbol == "c");
+						importType = AST::Import::Type_C;
 
 						s.getToken(&t, outError);
 						s_tokens.push_back(t);
 						assert(t.type == TokenType::CloseParenthesis);
 
 						s.getToken(&t, outError);
-						s_tokens.push_back(t);
-						assert(t.type == TokenType::StringLiteral);
-
-						auto node = createNode<AST::Import>();
-						node->file = t.symbol;
-						root->addChild(node);
 					}
+				
+					s_tokens.push_back(t);
+					assert(t.type == TokenType::StringLiteral);
+					string file = t.symbol;
 
+					s.getToken(&t, outError);
+					s_tokens.push_back(t);
+					assert(t.type == TokenType::SemiColon);
+
+					auto node = createNode<AST::Import>();
+					node->file = file;
+					assert(importType == AST::Import::Type_C);
+					node->type = importType;
+					root->addChild(node);
+					break;
+				}
+				case TokenType::CompilerDirective:
+				{
 					break;
 				}
 				case TokenType::Symbol:
@@ -412,10 +478,53 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Node* root, ParseError* 
 						node->function = token.symbol;
 
 						s.getToken(&t, outError);
+
+						// TODO: temp
+						vector<string> args;
+
+						// TODO: invoke param parser (which invokes expr parser)
+						if (t.type == TokenType::StringLiteral ||
+							t.type == TokenType::IntegerLiteral ||
+							t.type == TokenType::FloatLiteral)
+						{
+							while(true)
+							{
+								print(toString(t));
+								assert(t.type == TokenType::StringLiteral ||
+										t.type == TokenType::IntegerLiteral ||
+										t.type == TokenType::FloatLiteral);
+								s_tokens.push_back(t);
+
+								if (t.type == TokenType::StringLiteral)
+								{
+									node->args.push_back(string("\"") + t.symbol + "\"");
+								}
+								else
+								{
+									node->args.push_back(t.symbol);
+								}
+
+								s.getToken(&t, outError);
+								if (t.type == TokenType::Comma)
+								{
+									s_tokens.push_back(t);
+									s.getToken(&t, outError);
+									continue;
+								}
+								else
+								{
+									break;
+								}
+							}
+						}
+
+						assert(t.type == TokenType::CloseParenthesis);
 						s_tokens.push_back(t);
-						assert(t.type == TokenType::StringLiteral);
 						
-						node->args.push_back(string("\"") + t.symbol + "\"");
+
+						s.getToken(&t, outError);
+						assert(t.type == TokenType::SemiColon);
+						s_tokens.push_back(t);
 
 						root->addChild(node);					
 					}
@@ -494,10 +603,19 @@ void printAST(AST* ast, int indent = 0)
 	rec(ast->root);
 }
 
+void printTokens(const vector<Token>& tokens)
+{
+	for (auto& t : tokens)
+	{
+		printLine(toString(t), 1);
+	}
+}
+
 struct CGenerator : AST::Visitor
 {
 	CGenerator(std::ostream* out)
 		: m_out(out)
+		, m_indent(0)
 	{}
 
 	void run(AST* ast)
@@ -507,7 +625,7 @@ struct CGenerator : AST::Visitor
 		auto& out = *m_out;
 	
 		out << m_head.str();
-		out << "main(){\n";
+		out << "int main()\n{\n";
 		out << m_body.str();
 		out << "}\n";
 	}
@@ -515,7 +633,9 @@ struct CGenerator : AST::Visitor
 	void visit(AST::Import* node) override
 	{
 		auto& out = m_head;
-		out << "#include <" << node->file << ">\n";
+
+		if (node->type == AST::Import::Type_C)
+			out << "#include <" << node->file << ">\n";
 	}
 
 	void visit(AST::Call* node) override
@@ -529,12 +649,13 @@ struct CGenerator : AST::Visitor
 			for (int i = 1; i < argCount; ++i)
 				out << ", " << node->args[i];
 		}
-		out << ");";
+		out << ");\n";
 	};
 
 	std::ostream* m_out;
 	std::stringstream m_head;
 	std::stringstream m_body;
+	int m_indent;
 }; 
 
 int main(int argc, char** argv)
@@ -558,8 +679,7 @@ int main(int argc, char** argv)
 	{
 		LOG("Parse success!");
 		printLine("Tokens:");
-			for (auto& t : s_tokens)
-				printLine(toString(t), 1);
+		printTokens(s_tokens);
 
 		printLine("AST:");
 		printAST(&ast, 1);

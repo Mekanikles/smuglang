@@ -1,7 +1,9 @@
 
 // Import c lib
-#import("c") "stdio.h"; // Require semi-colon?
+import("c") "stdio.h";
 
 // Use c lib
-printf("Hello world");
+printf("Hello %s\n", "world");
+
+printf("Hello %s\n", "world, again");
 

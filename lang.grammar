@@ -1,0 +1,34 @@
+
+module: declaration_list?
+
+declaration_list:
+	declaration |
+	declaration declaration_list
+
+// func[int, int]
+function_signature: 'func' closure? func_sign_params
+
+closure: '[' unamed_typelist? ']'
+
+unamed_typelist: 
+	SYMBOL |
+	SYMBOL ',' unamed_typelist
+
+func_sign_params: '(' unamed_typelist? ('->' unamed_typelist)? ')'
+
+function_declaration: 'func' SYMBOL capture? func_decl_params func_body
+
+lambda_declaration: lambda_full_decl | lambda_short_decl
+
+lambda_full_decl: 'func' capture? func_decl_params func_body
+
+// TODO:
+lambda_short_decl: 
+
+// TODO
+capture:
+
+func_decl_params: '(' named_typelist? ('->' (named_typelist | unamed_typelist) ')'
+
+func_body: '{' statement_list '}'
+

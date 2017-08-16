@@ -1,0 +1,554 @@
+// Language spec file, this file should compile, document and demonstrate all language features
+
+#import "UnitTests"
+
+#extern function printf(i:>char, ...)
+
+#define LOLOLOL = 5;
+
+// Memory Labels ///////////////////////////////////////////////////////////////
+
+// TODO: Are all accessor labels implicit from usage? (except const?)
+// Accessor labels:
+//	const: 
+//		after initialization, memory can only be read.
+//		destructors are allowed to be called 
+//TODO: this allows destructors with random code to circumvent constness, should be allowed?
+//	readonly:
+//		memory can only be read, cannot be initialized or destroyed.
+//		implicitly forced for in-parameters
+//	writeonly:
+//		memory can only be written to, can be initialized (and destroyed)
+//		implicitly forced for out-parameters
+//	mutable:
+//		memory can be read and written to.
+//		default for stack variables
+
+// Lifetime labels:
+//	scoped:
+//		will be destroyed at end of scope, cannot be moved out of scope
+//		default for stack variables
+//	temp:
+//		will not be destroyed, must be moved out of scope or destroyed manually
+//		(which entails a move)
+
+
+// Initialization labels:
+//	new: //TODO: bad name?
+//		must be initialized after declaration statement.
+//		default for stack variables
+//	initialized:
+//		must already be initialized
+//		default for in-parameters
+//	uninitialized:
+//		is initialized at some point later, after declaration
+//		cannot implicitly cast to initialized
+//			compiler can elide "cast" to initialized, otherwise must be manually done by user
+//		TODO: should not be able body without init?
+
+
+// owned:
+//	owned memory, can be moved from if not used anymore
+//	
+
+// readonly T:
+//	readable-only memory, can be a copy of original memory or a reference
+//	readonly applies to post-initialization.
+
+// mutable T:
+//	mutable and readable memory, can be moved to from source if source is not
+//	used any more, otherwise copied from the source.
+
+// writeonly T:
+//	writable-only memory, same restrictions as mutable. Used for output values.
+
+// ref T:
+//	ref-type, remote borrowed memory, used if writing should have side-effects outside of body
+//	or if non-local changes can affect read data.
+//	detroying does nothing
+
+// owned ref T:
+// 	ref-type, owned remote memory, like ref, referenced memory will be destroyed
+//	when reference is destroyed
+
+// shared ref T:
+//	ref-type, shared remote mempy, like ref but can have multiple owners, 
+//	will be destroyed when last reference is destroyed
+
+// weak ref T:
+// 	ref-typ, weakly referenced remote memory, like ref, but needs to be checked before
+//	usage. 
+//	referenced memory will be destroyed when owned reference is destroyed
+
+// initialized T:
+//	initialized memory. Applies to post initialization. Default memory label (even used?)
+//	Treated as uninitialized before initialization.
+//	Compiler will automatically call destroy at end of scope
+
+// uninitialized T:
+//	uninitialized memory. Applies to post declaration.
+//	Compiler will automatically call destroy at end of scope if initialized
+// 	Cannot cast uninitialized memory to initialized memory, needs constructor
+// TODO: Illegal for unintialized memory to leave scope?
+
+
+// readonly ref writeonly T:
+//	readable-only reference to writable-only data
+
+// General grammar for type declarations is:
+//	(access-qualifier ref-type?)* type
+
+
+func hej(string s)
+{
+	string a = s;
+
+}
+
+
+
+
+
+// Assignment //////////////////////////////////////////////////////////////////
+
+struct T
+{
+	int a;
+}
+
+// = operator always mem copies POD types
+T t2;
+const T t1;
+
+t2 = t1;
+
+// If copied type is non-copyable, an implicit copy function must exist, or
+//	copy must be done manually.
+
+// TODO: Add POD/nonPOD qualifiers to structs
+struct R // nonPOD qualifier elided due to owned ref.
+{
+	owned int a;
+}
+
+// TODO: Should implicit be applicable to all funcs? or use special syntax for
+//	constructor copyer etc
+
+implicit func construct(-> uninitialied R out)
+{
+	out.a = null;
+}
+
+implicit func copyconstruct(readonly R in -> writeonly uninitialized R out) 
+{
+	out = in; // shallow copy
+	//return t; // TODO: how to return new default-initialized value 
+}
+
+
+implicit func construct(-> R out)
+
+implicit func copy(readonly R in -> writeonly R out) 
+{
+	out = in; // shallow copy
+	//return t; // TODO: how to return new default-initialized value 
+}
+
+
+
+constructor R(int a = 5)
+{
+
+}
+
+copy
+
+R r1;
+R r2;
+
+r1 = r2.copy();
+
+var uninitialized R r3;
+
+// Error, "copy constructor" is needed to initialize r3 with r2
+// 	since type is nonPOD and copy cannot be used on uninitialized values
+r3 = r2; 
+
+
+
+// Memory pointers /////////////////////////////////////////////////////////////
+
+T t;
+
+// TODO: Should pointers be typable? (for automatic correct arithmetic ops)
+const addr(MyType) a = addr(t);
+const b = a + 18;
+
+const t = b as ref(T);
+
+// TODO: Pointers should probably not allow dot-notation for "methods"
+
+// References //////////////////////////////////////////////////////////////////
+
+const ref(MyType) a;
+const MyType a;
+var ref b = ref a; // Warning: taking mutable ref from const object
+
+b = createMyType(); // assign to a if func returns MyType
+
+b = createMyTypeRef() // assign to b if func return ref MyType
+
+// dot-access on refs refers to underlying object
+b.member = 5; 
+b.fun(5);
+
+// Ownership References ////////////////////////////////////////////////////////
+
+// Reference with a single owner, will free resource when scope is lost
+//	Contains deallocation information
+// 	TODO: Figure out when to move owner, should not be "copyable"
+owned(MyType)
+
+// Shared reference, indicates multiple owners, will free resource when ref count == 0
+// 	Contains deallocation information
+// 	TODO: Figure out when to inc/dec ref count for argument passing
+shared(MyType)
+
+// Weak reference, indicates external ownership (shared or owned).
+// 	Testable for existence of memory
+//	TODO: Cannot be used directly? must be cast to ref?
+//	TODO: Core or library type?
+weak(MyType)
+
+// Standard reference + typeinfo for base type
+//	Allows down-casts and testing for types
+// Does not contain deallocation info
+// TODO: Keep?
+polymorph(MyType)
+
+// memory labels
+uninitialized owned ref T;
+shared ref T;
+weak ref T;
+ref T;
+
+ref? T t;
+owned ref T t;
+
+// alloc interface
+func alloc(
+
+// new implementation
+func new(->uninitialized owned ref $T out)
+{
+	uninitialized owned ref T t;
+	t = alloc(T);
+	t = T.constructor();
+}
+
+// Namespaces //////////////////////////////////////////////////////////////////
+
+// Namespaces can share names with other namespaces and structs
+//	but cannot have conflicting symbols
+// TODO: Should namespace and struct be the 
+
+namespace T
+{
+
+	// TODO: Referencing T as a first param should still allow for UFCS?
+	func test(T this, int a)
+	{
+	}
+}
+
+T t;
+T.test(t, 5);
+t.test(5);
+
+struct T
+{}
+
+// Structs /////////////////////////////////////////////////////////////////////
+
+struct T1(type(Numeric) T, int size)
+{
+	T b[size];
+
+	constructor($T in);
+}
+
+// b is a compile-time parameter
+func addInt(T a -> T, static int b)
+{
+	return a + b;
+}
+
+func addInt(static $T(INumeric) a, static int b = 5 -> T)
+
+
+// TODO: Maybe force $(INumeric) notation for parameters that can generate
+//	multiple functions. Just INumeric will bind to the default type.
+//	Valuable for int, which can mean many ints, but should default to s64.
+//	TODO: Think this through
+func addInt($ a, int b -> $)
+{
+	return a + b;
+}
+
+static $T hej = createHej();
+
+
+
+print("type of hej is: " ~ T);
+$T hej = createHej();
+
+
+struct TheType#(int size)
+{
+	float b[size];
+}
+
+TheType#(5)
+
+TheType#(5)
+
+funcCall#(int, 5)(sdfsdf);
+
+
+// TODO: How to specialize function
+func fiveAdder = #spec addInt(.b = 5);
+
+func transport($ a -> $(func))
+	return func (a, 
+
+
+
+int i = 5;
+float f = 5;
+fiveAdder(i, f)
+
+// Declare type parameters for this scope/body
+struct T2($1 P1, $2 P2 = bool)
+{
+	P1 a;
+	$2 b;
+}
+
+type IntSpec specializes T2(.P2 = int);
+
+
+// Can use incomplete types as params, must be complete when instantiated
+struct T3($(IEnum) P1)
+{
+	T a;
+}
+
+// Type declarations can be inferred and referenced later
+$A hej = createHej();
+var $ A hej2 = hej;
+
+var T2(int, float) hej3;
+var T2(.P1 = int, .P2 = float) hej4;
+
+var T3(T2(int, float)) hej5;
+
+// Types can be parameterized on constant values as well
+struct T4(int)
+{
+
+}
+
+// Functions ///////////////////////////////////////////////////////////////////
+
+// Uninitialized values
+//	Declares a constructor for that value
+//	Expects a uninitialized output target
+//	If called on an initialized target, target will be destroyed first
+func funinit( -> uninitialized MyType out)
+{
+	out.a = 1;
+	out.b = 2;
+}
+
+func createString(->uninitialized string)
+{
+	return constructString("unknown");
+}
+
+string hej = stringFunc("Lol");
+
+implicit func init(uninit utf8string in -> utf8string out)
+{
+
+}
+
+func constructString(-> utf8string out);
+
+utf8string hej = init(hej) + constructString();
+
+
+
+
+constructor init(-> utf8string out)
+
+
+destructor deinit(ref utf8string this)
+
+implicit func init( -> deinit utf8string out)
+
+implicit func toString(utf8string in -> uninit string out)
+
+implicit func init(utf8string in -> uninit utf8string out)
+implicit func assign(utf8string in -> utf8string out)
+{
+
+}
+
+func appendEOS(-> utf8string out)
+
+implicit func destroy(string label -> utf8string out)
+
+hej = destroy();
+
+
+hej = appendEOS();
+
+utf8string hej = "lol" + "hej";
+
+utf8string hej;
+
+
+// Basic functions
+func emptyFunc() {}
+func f1(int i) {}
+func f2(-> int) { return 0; }
+func f3(int i -> int) { return i; }
+
+// Parametric functions
+func f4($1 in -> $2)
+{
+	$2 = #typeof(in.a);
+
+	// out parameter type elided from type of in.a
+	return in.a;
+}
+
+// Variadic args
+func f5(string str, $... args)
+{
+	printf(str, args);
+}
+
+func f5(int... intparams)
+{
+
+}
+
+//TODO: problem with out-params, if type elision is used
+// What is the difference between (->int i) and (-> i) and (->int)
+//	symbol table must be consulted to resolve = BAD
+// SOLVED: No type elision for normal function declarations
+//	Use $ for parametric types
+
+func f4
+func f4(x -> #typeof(x) out)
+
+(x, y) => x + y
+func(x, y) { print x; return x + y; }
+
+// Named out parameters
+//	All or none out parameters must be named
+func f1(int i, float f -> int oi, float of)
+{
+	oi = i; of = f;
+}
+
+// Unnamed out parameters
+func f2(int i, float f -> int, float)
+{
+	return (i, f);
+}
+
+// Function declaration as assignment
+const f3 = func(int -> float
+
+
+
+// function type formatted as "func [closure types] (in types -> out types)"
+
+const func(int, float -> int, float) f2 = func(int i, float f -> int, float) 
+	{
+		return (i, f);
+	}; // Semi colon necessary, since function is part of assignment statement
+
+
+const func(int, float -> int, float) hej = (func[int, int](int -> float, float) inF -> func(int -> float) outF)
+{
+
+}
+
+func(int -> float, float) hej = func(-> float, float) 
+{   
+	o1 = 5;
+	o2 = 6;
+	//return (0.1, 0.2);
+};
+
+// Type Classes ////////////////////////////////////////////////////////////////
+
+// Type Classes are promises of implementation details
+
+class sint($ T)
+{
+	#typeof(T) in (i8, i16, i32, i64);
+}
+
+class uint($ T)
+{
+	#typeof(T) in (u8, u16, u32, u64);
+}
+
+class int($ T)
+{
+	#classof(T) in (SignedInteger, UnsignedInteger);
+}
+
+class float($ T)
+{
+	#typeof(T) in (f16, f32, f64);
+}
+
+class NumericPrimitive($ T)
+{
+	#classof(T) in (int, float);
+}
+
+class NumericOperable($ T)
+{
+	// TODO: Should check return type and type of operands as well
+	#typeinfo(T).operators in (+, -, *, /);
+}
+
+class Numeric($ T)
+{
+	#classof(T) in (NumericPrimitive, NumericOperable);
+}
+
+// TODO: To generate classes as a union of others, $-declaration should 
+//	be able to specify multiple classes
+class Numeric($(NumericPrimitive, NumericOperable) T);
+
+// Type classes can be used in place of type specifiers
+//	will result in a generated type/function
+func test(Numeric t) print(t);
+
+// Type classes can be used with $-declarations
+func test2($T(Numeric) t -> T) return t * t; 
+
+
+
+
+
+
+
+

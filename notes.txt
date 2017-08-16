@@ -1,5 +1,104 @@
 Notes
 
+Compiler
+	* AST is modified and rearranged with new type delcarations
+	* Polymorphic functions should probably generate prototype ASTs with missing types. Maybe these can be shared and merged for certain specializations
+	* Generated types/functions are generated in the same scope as the prototype
+	* Should be able to output code-version of final AST for inspection (basically reverse-engineering the ast
+
+
+Interfaces/Type Classes
+	* Requirements on params imposed by $T(Interface) etc should be manually available somehow. Previous statement is built-in "should implement" requirement.
+	* TODO: Figure out difference between typeclass/interface and actual type. Is A in $T(A) an interface or a polymorhic type? Should be able to specify multiple interfaces, but not multiple types (implement AND, OR?)
+	* Important: we want to be able to "implement" interfaces at usage site
+	rather than declaration site. Solution might be some kind of "implements" 
+	keyword what defines how to bind functions to interface methods. Java has problems inheriting two interfaces with the same function name. Rust solves it this way.
+
+
+Compile time polymorphism code explosion
+	* Current design allows for a lot of unintended code generation
+		(especially for untyped addr and ref)
+	* See if code generation can be internally qualified not on type, but on data,
+		for reusing generations of addr, addr(Type) that does not require different
+		functions
+
+	* See if compilation time can be sped up by caching generated functions/types
+
+Destructors and allocators
+	Think about RAII and slowness for custom allocators. How can we avoid "freeing" memory that is going to be freed later by a pool?
+	* Stupid idea: different versions of types based on context?
+
+Built-in functions
+	Array append etc, should be replacable. Defined using the language.
+		* In core/basic/std module implicitly included, but able to discard/override
+
+Standardized thread local context?
+	Can be supplied by std lib, can supply logging, allocation etc
+
+Allocators
+	Should be able to replace default allocator
+		* jai has a compiler "preload" file where allocator types can be defined
+		along with type structs etc
+	Should support pool allocators, heap allocators, equal block allocators (refridgerators?)
+
+	Set current allocator via "Global" context, be careful with multithreading though. Jai uses a hidden extra arg to all functions, use thread storage instead?
+
+	Stacked allocators could be cool, might be nice for tracking mem allocs for large programs that use custom allocators
+
+
+
+
+Compiler Warnings and Errors
+	Each warning and error has a defined id that can be referred to in #-declarations:
+		#warnings.suppress #vars.warnings.w205 {        }
+		using #vars.warnings #warnings.expect([ w205, w206, w107 ])
+			{
+				statement_that_generates_warnings
+			}
+		using ws = #vars.warnings for (w in ws) printf w;
+	Would be ideal if a testing framework could mute warnings and errors
+		and check them against an array, like #warnings.warnings
+	Maybe user compile-functions/checks can generate custom warnings/errors?
+
+Runtime logging
+	Should context contain logging utils?
+		Logger should support arbitrary filtering from systems and logging levels
+	Can we disable logging with "compiler flags"?
+
+Arrays
+	support static length arrays, dynamic arrays
+	figure out reference to array block (slice?), should work as an in-param, regardless of dynamic/static source
+	Different size requirements for different arrays:
+		static -> typed pointer, compile time size (do we even need the pointer if its on the stack?, the compiler can just hardcode locations)
+		dynamic -> typed pointer + runtime size (+ capacity?)
+		slice/reference -> typed pointer + size, cannot be resized in place
+	Bounds checking on/off should be able to control dyamically (part of type?)
+	Should support dynamic stack "static" arrays, as dynamic or another type?
+
+Compile time code execution?
+	Look at Dyncall for calls to external libs
+
+Figure out imports!
+	Imports can have side effects, at least through static assignment
+		When does static assignment happen?
+	Try to avoid import blocks at file start, would be good to import where usage is
+		But then, when is import initialized, and how to separate states from different imports? 
+	
+		How does D solve it?
+			Imports refer to the same module, regardless of declaration scope
+			Differentiates between thread local (default) and global static inits/destructors
+				local inits/destructs are run when a thread is created
+				globals are run on process startup/termination
+
+
+Compiler should warn about unused "imports"
+
+Pointer semantics:
+	Maybe keep separation between owned pointers (remote object?) and "references"
+		Fixes need for not_null, unique_ptr etc? Think about shared/smart, weak
+	Adress datatype for pointer arithmatics?
+
+
 Reserver some ascii symbol for internal name mangling, like @?
 
 
@@ -26,9 +125,21 @@ namespaces and types should be first-class object supporting reflection
 					{ %import s as #concat("prefix", s); }}
 				#myImport(#load("stdio.h", "c"));
 
+DataViews and StorageLatouts
+	To solve SOA etc
+	View should let you "typedef" a struct onto another memorywise with new accessors? Usecase: generic atomic data structures with a "data" block member. 		Inheritance allows you to add new members, which is bad. Typedef does not allow you to redefine what "data" is.
 
 support raw strings
 	syntax? #raw_string(hej det här är en \\\\\\ konstig string)
+
+should single quotes be necessary for character literals?
+	Does "" entail a null character on the end, for c compatibility?
+		maybe zstring type?
+	can free up single quotes as syntax	 
+
+infer types for numeric literals
+	5 could mean 5u32, 5u16, 5s32 5s16, 5f32, 5f64 etc
+	if possible, storage decides how to infer
 
 = should not be an expression?
 	Removes if (a = 5) mistake and other ambiguities
@@ -59,5 +170,8 @@ should support macros?
 			used because you want callsite info in logging
 		PROFILE_SCOPE
 			used because you want to inject scope objects in outer scope
+
+inline functions
+	keyword inline should fit somewhere. Applicable to lambdas?
 
 
