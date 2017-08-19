@@ -111,10 +111,125 @@ struct ParseError
 	string error;
 };
 
+class BufferedInputStream
+{
+public:
+	BufferedInputStream(std::istream& inStream) 
+		: m_inStream(inStream)
+	{
+	}
+
+	operator bool()
+	{
+		return (m_end != m_begin) || (bool)m_inStream;
+	}
+
+	char get()
+	{
+		char c;
+		return get(c) ? c : EOF;
+	}
+
+	bool get(char& c)
+	{
+		bool empty = false;
+		if (m_end == m_begin)
+			empty = fillBuffer() == 0;
+
+		if (!empty)
+		{
+			c = m_circBuffer[m_begin++];
+			m_begin = m_begin % BUF_SIZE;
+			return true;
+		}
+		else
+		{
+			c = EOF;
+			return false;
+		}
+	}
+
+	char lookAhead(uint count = 1)
+	{
+		assert(count < MAX_LOOKAHEAD);
+		uint buffered = bufferedLength();
+		if (buffered <= count)
+			buffered = fillBuffer();
+
+		if (buffered > count)
+			return m_circBuffer[m_begin + count];
+		else
+			return EOF;
+	}
+
+	void ignore(uint count = 1)
+	{
+		const uint buffered = bufferedLength();
+		if (count < buffered)
+		{
+			m_begin += count;
+			m_begin = m_begin % BUF_SIZE;
+		}
+		else
+		{
+			m_inStream.ignore(count - buffered);
+			m_end = m_begin;
+		}
+	}
+
+	char peek()
+	{
+		bool empty = false;
+		if (m_end == m_begin)
+			empty = fillBuffer() == 0;
+
+		if (!empty)
+			return m_circBuffer[m_begin];
+		else
+			return EOF;
+	}
+private:
+	uint bufferedLength()
+	{
+		return (m_end + BUF_SIZE - m_begin) % BUF_SIZE;
+	}
+
+	uint fillBuffer()
+	{
+		const uint bufSpace = BUF_SIZE - bufferedLength();
+		const uint fill = bufSpace - 1; // Leave one char for m_end
+		if (fill)
+		{
+			uint fill1 = std::min(BUF_SIZE - m_end, fill);
+			m_inStream.read(&m_circBuffer[m_end], fill1);
+			m_end += m_inStream.gcount();
+
+			m_end = m_end % BUF_SIZE;
+
+			uint fill2 = fill - fill1;
+			if (fill2)
+			{
+				m_inStream.read(&m_circBuffer[m_end], fill2);
+				m_end += m_inStream.gcount();
+			}
+		}
+
+		return bufferedLength();
+	}
+
+private:
+	static const uint MAX_LOOKAHEAD = 63;
+	static const uint BUF_SIZE = MAX_LOOKAHEAD + 1;
+	char m_circBuffer[BUF_SIZE];
+	uint m_begin = 0;
+	uint m_end = 0;
+	std::istream& m_inStream;
+};
+
 class Scanner
 {
 public:	
-	Scanner(std::istream& inStream) 
+	Scanner(BufferedInputStream& inStream) 
 		: m_inStream(inStream)
 	{
 	}
@@ -129,44 +244,66 @@ protected:
 	};
 
 
-	ScanResult scan(char c, char n, Token* outToken, ParseError* outParseError)
+	ScanResult scanComments(ParseError* outParseError)
 	{
-		if (m_isLineComment)
-		{
-			if (c == '\n')
-				m_isLineComment = false;
-			return ScanResult::Skip;
-		}
-		else if (m_blockCommentLevel > 0)
-		{
-			if (c == '*' && n == '/')
-				--m_blockCommentLevel;
-			return ScanResult::Skip;		
-		}
-		else
-		{
-			if (c == '/' && n == '/')
-			{
-				m_isLineComment = true;
-				m_inStream.ignore(1);
+		const char n1 = m_inStream.peek();
+		const char n2 = m_inStream.lookAhead();
 
-				return ScanResult::Skip;
-			}
-			if (c == '/' && n == '*')
+		// Line comment
+		if (n1 == '/' && n2 == '/')
+		{
+			m_inStream.ignore(2);
+			char c;
+			while (m_inStream.get(c))
 			{
-				++m_blockCommentLevel;
-				m_inStream.ignore(1);
-
-				return ScanResult::Skip;
+				// Skip until eol
+				if (c == '\n')
+					return ScanResult::Skip;
 			}
 
-			return ScanResult::Nothing;
+			// TODO: Error
+			return ScanResult::Error;
 		}
+
+		// Block comments
+		if (n1 == '/' && n2 == '*')
+		{
+			m_inStream.ignore(2);
+			uint level = 1;
+
+			char c;
+			while (m_inStream.get(c))
+			{
+				// Find end blocks
+				if (c == '/' && m_inStream.peek() == '*')
+				{
+					m_inStream.ignore();
+					++level;
+				}
+
+				// Find end blocks
+				if (c == '*' && m_inStream.peek() == '/')
+				{
+					m_inStream.ignore();
+					if (level == 0)
+						return ScanResult::Error;
+
+					if (level == 1)
+						return ScanResult::Skip; 
+
+					--level;
+				}				
+			}
+
+			// TODO: Error
+			return ScanResult::Error;
+		}
+
+		return ScanResult::Nothing;
 	}
 
 protected:
-	std::istream& m_inStream;
-	bool m_isLineComment = false;
+	BufferedInputStream& m_inStream;
 	int m_blockCommentLevel = 0;
 };
 
@@ -175,11 +312,13 @@ class TopLevelScanner : Scanner
 public:	
 	using Scanner::Scanner;
 
-	string parseWord(char c)
+	string parseWord()
 	{
 		string ret;
-		if (isalpha(c))
+		if (isalpha(m_inStream.peek()))
 		{
+			char c;
+			m_inStream.get(c);
 			ret += c;
 			while(isalnum(m_inStream.peek()))
 			{
@@ -191,8 +330,92 @@ public:
 		return ret;
 	}
 
-	string parseStringLiteral(char c)
+	bool isBinaryDigit(char c)
 	{
+		return (c == '0') || (c == '1');
+	}
+
+	TokenType parseNumericLiteral(string& out)
+	{
+		char n = m_inStream.peek();
+		if (n == '0')
+		{
+			// hexadecimal
+			if (m_inStream.lookAhead() == 'x')
+			{
+				out += m_inStream.get();
+				out += m_inStream.get();
+
+				assert(isxdigit(m_inStream.peek()));
+				out += m_inStream.get();
+				while (isxdigit(m_inStream.peek()))
+					out += m_inStream.get();
+
+				return TokenType::IntegerLiteral;
+			}
+
+			// binary
+			if (m_inStream.lookAhead() == 'b')
+			{
+				out += m_inStream.get();
+				out += m_inStream.get();
+
+				assert(isBinaryDigit(m_inStream.peek()));
+				out += m_inStream.get();
+				while (isBinaryDigit(m_inStream.peek()))
+					out += m_inStream.get();
+
+				return TokenType::IntegerLiteral;
+			}
+		}
+
+		do
+		{
+			if (isdigit(n))
+			{
+				out += m_inStream.get();
+			}
+			else if (n == '.')
+			{
+				out += m_inStream.get();
+
+				// We know this is a floating type
+				while ((n = m_inStream.peek()) != EOF)
+				{
+					if(isdigit(n))
+					{
+						out += m_inStream.get();
+					}
+					else if (n == 'e' || n == 'E')
+					{
+						out += m_inStream.get();
+						assert(isdigit(m_inStream.peek()));
+						out += m_inStream.get();
+						// We can only digits after exponent sign
+						while (isdigit(m_inStream.peek()))
+							out += m_inStream.get();
+					}
+					else
+					{
+						break;
+					}
+				}
+
+				return TokenType::FloatLiteral;
+			}
+			else
+			{
+				break;
+			}
+		} while((n = m_inStream.peek()) != EOF);
+
+		return TokenType::IntegerLiteral;
+	}
+
+	string parseStringLiteral()
+	{
+		char c;
+		m_inStream.get(c);
 		string ret;
 		if (c == '"')
 		{
@@ -216,6 +439,10 @@ public:
 				assert(m_inStream.peek() != '\n');
 			}
 		}
+		else
+		{
+			assert(false);
+		}
 		// eat end-of-string identifier
 		m_inStream.get(c);
 		return ret;
@@ -224,13 +451,11 @@ public:
 	bool getToken(Token* outToken, ParseError* outError)
 	{
 		ParseError error;
-		char c;
 		outToken->type = TokenType::EndOfScan;
-		while (m_inStream.get(c))
-		{	
-			char n = m_inStream.peek();
 
-			auto scanRes = Scanner::scan(c, n, outToken, outError);
+		while (m_inStream)
+		{
+			auto scanRes = Scanner::scanComments(outError);
 			if (scanRes == ScanResult::FoundToken)
 				return true;
 			else if (scanRes == ScanResult::Error)
@@ -238,25 +463,32 @@ public:
 			else if (scanRes == ScanResult::Skip)
 				continue;
 
-			if (c == ' ' || c == '\t' || c == '\n')
-				continue;
-
-			if (c == ';')
+			const char n = m_inStream.peek();
+			if (n == ' ' || n == '\t' || n == '\n')
 			{
+				m_inStream.ignore();
+				continue;
+			}
+
+			if (n == ';')
+			{
+				m_inStream.ignore();
 				*outToken = Token(TokenType::SemiColon);
 				return true;
 			}
 
-			if (c == ',')
+			if (n == ',')
 			{
+				m_inStream.ignore();
 				*outToken = Token(TokenType::Comma);
 				return true;
 			}
 
-			if (c == '#')
+			// Compiler directive
+			if (n == '#')
 			{
-				m_inStream.get(c);
-				string w = parseWord(c);
+				m_inStream.ignore();
+				string w = parseWord();
 				// TODO: Add error for no symbol
 				if (w != "")
 				{
@@ -266,9 +498,9 @@ public:
 			}
 
 			// Symbols
-			if (isalpha(c))
+			if (isalpha(n))
 			{
-				string w = parseWord(c);
+				string w = parseWord();
 				// TODO: Difference between toplevel scan and body scan?
 				if (w == "import")
 					*outToken = Token(TokenType::Import);
@@ -277,24 +509,44 @@ public:
 				return true;
 			}
 
-			if (c == '"' || c == '\'')
+			// Numericals
+			if (isdigit(n) || (n == '.' && isdigit(m_inStream.lookAhead())))
 			{
-				string s = parseStringLiteral(c);
+				string literal;
+				TokenType type = parseNumericLiteral(literal);
+
+				assert(literal != "");
+				if (type == TokenType::FloatLiteral)
+					*outToken = Token(TokenType::FloatLiteral, literal);
+				else
+					*outToken = Token(TokenType::IntegerLiteral, literal);
+
+				return true;
+			}
+
+			if (n == '"' || n == '\'')
+			{
+				string s = parseStringLiteral();
 				*outToken = Token(TokenType::StringLiteral, s);
 				return true;
 			}
 
-			if (c == '(')
+			if (n == '(')
 			{
+				m_inStream.ignore();
 				*outToken = Token(TokenType::OpenParenthesis);
 				return true;
 			}
 
-			if (c == ')')
+			if (n == ')')
 			{
+				m_inStream.ignore();
 				*outToken = Token(TokenType::CloseParenthesis);
 				return true;
 			}
+
+			// Don't let anything unparsed through
+			assert(false);
 		}
 
 		return true;
@@ -304,7 +556,7 @@ public:
 class ScannerFactory
 {
 public:
-	ScannerFactory(std::istream& inStream) 
+	ScannerFactory(BufferedInputStream& inStream) 
 		: m_inStream(inStream)
 	{
 	}
@@ -312,7 +564,7 @@ public:
 	TopLevelScanner scanTopLevel() { return TopLevelScanner(m_inStream); }
 
 private:
-	std::istream& m_inStream;
+	BufferedInputStream& m_inStream;
 };
 
 struct AST
@@ -489,7 +741,6 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Node* root, ParseError* 
 						{
 							while(true)
 							{
-								print(toString(t));
 								assert(t.type == TokenType::StringLiteral ||
 										t.type == TokenType::IntegerLiteral ||
 										t.type == TokenType::FloatLiteral);
@@ -667,7 +918,8 @@ int main(int argc, char** argv)
 
 	std::ifstream inFile(args[0]);
 
-	ScannerFactory scannerFactory(inFile);
+	BufferedInputStream inStream(inFile);
+	ScannerFactory scannerFactory(inStream);
 	AST ast;
 	ParseError error;
 
