@@ -1,4 +1,5 @@
 #include <cassert>
+#include <cstdlib>
 #include <vector>
 #include <string>
 #include <iostream>
@@ -569,51 +570,62 @@ private:
 
 struct AST
 {
+	struct Statement;
 	struct Module;
 	struct Import;
 	struct Call;
-
-	struct Visitor;
-
-	struct Node
-	{
-		vector<Node*> children;
-		void addChild(AST::Node* child)
-		{
-			children.push_back(child);
-		}
-
-		void acceptChildren(Visitor* v)
-		{
-			for (auto* child : children)
-				child->accept(v);
-		}
-
-		virtual ~Node() = default;
-
-		virtual void accept(Visitor* v) = 0;
-		virtual string toString() = 0;	
-	};
+	struct StringLiteral;
+	struct IntegerLiteral;
+	struct FloatLiteral;
 
 	struct Visitor
 	{
-		virtual void visit(Module* node) { node->acceptChildren(this); }
-		virtual void visit(Import* node) { node->acceptChildren(this); }
-		virtual void visit(Call* node) { node->acceptChildren(this); }
+		virtual void visit(Statement* node) { assert(false); }
+		virtual void visit(Module* node) { assert(false); }
+		virtual void visit(Import* node) { visit((Statement*)node); }
+		virtual void visit(Call* node) { visit((Statement*)node); }
+		virtual void visit(StringLiteral* node) { assert(false); }
+		virtual void visit(IntegerLiteral* node) { assert(false); }
+		virtual void visit(FloatLiteral* node) { assert(false); }
 	};
 
-	template<typename T>
-	struct NodeImpl : Node
+	struct Node
+	{
+		virtual ~Node() = default;
+
+		virtual const vector<Node*> getChildren() { return vector<Node*>(); }
+		virtual void accept(Visitor* v) = 0;
+		virtual string toString() = 0;
+	};
+
+	struct Statement : Node
+	{};
+
+	struct Expression : Node
+	{};
+
+	template<typename T, typename P = Node>
+	struct NodeImpl : P
 	{
 		void accept(Visitor* v) override { v->visit((T*)this); }
 	};
 
 	struct Module : NodeImpl<Module>
 	{
+		vector<Statement*> statements;
 		string toString() override { return "Module"; }
+		const vector<Node*> getChildren() override
+		{
+			return vector<Node*>(statements.begin(), statements.end());
+		}
+
+		void addStatement(Statement* s)
+		{
+			statements.push_back(s);
+		}
 	};
 
-	struct Import : NodeImpl<Import>
+	struct Import : NodeImpl<Import, Statement>
 	{	
 		enum Type
 		{
@@ -626,18 +638,50 @@ struct AST
 		string toString() override { return string("Import(file:") + file + ")"; }	
 	};
 
-	struct Call : NodeImpl<Call>
+	struct StringLiteral : NodeImpl<StringLiteral, Expression>
 	{
-		string function;
-		vector<string> args;
+		string value;
 		string toString() override 
 		{ 
-			string s = "Call(";
-			s += function;
-			for (auto& a : args)
-				s += string(", ") + a;
-			s += ")";
+			string s = "StringLiteral(" + value + ")";
+			return s;
+		}
+	};
+
+	struct IntegerLiteral : NodeImpl<IntegerLiteral, Expression>
+	{
+		string value;
+		string toString() override 
+		{ 
+			string s = "IntegerLiteral(" + value + ")";
+			return s;
+		}
+	};
+
+	struct FloatLiteral : NodeImpl<FloatLiteral, Expression>
+	{
+		string value;
+		string toString() override 
+		{ 
+			string s = "FloatLiteral(" + value + ")";
+			return s;
+		}
+	};
+
+	// TODO: split functions into calls and call-expression?
+	//	for funcs that can act as an expression/operand
+	struct Call : NodeImpl<Call, Statement>
+	{
+		string function;
+		vector<Expression*> args;
+		string toString() override 
+		{ 
+			string s = "Call(" + function + ")";
 			return s; 
+		}
+		const vector<Node*> getChildren() override
+		{
+			return vector<Node*>(args.begin(), args.end());
 		}
 	};
 
@@ -656,7 +700,7 @@ NodeT* createNode(Args... args)
 
 vector<Token> s_tokens;
 
-bool parseTopLevel(ScannerFactory* scannerFactory, AST::Node* root, ParseError* outError)
+bool parseTopLevel(ScannerFactory* scannerFactory, AST::Module* module, ParseError* outError)
 {
 	auto s = scannerFactory->scanTopLevel();
 
@@ -710,7 +754,7 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Node* root, ParseError* 
 					node->file = file;
 					assert(importType == AST::Import::Type_C);
 					node->type = importType;
-					root->addChild(node);
+					module->addStatement(node);
 					break;
 				}
 				case TokenType::CompilerDirective:
@@ -731,9 +775,6 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Node* root, ParseError* 
 
 						s.getToken(&t, outError);
 
-						// TODO: temp
-						vector<string> args;
-
 						// TODO: invoke param parser (which invokes expr parser)
 						if (t.type == TokenType::StringLiteral ||
 							t.type == TokenType::IntegerLiteral ||
@@ -748,11 +789,21 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Node* root, ParseError* 
 
 								if (t.type == TokenType::StringLiteral)
 								{
-									node->args.push_back(string("\"") + t.symbol + "\"");
+									auto expr = createNode<AST::StringLiteral>();
+									expr->value = t.symbol;
+									node->args.push_back(expr);
 								}
-								else
+								else if (t.type == TokenType::IntegerLiteral)
 								{
-									node->args.push_back(t.symbol);
+									auto expr = createNode<AST::IntegerLiteral>();
+									expr->value = t.symbol;
+									node->args.push_back(expr);
+								}
+								else if (t.type == TokenType::FloatLiteral)
+								{
+									auto expr = createNode<AST::FloatLiteral>();
+									expr->value = t.symbol;
+									node->args.push_back(expr);
 								}
 
 								s.getToken(&t, outError);
@@ -777,7 +828,7 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Node* root, ParseError* 
 						assert(t.type == TokenType::SemiColon);
 						s_tokens.push_back(t);
 
-						root->addChild(node);					
+						module->addStatement(node);					
 					}
 				}
 
@@ -800,7 +851,7 @@ bool parse(ScannerFactory* scannerFactory, AST* ast, ParseError* outError)
 	assert(!ast->root);	
 	ast->root = createNode<AST::Module>();
 
-	return parseTopLevel(scannerFactory, ast->root, outError);
+	return parseTopLevel(scannerFactory, (AST::Module*)ast->root, outError);
 }
 
 void printAST(AST* ast, int indent = 0)
@@ -825,7 +876,7 @@ void printAST(AST* ast, int indent = 0)
 		const int depth = depthStack.size();
 		if (depth > 0)
 		{
-			for (int i = 0; depth - 1; ++i)
+			for (int i = 0; i < depth - 1; ++i)
 			{
 				if (depthStack[i])
 					print("| ");
@@ -837,16 +888,17 @@ void printAST(AST* ast, int indent = 0)
 
 		printLine(node->toString());
 
-		const int childCount = node->children.size();
+		const auto children = node->getChildren();
+		const int childCount = children.size();
 		if (childCount > 0)
 		{
 			depthStack.push_back(true);
 			for (int i = 0; i < childCount - 1; ++i)
 			{
-				rec(node->children[i]);
+				rec(children[i]);
 			}
 			depthStack.back() = false;
-			rec(node->children.back());
+			rec(children.back());
 			depthStack.pop_back();
 		}
 	};
@@ -862,6 +914,33 @@ void printTokens(const vector<Token>& tokens)
 	}
 }
 
+/*
+struct CExpressionGenerator
+{
+	CExpressionGenerator(std::ostream* out, int indent)
+		: m_out(out)
+		, m_indent(indent)
+	{}
+
+	void visit(AST::Call* node) override
+	{
+		//return "";
+	};
+
+	void visit(AST::StringLiteral* node) override
+	{
+		auto& out = m_head;
+
+		if (node->type == AST::Import::Type_C)
+			out << "#include <" << node->file << ">\n";
+			
+		//return "";
+	};
+
+	std::ostream* m_out;
+	int m_indent;
+}
+*/
 struct CGenerator : AST::Visitor
 {
 	CGenerator(std::ostream* out)
@@ -876,8 +955,20 @@ struct CGenerator : AST::Visitor
 		auto& out = *m_out;
 	
 		out << m_head.str();
-		out << "int main()\n{\n";
 		out << m_body.str();
+	}
+
+	void visit(AST::Module* node) override
+	{
+		auto& out = m_body;
+		out << "int main()\n{\n";
+		{
+			m_indent++;
+			for (auto s : node->statements)
+			{
+				s->accept(this);
+			}
+		}
 		out << "}\n";
 	}
 
@@ -889,16 +980,44 @@ struct CGenerator : AST::Visitor
 			out << "#include <" << node->file << ">\n";
 	}
 
+	void appendArg(std::ostream& out, AST::Node* node)
+	{
+		if (auto* n = dynamic_cast<AST::StringLiteral*>(node))
+		{
+			out << '"' << n->value << '"';
+		}
+		else if (auto* n = dynamic_cast<AST::IntegerLiteral*>(node))
+		{
+			out << n->value;
+		}
+		else if (auto* n = dynamic_cast<AST::FloatLiteral*>(node))
+		{
+			out << n->value;
+		}
+	}
+
 	void visit(AST::Call* node) override
 	{
 		auto& out = m_body;
+		/*CExpressionGenerator exprGen(out, m_indent);
+
+		for (auto a : node->args)
+		{
+			string s = a->accept(exprGen);
+			print(s);
+		}*/
+
+
 		out << node->function << "(";
 		int argCount = node->args.size();
 		if (argCount > 0)
 		{
-			out << node->args[0];
+			appendArg(out, node->args[0]);
 			for (int i = 1; i < argCount; ++i)
-				out << ", " << node->args[i];
+			{
+				out << ", ";
+				appendArg(out, node->args[i]);
+			}
 		}
 		out << ");\n";
 	};
