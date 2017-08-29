@@ -7,6 +7,22 @@ Compiler
 	* Should be able to output code-version of final AST for inspection (basically reverse-engineering the ast
 
 
+Context free grammar:
+	using * as pointer is problematic, if (T) means casting
+		func((T)*x); // means cast *x to T or T multiplied with x?
+
+		Use other cast syntax? (T)*x
+
+		x as T* y;
+
+Operator overloading:
+	Dlang does something where operator overlading is one function per type of op
+	with the operator as an argument, like so:
+		binaryop#(optype)(T a, T b -> T out)
+		{
+			#if (optype == "+") out = a + b;
+		}
+
 Interfaces/Type Classes
 	* Requirements on params imposed by $T(Interface) etc should be manually available somehow. Previous statement is built-in "should implement" requirement.
 	* TODO: Figure out difference between typeclass/interface and actual type. Is A in $T(A) an interface or a polymorhic type? Should be able to specify multiple interfaces, but not multiple types (implement AND, OR?)

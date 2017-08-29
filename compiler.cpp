@@ -72,6 +72,11 @@ enum class TokenType
 	CompilerDirective,
 	SemiColon,
 	Comma,
+	PlusSign,
+	MinusSign,
+	MultiplicationSign,
+	DivisionSign,
+	StartOfScan,
 	EndOfScan,
 	Invalid,
 };
@@ -88,23 +93,36 @@ struct Token
 	{}
 };
 
-string toString(const Token& t)
+string toString(TokenType type)
 {
-	switch (t.type)
+	switch (type)
 	{
 		case TokenType::Import: return "Import";
 		case TokenType::OpenParenthesis: return "OpenParenthesis";
 		case TokenType::CloseParenthesis: return "CloseParenthesis";
-		case TokenType::StringLiteral: return string("StringLiteral(") + t.symbol + ")";
-		case TokenType::IntegerLiteral: return string("IntegerLiteral(") + t.symbol + ")";
-		case TokenType::FloatLiteral: return string("FloatLiteral(") + t.symbol + ")";
-		case TokenType::Symbol: return string("Symbol(") + t.symbol + ")";
-		case TokenType::SemiColon: return string("SemiColon");
-		case TokenType::Comma: return string("Comma");
-		case TokenType::EndOfScan: return "EndOfScan";
-		case TokenType::CompilerDirective: return string("CompilerDirective(") + t.symbol + ")";
+		case TokenType::StringLiteral: return "StringLiteral";
+		case TokenType::IntegerLiteral: return "IntegerLiteral";
+		case TokenType::FloatLiteral: return "FloatLiteral";
+		case TokenType::Symbol: return "Symbol";
+		case TokenType::CompilerDirective: return "CompilerDirective";		
+		case TokenType::SemiColon: return "SemiColon";
+		case TokenType::Comma: return "Comma";
+		case TokenType::PlusSign: return "PlusSign";
+		case TokenType::MinusSign: return "MinusSign";
+		case TokenType::MultiplicationSign: return "MultiplicationSign";
+		case TokenType::DivisionSign: return "DivisionSign";
+		case TokenType::StartOfScan: return "StartOfScan";
+		case TokenType::EndOfScan: return "EndOfScan";	
 		default: return "UknownToken";
 	};
+}
+
+string toString(const Token& t)
+{
+	if (t.symbol != "")
+		return toString(t.type) + "(" + t.symbol + ")";
+	else
+		return toString(t.type);
 }
 
 struct ParseError
@@ -235,6 +253,8 @@ public:
 	{
 	}
 
+	virtual bool getToken(Token* outToken, ParseError* outError) = 0;
+
 protected:
 	enum class ScanResult
 	{
@@ -308,7 +328,7 @@ protected:
 	int m_blockCommentLevel = 0;
 };
 
-class TopLevelScanner : Scanner
+class TopLevelScanner : public Scanner
 {
 public:	
 	using Scanner::Scanner;
@@ -449,7 +469,7 @@ public:
 		return ret;
 	}
 
-	bool getToken(Token* outToken, ParseError* outError)
+	bool getToken(Token* outToken, ParseError* outError) override
 	{
 		ParseError error;
 		outToken->type = TokenType::EndOfScan;
@@ -525,10 +545,37 @@ public:
 				return true;
 			}
 
+			// Strings
 			if (n == '"' || n == '\'')
 			{
 				string s = parseStringLiteral();
 				*outToken = Token(TokenType::StringLiteral, s);
+				return true;
+			}
+
+			// operators
+			if (n == '+')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::PlusSign);
+				return true;
+			}
+			else if (n == '-')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::MinusSign);
+				return true;
+			}
+			else if (n == '*')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::MultiplicationSign);
+				return true;
+			}
+			else if (n == '/')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::DivisionSign);
 				return true;
 			}
 
@@ -698,160 +745,209 @@ NodeT* createNode(Args... args)
 	return n;
 }
 
-vector<Token> s_tokens;
-
-bool parseTopLevel(ScannerFactory* scannerFactory, AST::Module* module, ParseError* outError)
+struct ParserError
 {
-	auto s = scannerFactory->scanTopLevel();
-
+	string msg;
 	Token token;
-	while(1)
+};
+
+
+vector<Token> s_tokens;
+Token s_currentToken = Token(TokenType::StartOfScan);
+vector<Scanner*> s_scanners;
+Scanner* s_scanner = nullptr;
+vector<ParserError> s_parserErrors;
+int newErrors = 0;
+
+void pushScanner(Scanner* scanner)
+{
+	s_scanners.push_back(scanner);
+}
+
+void popScanner()
+{
+	s_scanners.pop_back();
+}
+
+template<typename T>
+struct ScopedScanner
+{
+	ScopedScanner(T s) : scanner(s) { pushScanner(&scanner); }
+	~ScopedScanner() { popScanner(); }
+
+	T scanner;
+};
+
+Scanner* getScanner()
+{
+	return s_scanners.back();
+}
+
+void error(const Token& token, string msg)
+{
+	s_parserErrors.push_back(ParserError { msg, token });
+	newErrors++;
+}
+
+void advanceToken()
+{
+	s_tokens.push_back(s_currentToken);
+	getScanner()->getToken(&s_currentToken, nullptr);
+	//printLine(string("Found token: ") + toString(s_currentToken));
+}
+
+const Token& lastToken()
+{
+	return s_tokens.back();
+}
+
+bool accept(TokenType type)
+{
+	//printLine(string("Accept: ") + toString(type));	
+	if (s_currentToken.type == type)
 	{
-		if (s.getToken(&token, outError))
-		{
-			s_tokens.push_back(token);
+		advanceToken();
+		return true;
+	}
+	return false;
+}
 
-			switch (token.type)
-			{
-				case TokenType::EndOfScan:
-					return true;
-				case TokenType::Import:
-				{
-					Token t;
-					s.getToken(&t, outError);
+bool expect(TokenType type)
+{
+	//printLine(string("Expect: ") + toString(type));
+	if (accept(type))
+		return true;
+	
+	advanceToken();
+	string errMsg = 
+			string("Expected '") + toString(type) + "' but got '" + 
+			toString(s_currentToken) + "'";
+	error(s_currentToken, errMsg);
+	return false;
+}
 
-					AST::Import::Type importType = AST::Import::Type_Native;
-
-					// optional import params
-					// TODO: invoke new parameter list scanner?
-					if (t.type == TokenType::OpenParenthesis)
-					{
-						s_tokens.push_back(t);
-
-						s.getToken(&t, outError);
-						s_tokens.push_back(t);
-						assert(t.type == TokenType::StringLiteral);
-
-						assert(t.symbol == "c");
-						importType = AST::Import::Type_C;
-
-						s.getToken(&t, outError);
-						s_tokens.push_back(t);
-						assert(t.type == TokenType::CloseParenthesis);
-
-						s.getToken(&t, outError);
-					}
-				
-					s_tokens.push_back(t);
-					assert(t.type == TokenType::StringLiteral);
-					string file = t.symbol;
-
-					s.getToken(&t, outError);
-					s_tokens.push_back(t);
-					assert(t.type == TokenType::SemiColon);
-
-					auto node = createNode<AST::Import>();
-					node->file = file;
-					assert(importType == AST::Import::Type_C);
-					node->type = importType;
-					module->addStatement(node);
-					break;
-				}
-				case TokenType::CompilerDirective:
-				{
-					break;
-				}
-				case TokenType::Symbol:
-				{
-					Token t;
-					s.getToken(&t, outError);
-					s_tokens.push_back(t);
-
-					// Function call
-					if (t.type == TokenType::OpenParenthesis)
-					{
-						auto node = createNode<AST::Call>();
-						node->function = token.symbol;
-
-						s.getToken(&t, outError);
-
-						// TODO: invoke param parser (which invokes expr parser)
-						if (t.type == TokenType::StringLiteral ||
-							t.type == TokenType::IntegerLiteral ||
-							t.type == TokenType::FloatLiteral)
-						{
-							while(true)
-							{
-								assert(t.type == TokenType::StringLiteral ||
-										t.type == TokenType::IntegerLiteral ||
-										t.type == TokenType::FloatLiteral);
-								s_tokens.push_back(t);
-
-								if (t.type == TokenType::StringLiteral)
-								{
-									auto expr = createNode<AST::StringLiteral>();
-									expr->value = t.symbol;
-									node->args.push_back(expr);
-								}
-								else if (t.type == TokenType::IntegerLiteral)
-								{
-									auto expr = createNode<AST::IntegerLiteral>();
-									expr->value = t.symbol;
-									node->args.push_back(expr);
-								}
-								else if (t.type == TokenType::FloatLiteral)
-								{
-									auto expr = createNode<AST::FloatLiteral>();
-									expr->value = t.symbol;
-									node->args.push_back(expr);
-								}
-
-								s.getToken(&t, outError);
-								if (t.type == TokenType::Comma)
-								{
-									s_tokens.push_back(t);
-									s.getToken(&t, outError);
-									continue;
-								}
-								else
-								{
-									break;
-								}
-							}
-						}
-
-						assert(t.type == TokenType::CloseParenthesis);
-						s_tokens.push_back(t);
-						
-
-						s.getToken(&t, outError);
-						assert(t.type == TokenType::SemiColon);
-						s_tokens.push_back(t);
-
-						module->addStatement(node);					
-					}
-				}
-
-				default:
-					break;
-			}
-		}
-		else
-		{
-			return false;
-		}
+bool parseExpression(ScannerFactory* scannerFactory, AST::Call* node)
+{
+	if (accept(TokenType::StringLiteral))
+	{
+		auto expr = createNode<AST::StringLiteral>();
+		expr->value = lastToken().symbol;
+		node->args.push_back(expr);
+	}
+	else if (accept(TokenType::IntegerLiteral))
+	{
+		auto expr = createNode<AST::IntegerLiteral>();
+		expr->value = lastToken().symbol;
+		node->args.push_back(expr);
+	}
+	else if (accept(TokenType::FloatLiteral))
+	{
+		auto expr = createNode<AST::FloatLiteral>();
+		expr->value = lastToken().symbol;
+		node->args.push_back(expr);
+	}
+	else
+	{
+		return false;
 	}
 
 	return true;
 }
 
-
-bool parse(ScannerFactory* scannerFactory, AST* ast, ParseError* outError)
+bool parseCallParameters(ScannerFactory* scannerFactory, AST::Call* call)
 {
-	assert(!ast->root);	
-	ast->root = createNode<AST::Module>();
+	while (parseExpression(scannerFactory, call))
+	{
+		if (accept(TokenType::Comma))
+			continue;
+		else
+			break;
+	}
 
-	return parseTopLevel(scannerFactory, (AST::Module*)ast->root, outError);
+	return true;
+}
+
+// TODO: Rename parseModule
+bool parseTopLevel(ScannerFactory* scannerFactory, AST::Module* module)
+{
+	while(true)
+	{
+		if (accept(TokenType::Import))
+		{
+			AST::Import::Type importType = AST::Import::Type_Native;
+
+			// optional import params
+			// TODO: invoke new parameter list scanner?
+			if (accept(TokenType::OpenParenthesis))
+			{
+				expect(TokenType::StringLiteral);	
+				if (lastToken().symbol != "c")
+					error(lastToken(), "Only 'c' imports type specifier is supported");
+
+				importType = AST::Import::Type_C;
+
+				expect(TokenType::CloseParenthesis);	
+			}
+		
+			expect(TokenType::StringLiteral);
+			const string file = lastToken().symbol;
+
+			expect(TokenType::SemiColon);
+
+			auto node = createNode<AST::Import>();
+			node->file = file;
+			if(importType != AST::Import::Type_C)
+				error(lastToken(), "Only 'c' type imports are supported");
+			node->type = importType;
+			module->addStatement(node);
+		}
+		else if (accept(TokenType::Symbol))
+		{
+			string symbol = lastToken().symbol;
+
+			// Function call
+			if (accept(TokenType::OpenParenthesis))
+			{
+				auto node = createNode<AST::Call>();
+				node->function = symbol;
+
+				parseCallParameters(scannerFactory, node);
+
+				expect(TokenType::CloseParenthesis);
+				expect(TokenType::SemiColon);
+
+				module->addStatement(node);					
+			}
+			else
+			{
+				error(lastToken(), "No support for non-call symbols yet!");
+			}
+		}
+		else
+		{
+			// TODO: Can module parse return false?
+			return true;
+		}
+	}
+
+	return false;
+}
+
+
+bool parse(ScannerFactory* scannerFactory, AST* ast)
+{
+	// TODO: Should scanner be pushed/popped? All parsers need to do it to be safe
+	auto s = ScopedScanner<TopLevelScanner>(scannerFactory->scanTopLevel());
+
+	assert(!ast->root);	
+	auto* node = createNode<AST::Module>();
+
+	advanceToken();
+	parseTopLevel(scannerFactory, node);
+	expect(TokenType::EndOfScan);
+
+	ast->root = node;
+	return s_parserErrors.size() == 0;
 }
 
 void printAST(AST* ast, int indent = 0)
@@ -1042,9 +1138,10 @@ int main(int argc, char** argv)
 	AST ast;
 	ParseError error;
 
-	if (!parse(&scannerFactory, &ast, &error))
+	LOG("Parsing...");
+	if (!parse(&scannerFactory, &ast))
 	{
-		LOG(error.error);
+		LOG("Parse fail!");
 	}
 	else
 	{

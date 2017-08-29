@@ -510,7 +510,7 @@ class uint($ T)
 
 class int($ T)
 {
-	#classof(T) in (SignedInteger, UnsignedInteger);
+	#classof(T) in (sint, uint);
 }
 
 class float($ T)
@@ -546,7 +546,20 @@ func test(Numeric t) print(t);
 func test2($T(Numeric) t -> T) return t * t; 
 
 
+func hej(int d)
+{
 
+}
+
+func main()
+{
+	var int x = 500;
+	
+	var i8 p = 0;
+
+	hej(x);
+	hej(p);
+}
 
 
 
