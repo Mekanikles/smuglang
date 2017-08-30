@@ -5,6 +5,7 @@
 #include <iostream>
 #include <sstream>
 #include <regex>
+#include <limits>
 
 #include <fstream>
 #include <cctype>
@@ -12,6 +13,8 @@
 template<typename T>
 using vector = std::vector<T>;
 using string = std::string;
+
+using uint = unsigned int;
 
 class Indenter
 {
@@ -98,28 +101,29 @@ string toString(TokenType type)
 	switch (type)
 	{
 		case TokenType::Import: return "Import";
-		case TokenType::OpenParenthesis: return "OpenParenthesis";
-		case TokenType::CloseParenthesis: return "CloseParenthesis";
-		case TokenType::StringLiteral: return "StringLiteral";
-		case TokenType::IntegerLiteral: return "IntegerLiteral";
-		case TokenType::FloatLiteral: return "FloatLiteral";
+		case TokenType::OpenParenthesis: return "Opening Parenthesis";
+		case TokenType::CloseParenthesis: return "Closing Parenthesis";
+		case TokenType::StringLiteral: return "String Literal";
+		case TokenType::IntegerLiteral: return "Integer Literal";
+		case TokenType::FloatLiteral: return "Float Literal";
 		case TokenType::Symbol: return "Symbol";
-		case TokenType::CompilerDirective: return "CompilerDirective";		
-		case TokenType::SemiColon: return "SemiColon";
+		case TokenType::CompilerDirective: return "Compiler Directive";		
+		case TokenType::SemiColon: return "Semi Colon";
 		case TokenType::Comma: return "Comma";
-		case TokenType::PlusSign: return "PlusSign";
-		case TokenType::MinusSign: return "MinusSign";
-		case TokenType::MultiplicationSign: return "MultiplicationSign";
-		case TokenType::DivisionSign: return "DivisionSign";
-		case TokenType::StartOfScan: return "StartOfScan";
-		case TokenType::EndOfScan: return "EndOfScan";	
+		case TokenType::PlusSign: return "Plus Sign";
+		case TokenType::MinusSign: return "Minus Sign";
+		case TokenType::MultiplicationSign: return "Multiplication Sign";
+		case TokenType::DivisionSign: return "Division Sign";
+		case TokenType::StartOfScan: return "Start Of File";
+		case TokenType::EndOfScan: return "End Of File";	
 		default: return "UknownToken";
 	};
 }
 
 string toString(const Token& t)
 {
-	if (t.symbol != "")
+	printLine(string() + "Tokensymbol: '" + t.symbol + "' length: " + std::to_string(t.symbol.length()));
+	if (t.symbol.length() > 0)
 		return toString(t.type) + "(" + t.symbol + ")";
 	else
 		return toString(t.type);
@@ -143,10 +147,14 @@ public:
 		return (m_end != m_begin) || (bool)m_inStream;
 	}
 
+	uint currentColumn() { return m_column; }
+	uint currentRow() { return m_row; }
+
 	char get()
 	{
 		char c;
-		return get(c) ? c : EOF;
+		get(c);
+		return c;
 	}
 
 	bool get(char& c)
@@ -159,6 +167,18 @@ public:
 		{
 			c = m_circBuffer[m_begin++];
 			m_begin = m_begin % BUF_SIZE;
+
+			if (c == '\n')
+			{
+				m_row++;
+				m_column = 0;
+			}
+			else
+			{
+				m_column++;
+			}
+			//printLine(string("char: '") + c + "', row: " + std::to_string(m_row) + ", column: " + std::to_string(m_column));
+
 			return true;
 		}
 		else
@@ -183,17 +203,9 @@ public:
 
 	void ignore(uint count = 1)
 	{
-		const uint buffered = bufferedLength();
-		if (count < buffered)
-		{
-			m_begin += count;
-			m_begin = m_begin % BUF_SIZE;
-		}
-		else
-		{
-			m_inStream.ignore(count - buffered);
-			m_end = m_begin;
-		}
+		char c;
+		for (int i = 0; i < count; ++i)
+			get(c);
 	}
 
 	char peek()
@@ -243,6 +255,8 @@ private:
 	uint m_begin = 0;
 	uint m_end = 0;
 	std::istream& m_inStream;
+	uint m_row = 1;
+	uint m_column = 1;
 };
 
 class Scanner
@@ -255,6 +269,9 @@ public:
 
 	virtual bool getToken(Token* outToken, ParseError* outError) = 0;
 
+	uint currentColumn() { return m_inStream.currentColumn(); }
+	uint currentRow() { return m_inStream.currentRow(); }
+
 protected:
 	enum class ScanResult
 	{
@@ -263,7 +280,6 @@ protected:
 		Skip,
 		Nothing
 	};
-
 
 	ScanResult scanComments(ParseError* outParseError)
 	{
@@ -440,6 +456,7 @@ public:
 		string ret;
 		if (c == '"')
 		{
+			ret += c;
 			// TODO: Add error reporing
 			while(m_inStream.peek() != '"')
 			{
@@ -451,6 +468,7 @@ public:
 		}
 		else if (c == '\'')
 		{
+			ret += c;
 			// TODO: Add error reporing
 			while(m_inStream.peek() != '\'')
 			{
@@ -466,6 +484,7 @@ public:
 		}
 		// eat end-of-string identifier
 		m_inStream.get(c);
+		ret += c;
 		return ret;
 	}
 
@@ -749,13 +768,14 @@ struct ParserError
 {
 	string msg;
 	Token token;
+	uint column;
+	uint row;
 };
 
 
 vector<Token> s_tokens;
 Token s_currentToken = Token(TokenType::StartOfScan);
 vector<Scanner*> s_scanners;
-Scanner* s_scanner = nullptr;
 vector<ParserError> s_parserErrors;
 int newErrors = 0;
 
@@ -785,7 +805,12 @@ Scanner* getScanner()
 
 void error(const Token& token, string msg)
 {
-	s_parserErrors.push_back(ParserError { msg, token });
+	auto* s = getScanner();
+	const uint column = s->currentColumn();
+	const uint row = s->currentRow();
+	const int tokenLength = std::max((int)token.symbol.length() - 1, 0);
+
+	s_parserErrors.push_back(ParserError { msg, token, column - tokenLength, row });
 	newErrors++;
 }
 
@@ -818,11 +843,11 @@ bool expect(TokenType type)
 	if (accept(type))
 		return true;
 	
-	advanceToken();
 	string errMsg = 
 			string("Expected '") + toString(type) + "' but got '" + 
-			toString(s_currentToken) + "'";
+			toString(s_currentToken.type) + "'";
 	error(s_currentToken, errMsg);
+	advanceToken();	
 	return false;
 }
 
@@ -867,6 +892,11 @@ bool parseCallParameters(ScannerFactory* scannerFactory, AST::Call* call)
 	return true;
 }
 
+string stringSymbolValue(string symbol)
+{
+	return symbol.substr(1, symbol.length() - 2);
+}
+
 // TODO: Rename parseModule
 bool parseTopLevel(ScannerFactory* scannerFactory, AST::Module* module)
 {
@@ -881,7 +911,7 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Module* module)
 			if (accept(TokenType::OpenParenthesis))
 			{
 				expect(TokenType::StringLiteral);	
-				if (lastToken().symbol != "c")
+				if (stringSymbolValue(lastToken().symbol) != "c")
 					error(lastToken(), "Only 'c' imports type specifier is supported");
 
 				importType = AST::Import::Type_C;
@@ -890,7 +920,7 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Module* module)
 			}
 		
 			expect(TokenType::StringLiteral);
-			const string file = lastToken().symbol;
+			const string file = stringSymbolValue(lastToken().symbol);
 
 			expect(TokenType::SemiColon);
 
@@ -1080,7 +1110,7 @@ struct CGenerator : AST::Visitor
 	{
 		if (auto* n = dynamic_cast<AST::StringLiteral*>(node))
 		{
-			out << '"' << n->value << '"';
+			out << n->value;
 		}
 		else if (auto* n = dynamic_cast<AST::IntegerLiteral*>(node))
 		{
@@ -1124,6 +1154,42 @@ struct CGenerator : AST::Visitor
 	int m_indent;
 }; 
 
+
+std::ifstream& gotoLine(std::ifstream& file, unsigned int num){
+    file.seekg(std::ios::beg);
+    for(int i=0; i < num - 1; ++i){
+        file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
+    }
+    return file;
+}
+
+void printPointAtColumn(uint column, int indent = 0)
+{
+	indent = ((column - 1) / 4) + 1;
+	printIndent(indent);
+	uint rest = (column - 1) % 4;
+	for (int i = 0; i < rest; ++i)
+		print(" ");
+	printLine("\033[1;31m^\033[0m");
+}
+
+void printParserErrors(std::ifstream& file)
+{
+	int hej;
+	for (auto e : s_parserErrors)
+	{
+		printLine(string("\033[1m") + std::to_string(e.row) + 
+				":" + std::to_string(e.column) + ": \033[31mError: \033[39m" + e.msg + "\033[0m");
+
+		// TODO: Make into segment surrounding error instead, to support really long lines
+		char line[256];
+		auto& fileAtLine = gotoLine(file, e.row);
+		fileAtLine.getline(line, 256);
+		printLine(string(line), 1);
+		printPointAtColumn(e.column, 1);
+	}
+}
+
 int main(int argc, char** argv)
 {
 	vector<string> args(argv + 1, argv + argc);
@@ -1142,6 +1208,8 @@ int main(int argc, char** argv)
 	if (!parse(&scannerFactory, &ast))
 	{
 		LOG("Parse fail!");
+		auto f = std::ifstream(args[0]);
+		printParserErrors(f);
 	}
 	else
 	{
