@@ -9,6 +9,6 @@ printf("Hello %s\n", "world, again");
 
 printf("Hello integers %i, %i, %i\n", 1, 12, 123);
 
-printf(s"Hello special integer %u, %i\n", 0xFFF16, 0b1111101);
+printf(,"Hello special integer %u, %i\n",, 0xFFF16, 0b1111101);
 
 printf("Hello floats %f, %f, %f, %f, %f\n", 1.0, 1.2, .2, .2e2, .3E2);

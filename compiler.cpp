@@ -349,7 +349,7 @@ class TopLevelScanner : public Scanner
 public:	
 	using Scanner::Scanner;
 
-	string parseWord()
+	string scanWord()
 	{
 		string ret;
 		if (isalpha(m_inStream.peek()))
@@ -372,7 +372,7 @@ public:
 		return (c == '0') || (c == '1');
 	}
 
-	TokenType parseNumericLiteral(string& out)
+	TokenType scanNumericLiteral(string& out)
 	{
 		char n = m_inStream.peek();
 		if (n == '0')
@@ -449,7 +449,7 @@ public:
 		return TokenType::IntegerLiteral;
 	}
 
-	string parseStringLiteral()
+	string scanStringLiteral()
 	{
 		char c;
 		m_inStream.get(c);
@@ -528,7 +528,7 @@ public:
 			if (n == '#')
 			{
 				m_inStream.ignore();
-				string w = parseWord();
+				string w = scanWord();
 				// TODO: Add error for no symbol
 				if (w != "")
 				{
@@ -540,7 +540,7 @@ public:
 			// Symbols
 			if (isalpha(n))
 			{
-				string w = parseWord();
+				string w = scanWord();
 				// TODO: Difference between toplevel scan and body scan?
 				if (w == "import")
 					*outToken = Token(TokenType::Import);
@@ -553,7 +553,7 @@ public:
 			if (isdigit(n) || (n == '.' && isdigit(m_inStream.lookAhead())))
 			{
 				string literal;
-				TokenType type = parseNumericLiteral(literal);
+				TokenType type = scanNumericLiteral(literal);
 
 				assert(literal != "");
 				if (type == TokenType::FloatLiteral)
@@ -567,7 +567,7 @@ public:
 			// Strings
 			if (n == '"' || n == '\'')
 			{
-				string s = parseStringLiteral();
+				string s = scanStringLiteral();
 				*outToken = Token(TokenType::StringLiteral, s);
 				return true;
 			}
@@ -777,7 +777,7 @@ vector<Token> s_tokens;
 Token s_currentToken = Token(TokenType::StartOfScan);
 vector<Scanner*> s_scanners;
 vector<ParserError> s_parserErrors;
-int newErrors = 0;
+int s_newErrors = 0;
 
 void pushScanner(Scanner* scanner)
 {
@@ -811,8 +811,10 @@ void error(const Token& token, string msg)
 	const int tokenLength = std::max((int)token.symbol.length() - 1, 0);
 
 	s_parserErrors.push_back(ParserError { msg, token, column - tokenLength, row });
-	newErrors++;
+	s_newErrors++;
 }
+
+int newErrors() { const int ret = s_newErrors; s_newErrors = 0; return ret; }
 
 void advanceToken()
 {
@@ -826,10 +828,15 @@ const Token& lastToken()
 	return s_tokens.back();
 }
 
+bool peek(TokenType type)
+{
+	return s_currentToken.type == type;
+}
+
 bool accept(TokenType type)
 {
 	//printLine(string("Accept: ") + toString(type));	
-	if (s_currentToken.type == type)
+	if (peek(type))
 	{
 		advanceToken();
 		return true;
@@ -844,8 +851,8 @@ bool expect(TokenType type)
 		return true;
 	
 	string errMsg = 
-			string("Expected '") + toString(type) + "' but got '" + 
-			toString(s_currentToken.type) + "'";
+			string("Expected ") + toString(type) + " but got " + 
+			toString(s_currentToken.type);
 	error(s_currentToken, errMsg);
 	advanceToken();	
 	return false;
@@ -853,6 +860,13 @@ bool expect(TokenType type)
 
 bool parseExpression(ScannerFactory* scannerFactory, AST::Call* node)
 {
+	// Special case: allow continued parsing with extra commas
+	if (peek(TokenType::Comma))
+	{
+		error(lastToken(), "Expected expression");
+		advanceToken();
+	}
+
 	if (accept(TokenType::StringLiteral))
 	{
 		auto expr = createNode<AST::StringLiteral>();
@@ -881,20 +895,47 @@ bool parseExpression(ScannerFactory* scannerFactory, AST::Call* node)
 
 bool parseCallParameters(ScannerFactory* scannerFactory, AST::Call* call)
 {
-	while (parseExpression(scannerFactory, call))
+	if (accept(TokenType::OpenParenthesis))
 	{
-		if (accept(TokenType::Comma))
-			continue;
-		else
-			break;
-	}
+		while (parseExpression(scannerFactory, call))
+		{
+			if (peek(TokenType::CloseParenthesis))
+			{
+				break;
+			}
+			else if (expect(TokenType::Comma))
+			{
+				continue;
+			}
+			else
+			{
+				break;
+			}
+		}
 
-	return true;
+		expect(TokenType::CloseParenthesis);
+
+		return true;
+	}
+	return false;
 }
 
 string stringSymbolValue(string symbol)
 {
 	return symbol.substr(1, symbol.length() - 2);
+}
+
+
+void skipCurrentStatement()
+{
+	// TODO: Can this be generalized for non semi-colon statements?
+	// If we encountered errors and could not parse anymore statements, try to jump to next statement
+	while (!accept(TokenType::SemiColon))
+	{
+		advanceToken();
+		if (peek(TokenType::EndOfScan))
+			return;
+	}
 }
 
 // TODO: Rename parseModule
@@ -936,22 +977,35 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Module* module)
 			string symbol = lastToken().symbol;
 
 			// Function call
-			if (accept(TokenType::OpenParenthesis))
+			if (peek(TokenType::OpenParenthesis))
 			{
 				auto node = createNode<AST::Call>();
 				node->function = symbol;
 
-				parseCallParameters(scannerFactory, node);
+				if (!parseCallParameters(scannerFactory, node))
+				{
+					error(lastToken(), "Call parameter list expected");
+				}
 
-				expect(TokenType::CloseParenthesis);
-				expect(TokenType::SemiColon);
+				if (!newErrors())
+				{
+					expect(TokenType::SemiColon);
 
-				module->addStatement(node);					
+					module->addStatement(node);
+				}
+				else
+				{
+					skipCurrentStatement();
+				}		
 			}
 			else
 			{
 				error(lastToken(), "No support for non-call symbols yet!");
 			}
+		}
+		else if (newErrors())
+		{
+			skipCurrentStatement();
 		}
 		else
 		{
