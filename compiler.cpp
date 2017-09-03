@@ -122,7 +122,6 @@ string toString(TokenType type)
 
 string toString(const Token& t)
 {
-	printLine(string() + "Tokensymbol: '" + t.symbol + "' length: " + std::to_string(t.symbol.length()));
 	if (t.symbol.length() > 0)
 		return toString(t.type) + "(" + t.symbol + ")";
 	else
@@ -637,12 +636,15 @@ private:
 struct AST
 {
 	struct Statement;
+	struct Expression;
 	struct Module;
 	struct Import;
 	struct Call;
 	struct StringLiteral;
 	struct IntegerLiteral;
 	struct FloatLiteral;
+	struct UnaryOp;
+	struct BinaryOp;
 
 	struct Visitor
 	{
@@ -650,9 +652,12 @@ struct AST
 		virtual void visit(Module* node) { assert(false); }
 		virtual void visit(Import* node) { visit((Statement*)node); }
 		virtual void visit(Call* node) { visit((Statement*)node); }
-		virtual void visit(StringLiteral* node) { assert(false); }
-		virtual void visit(IntegerLiteral* node) { assert(false); }
-		virtual void visit(FloatLiteral* node) { assert(false); }
+		virtual void visit(Expression* node) { assert(false); }
+		virtual void visit(StringLiteral* node) { visit((Expression*)node);}
+		virtual void visit(IntegerLiteral* node) { visit((Expression*)node); }
+		virtual void visit(FloatLiteral* node) { visit((Expression*)node);  }
+		virtual void visit(UnaryOp* node) { visit((Expression*)node);  }
+		virtual void visit(BinaryOp* node) { visit((Expression*)node);  }
 	};
 
 	struct Node
@@ -751,6 +756,46 @@ struct AST
 		}
 	};
 
+	struct UnaryOp : NodeImpl<UnaryOp, Expression>
+	{
+		TokenType type;
+		Expression* expr;
+
+		string toString() override 
+		{ 
+			string s = "UnaryOp(" + ::toString(type) + ")";
+			return s; 
+		}
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.reserve(1);
+			ret.push_back(expr);
+			return ret;
+		}
+	};
+
+	struct BinaryOp : NodeImpl<BinaryOp, Expression>
+	{
+		TokenType type;
+		Expression* left;
+		Expression* right;
+
+		string toString() override 
+		{ 
+			string s = "BinaryOp(" + ::toString(type) + ")";
+			return s; 
+		}
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.reserve(2);
+			ret.push_back(left);
+			ret.push_back(right);
+			return ret;
+		}
+	};
+
 	Node* root = nullptr;
 };
 
@@ -803,6 +848,11 @@ Scanner* getScanner()
 	return s_scanners.back();
 }
 
+const Token& lastToken()
+{
+	return s_tokens.back();
+}
+
 void error(const Token& token, string msg)
 {
 	auto* s = getScanner();
@@ -814,6 +864,11 @@ void error(const Token& token, string msg)
 	s_newErrors++;
 }
 
+void error(string msg)
+{
+	error(lastToken(), msg);
+}
+
 int newErrors() { const int ret = s_newErrors; s_newErrors = 0; return ret; }
 
 void advanceToken()
@@ -823,11 +878,6 @@ void advanceToken()
 	//printLine(string("Found token: ") + toString(s_currentToken));
 }
 
-const Token& lastToken()
-{
-	return s_tokens.back();
-}
-
 bool peek(TokenType type)
 {
 	return s_currentToken.type == type;
@@ -835,7 +885,7 @@ bool peek(TokenType type)
 
 bool accept(TokenType type)
 {
-	//printLine(string("Accept: ") + toString(type));	
+	//printLine(string("Accept: ") + toString(type) + ((s_currentToken.type != type)?  (string(" (got ") + toString(s_currentToken.type) + ")") : ""));	
 	if (peek(type))
 	{
 		advanceToken();
@@ -846,7 +896,7 @@ bool accept(TokenType type)
 
 bool expect(TokenType type)
 {
-	//printLine(string("Expect: ") + toString(type));
+	//printLine(string("Expect: ") + toString(type) + ((s_currentToken.type != type)? (string(" (got ") + toString(s_currentToken.type) + ")") : ""));
 	if (accept(type))
 		return true;
 	
@@ -858,32 +908,61 @@ bool expect(TokenType type)
 	return false;
 }
 
-bool parseExpression(ScannerFactory* scannerFactory, AST::Call* node)
+bool acceptUnaryPrefixOperator()
 {
-	// Special case: allow continued parsing with extra commas
-	if (peek(TokenType::Comma))
+	if (accept(TokenType::PlusSign))
 	{
-		error(lastToken(), "Expected expression");
-		advanceToken();
+		 return true;
 	}
 
-	if (accept(TokenType::StringLiteral))
+	return false;
+}
+
+bool acceptBinaryOperator()
+{
+	if (accept(TokenType::PlusSign))
 	{
-		auto expr = createNode<AST::StringLiteral>();
+		 return true;
+	}
+
+	return false;
+}
+
+bool parsePrimitiveExpression(AST::Expression** outNode)
+{
+	if (acceptUnaryPrefixOperator())
+	{
+		auto uop = createNode<AST::UnaryOp>();
+		uop->type = lastToken().type;
+
+		AST::Expression* expr = nullptr;
+		if (parsePrimitiveExpression(&expr))
+		{
+			uop->expr = expr;
+			*outNode = uop;
+		}
+		else
+		{
+			error("Expected primary expression");
+		}
+	}
+	else if (accept(TokenType::StringLiteral))
+	{
+		auto* expr = createNode<AST::StringLiteral>();
 		expr->value = lastToken().symbol;
-		node->args.push_back(expr);
+		*outNode = expr;
 	}
 	else if (accept(TokenType::IntegerLiteral))
 	{
-		auto expr = createNode<AST::IntegerLiteral>();
+		auto* expr = createNode<AST::IntegerLiteral>();
 		expr->value = lastToken().symbol;
-		node->args.push_back(expr);
+		*outNode = expr;
 	}
 	else if (accept(TokenType::FloatLiteral))
 	{
-		auto expr = createNode<AST::FloatLiteral>();
+		auto* expr = createNode<AST::FloatLiteral>();
 		expr->value = lastToken().symbol;
-		node->args.push_back(expr);
+		*outNode = expr;
 	}
 	else
 	{
@@ -893,12 +972,67 @@ bool parseExpression(ScannerFactory* scannerFactory, AST::Call* node)
 	return true;
 }
 
+bool parseExpression(ScannerFactory* scannerFactory, AST::Expression** outExpr)
+{
+	vector<Token> binOpStack;
+	vector<AST::Expression*> exprStack;
+
+	// Shunt all the yards!
+	AST::Expression* exprNode = nullptr;
+	while (parsePrimitiveExpression(&exprNode))
+	{
+		if (binOpStack.size() > 0)
+		{
+			assert(exprStack.size() > 0);
+			auto* bop = createNode<AST::BinaryOp>();
+			bop->type = binOpStack.back().type;
+			binOpStack.pop_back();
+			bop->left = exprStack.back();
+			bop->right = exprNode;
+
+			exprStack.back() = bop;		
+		}
+		else
+		{
+			exprStack.push_back(exprNode);
+		}
+
+		if (acceptBinaryOperator())
+		{
+			binOpStack.push_back(lastToken());
+			continue;
+		}
+		else
+		{
+			break;
+		}
+	}
+
+	if (exprStack.size() == 0)
+		return false;
+
+	if (exprStack.size() != 1)
+	{
+		printLine("ExprStack:");
+		for (auto* e : exprStack)
+			printLine(e->toString(), 1);
+
+	}
+	assert(exprStack.size() == 1);
+	*outExpr = exprStack.back();
+
+	return true;
+}
+
 bool parseCallParameters(ScannerFactory* scannerFactory, AST::Call* call)
 {
 	if (accept(TokenType::OpenParenthesis))
 	{
-		while (parseExpression(scannerFactory, call))
+		AST::Expression* exprNode;
+		while (parseExpression(scannerFactory, &exprNode))
 		{
+			call->args.push_back(exprNode);
+
 			if (peek(TokenType::CloseParenthesis))
 			{
 				break;
@@ -1187,20 +1321,54 @@ struct CGenerator : AST::Visitor
 			print(s);
 		}*/
 
-
-		out << node->function << "(";
+		out << indent(m_indent) << node->function << "(";
 		int argCount = node->args.size();
 		if (argCount > 0)
 		{
-			appendArg(out, node->args[0]);
+			node->args[0]->accept(this);
 			for (int i = 1; i < argCount; ++i)
 			{
 				out << ", ";
-				appendArg(out, node->args[i]);
+				node->args[i]->accept(this);
 			}
 		}
 		out << ");\n";
 	};
+
+	void visit(AST::BinaryOp* node) override
+	{	
+		auto& out = m_body;
+
+		node->left->accept(this);
+		out << " ";
+		switch (node->type)
+		{
+			case TokenType::PlusSign: out << "+ "; break;
+			default: assert(false);
+		}
+		node->right->accept(this);
+	}
+
+	void visit(AST::UnaryOp* node) override
+	{
+		auto& out = m_body;
+
+		switch (node->type)
+		{
+			case TokenType::PlusSign: out << "+ "; break;
+			default: assert(false);
+		}
+		node->expr->accept(this);
+	}
+
+	void visit(AST::StringLiteral* node) override
+	{	m_body << node->value; }
+
+	void visit(AST::IntegerLiteral* node) override
+	{	m_body << node->value; }
+
+	void visit(AST::FloatLiteral* node) override
+	{	m_body << node->value; }
 
 	std::ostream* m_out;
 	std::stringstream m_head;
