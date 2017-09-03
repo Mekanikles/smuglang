@@ -75,10 +75,12 @@ enum class TokenType
 	CompilerDirective,
 	SemiColon,
 	Comma,
-	PlusSign,
-	MinusSign,
-	MultiplicationSign,
-	DivisionSign,
+	PlusOp,
+	MinusOp,
+	MultiplicationOp,
+	DivisionOp,
+	IncrementOp,
+	DecrementOp,
 	StartOfScan,
 	EndOfScan,
 	Invalid,
@@ -110,10 +112,12 @@ string toString(TokenType type)
 		case TokenType::CompilerDirective: return "Compiler Directive";		
 		case TokenType::SemiColon: return "Semi Colon";
 		case TokenType::Comma: return "Comma";
-		case TokenType::PlusSign: return "Plus Sign";
-		case TokenType::MinusSign: return "Minus Sign";
-		case TokenType::MultiplicationSign: return "Multiplication Sign";
-		case TokenType::DivisionSign: return "Division Sign";
+		case TokenType::PlusOp: return "Operator plus";
+		case TokenType::MinusOp: return "Operator minus";
+		case TokenType::MultiplicationOp: return "Operator multiplication";
+		case TokenType::DivisionOp: return "Operator division";
+		case TokenType::IncrementOp: return "Operator increment";
+		case TokenType::DecrementOp: return "Operator decrement";
 		case TokenType::StartOfScan: return "Start Of File";
 		case TokenType::EndOfScan: return "End Of File";	
 		default: return "UknownToken";
@@ -571,29 +575,45 @@ public:
 				return true;
 			}
 
-			// operators
+			char n2 = m_inStream.lookAhead();
+
+			// double-digit operators
+			if (n == '+' && n2 == '+')
+			{
+				m_inStream.ignore(2);
+				*outToken = Token(TokenType::IncrementOp);
+				return true;
+			}
+			else if (n =='-' && n2 == '-')
+			{
+				m_inStream.ignore(2);
+				*outToken = Token(TokenType::DecrementOp);
+				return true;
+			}
+
+			// single-digit operators
 			if (n == '+')
 			{
 				m_inStream.ignore();
-				*outToken = Token(TokenType::PlusSign);
+				*outToken = Token(TokenType::PlusOp);
 				return true;
 			}
 			else if (n == '-')
 			{
 				m_inStream.ignore();
-				*outToken = Token(TokenType::MinusSign);
+				*outToken = Token(TokenType::MinusOp);
 				return true;
 			}
 			else if (n == '*')
 			{
 				m_inStream.ignore();
-				*outToken = Token(TokenType::MultiplicationSign);
+				*outToken = Token(TokenType::MultiplicationOp);
 				return true;
 			}
 			else if (n == '/')
 			{
 				m_inStream.ignore();
-				*outToken = Token(TokenType::DivisionSign);
+				*outToken = Token(TokenType::DivisionOp);
 				return true;
 			}
 
@@ -644,6 +664,7 @@ struct AST
 	struct IntegerLiteral;
 	struct FloatLiteral;
 	struct UnaryOp;
+	struct UnaryPostfixOp;
 	struct BinaryOp;
 
 	struct Visitor
@@ -657,6 +678,7 @@ struct AST
 		virtual void visit(IntegerLiteral* node) { visit((Expression*)node); }
 		virtual void visit(FloatLiteral* node) { visit((Expression*)node);  }
 		virtual void visit(UnaryOp* node) { visit((Expression*)node);  }
+		virtual void visit(UnaryPostfixOp* node) { visit((Expression*)node); }
 		virtual void visit(BinaryOp* node) { visit((Expression*)node);  }
 	};
 
@@ -764,6 +786,25 @@ struct AST
 		string toString() override 
 		{ 
 			string s = "UnaryOp(" + ::toString(type) + ")";
+			return s; 
+		}
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.reserve(1);
+			ret.push_back(expr);
+			return ret;
+		}
+	};
+
+	struct UnaryPostfixOp : NodeImpl<UnaryPostfixOp, Expression>
+	{
+		TokenType type;
+		Expression* expr;
+
+		string toString() override 
+		{ 
+			string s = "UnaryPostfixOp(" + ::toString(type) + ")";
 			return s; 
 		}
 		const vector<Node*> getChildren() override
@@ -908,11 +949,33 @@ bool expect(TokenType type)
 	return false;
 }
 
-bool acceptUnaryPrefixOperator()
+bool acceptUnaryOperator()
 {
-	if (accept(TokenType::PlusSign))
+	if (accept(TokenType::PlusOp))
 	{
 		 return true;
+	}
+	else if (accept(TokenType::IncrementOp))
+	{
+		return true;
+	}
+	else if (accept(TokenType::DecrementOp))
+	{
+		return true;
+	}
+
+	return false;
+}
+
+bool acceptUnaryPostfixOperator()
+{
+	if (accept(TokenType::IncrementOp))
+	{
+		return true;
+	}
+	else if (accept(TokenType::DecrementOp))
+	{
+		return true;
 	}
 
 	return false;
@@ -920,7 +983,7 @@ bool acceptUnaryPrefixOperator()
 
 bool acceptBinaryOperator()
 {
-	if (accept(TokenType::PlusSign))
+	if (accept(TokenType::PlusOp))
 	{
 		 return true;
 	}
@@ -930,7 +993,7 @@ bool acceptBinaryOperator()
 
 bool parsePrimitiveExpression(AST::Expression** outNode)
 {
-	if (acceptUnaryPrefixOperator())
+	if (acceptUnaryOperator())
 	{
 		auto uop = createNode<AST::UnaryOp>();
 		uop->type = lastToken().type;
@@ -944,6 +1007,7 @@ bool parsePrimitiveExpression(AST::Expression** outNode)
 		else
 		{
 			error("Expected primary expression");
+			return true;
 		}
 	}
 	else if (accept(TokenType::StringLiteral))
@@ -967,6 +1031,15 @@ bool parsePrimitiveExpression(AST::Expression** outNode)
 	else
 	{
 		return false;
+	}
+
+	if (acceptUnaryPostfixOperator())
+	{
+		auto uop = createNode<AST::UnaryPostfixOp>();
+		uop->type = lastToken().type;
+		uop->expr = *outNode;
+
+		*outNode = uop;
 	}
 
 	return true;
@@ -1343,7 +1416,7 @@ struct CGenerator : AST::Visitor
 		out << " ";
 		switch (node->type)
 		{
-			case TokenType::PlusSign: out << "+ "; break;
+			case TokenType::PlusOp: out << "+ "; break;
 			default: assert(false);
 		}
 		node->right->accept(this);
@@ -1355,10 +1428,26 @@ struct CGenerator : AST::Visitor
 
 		switch (node->type)
 		{
-			case TokenType::PlusSign: out << "+ "; break;
+			case TokenType::PlusOp: out << "+ "; break;
+			case TokenType::IncrementOp: out << "++ "; break;
+			case TokenType::DecrementOp: out << "-- "; break;
 			default: assert(false);
 		}
 		node->expr->accept(this);
+	}
+
+	void visit(AST::UnaryPostfixOp* node) override
+	{
+		auto& out = m_body;
+
+		node->expr->accept(this);
+
+		switch (node->type)
+		{
+			case TokenType::IncrementOp: out << "++ "; break;
+			case TokenType::DecrementOp: out << "-- "; break;
+			default: assert(false);
+		}
 	}
 
 	void visit(AST::StringLiteral* node) override
