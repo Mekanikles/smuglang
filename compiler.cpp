@@ -955,6 +955,10 @@ bool acceptUnaryOperator()
 	{
 		 return true;
 	}
+	else if (accept(TokenType::MinusOp))
+	{
+		 return true;
+	}	
 	else if (accept(TokenType::IncrementOp))
 	{
 		return true;
@@ -987,7 +991,18 @@ bool acceptBinaryOperator()
 	{
 		 return true;
 	}
-
+	else if (accept(TokenType::MinusOp))
+	{
+		 return true;
+	}
+	else if (accept(TokenType::MultiplicationOp))
+	{
+		 return true;
+	}
+	else if (accept(TokenType::DivisionOp))
+	{
+		 return true;
+	}		
 	return false;
 }
 
@@ -1417,6 +1432,9 @@ struct CGenerator : AST::Visitor
 		switch (node->type)
 		{
 			case TokenType::PlusOp: out << "+ "; break;
+			case TokenType::MinusOp: out << "- "; break;
+			case TokenType::MultiplicationOp: out << "* "; break;
+			case TokenType::DivisionOp: out << "/ "; break;
 			default: assert(false);
 		}
 		node->right->accept(this);
@@ -1429,6 +1447,7 @@ struct CGenerator : AST::Visitor
 		switch (node->type)
 		{
 			case TokenType::PlusOp: out << "+ "; break;
+			case TokenType::MinusOp: out << "- "; break;
 			case TokenType::IncrementOp: out << "++ "; break;
 			case TokenType::DecrementOp: out << "-- "; break;
 			default: assert(false);
