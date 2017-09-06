@@ -75,8 +75,8 @@ enum class TokenType
 	CompilerDirective,
 	SemiColon,
 	Comma,
-	PlusOp,
-	MinusOp,
+	AddOp,
+	SubtractOp,
 	MultiplicationOp,
 	DivisionOp,
 	IncrementOp,
@@ -112,8 +112,8 @@ string toString(TokenType type)
 		case TokenType::CompilerDirective: return "Compiler Directive";		
 		case TokenType::SemiColon: return "Semi Colon";
 		case TokenType::Comma: return "Comma";
-		case TokenType::PlusOp: return "Operator plus";
-		case TokenType::MinusOp: return "Operator minus";
+		case TokenType::AddOp: return "Operator add";
+		case TokenType::SubtractOp: return "Operator subtract";
 		case TokenType::MultiplicationOp: return "Operator multiplication";
 		case TokenType::DivisionOp: return "Operator division";
 		case TokenType::IncrementOp: return "Operator increment";
@@ -595,13 +595,13 @@ public:
 			if (n == '+')
 			{
 				m_inStream.ignore();
-				*outToken = Token(TokenType::PlusOp);
+				*outToken = Token(TokenType::AddOp);
 				return true;
 			}
 			else if (n == '-')
 			{
 				m_inStream.ignore();
-				*outToken = Token(TokenType::MinusOp);
+				*outToken = Token(TokenType::SubtractOp);
 				return true;
 			}
 			else if (n == '*')
@@ -951,11 +951,11 @@ bool expect(TokenType type)
 
 bool acceptUnaryOperator()
 {
-	if (accept(TokenType::PlusOp))
+	if (accept(TokenType::AddOp))
 	{
 		 return true;
 	}
-	else if (accept(TokenType::MinusOp))
+	else if (accept(TokenType::SubtractOp))
 	{
 		 return true;
 	}	
@@ -987,11 +987,11 @@ bool acceptUnaryPostfixOperator()
 
 bool acceptBinaryOperator()
 {
-	if (accept(TokenType::PlusOp))
+	if (accept(TokenType::AddOp))
 	{
 		 return true;
 	}
-	else if (accept(TokenType::MinusOp))
+	else if (accept(TokenType::SubtractOp))
 	{
 		 return true;
 	}
@@ -1006,7 +1006,7 @@ bool acceptBinaryOperator()
 	return false;
 }
 
-bool parsePrimitiveExpression(AST::Expression** outNode)
+bool parsePrimaryExpression(AST::Expression** outNode)
 {
 	if (acceptUnaryOperator())
 	{
@@ -1014,7 +1014,7 @@ bool parsePrimitiveExpression(AST::Expression** outNode)
 		uop->type = lastToken().type;
 
 		AST::Expression* expr = nullptr;
-		if (parsePrimitiveExpression(&expr))
+		if (parsePrimaryExpression(&expr))
 		{
 			uop->expr = expr;
 			*outNode = uop;
@@ -1060,52 +1060,87 @@ bool parsePrimitiveExpression(AST::Expression** outNode)
 	return true;
 }
 
+int operatorPrecedence(TokenType opType)
+{
+	switch (opType)
+	{
+		case TokenType::MultiplicationOp:
+		case TokenType::DivisionOp:
+			return 2;
+		case TokenType::AddOp:
+		case TokenType::SubtractOp:
+			return 1;
+		default:
+			return 0;
+	}
+}
+
+bool hasHigherOperatorPrecedence(TokenType left, TokenType right)
+{
+	const int l = operatorPrecedence(left);
+	const int r = operatorPrecedence(right);
+
+	// TODO: Deal with right-associative operators
+	return (r > l);
+}
+
+
 bool parseExpression(ScannerFactory* scannerFactory, AST::Expression** outExpr)
 {
-	vector<Token> binOpStack;
+	vector<TokenType> binOpStack;
 	vector<AST::Expression*> exprStack;
 
 	// Shunt all the yards!
 	AST::Expression* exprNode = nullptr;
-	while (parsePrimitiveExpression(&exprNode))
+	if (parsePrimaryExpression(&exprNode))
 	{
-		if (binOpStack.size() > 0)
-		{
-			assert(exprStack.size() > 0);
-			auto* bop = createNode<AST::BinaryOp>();
-			bop->type = binOpStack.back().type;
-			binOpStack.pop_back();
-			bop->left = exprStack.back();
-			bop->right = exprNode;
+		exprStack.push_back(exprNode);
 
-			exprStack.back() = bop;		
-		}
-		else
+		while (acceptBinaryOperator())
 		{
-			exprStack.push_back(exprNode);
-		}
+			const auto op = lastToken().type;
 
-		if (acceptBinaryOperator())
-		{
-			binOpStack.push_back(lastToken());
-			continue;
-		}
-		else
-		{
-			break;
+			// Resolve as many previous ops as possible
+			while (binOpStack.size() > 0 && !hasHigherOperatorPrecedence(binOpStack.back(), op))
+			{
+				assert(exprStack.size() > 1);
+				auto* bop = createNode<AST::BinaryOp>();
+				bop->type = binOpStack.back();
+				binOpStack.pop_back();
+				bop->right = exprStack.back();
+				exprStack.pop_back();
+				bop->left = exprStack.back();
+
+				exprStack.back() = bop;	
+			}
+
+			binOpStack.push_back(op);
+
+			if (parsePrimaryExpression(&exprNode))
+			{
+				exprStack.push_back(exprNode);
+				continue;
+			}
+			else
+			{
+				error("Expected primary expression");
+				return true;
+			}
 		}
 	}
 
-	if (exprStack.size() == 0)
-		return false;
-
-	if (exprStack.size() != 1)
+	// Take care of remaining ops
+	while (binOpStack.size() > 0)
 	{
-		printLine("ExprStack:");
-		for (auto* e : exprStack)
-			printLine(e->toString(), 1);
-
+		auto* bop = createNode<AST::BinaryOp>();
+		bop->type = binOpStack.back();
+		binOpStack.pop_back();
+		bop->right = exprStack.back();
+		exprStack.pop_back();
+		bop->left = exprStack.back();
+		exprStack.back() = bop;	
 	}
+
 	assert(exprStack.size() == 1);
 	*outExpr = exprStack.back();
 
@@ -1431,8 +1466,8 @@ struct CGenerator : AST::Visitor
 		out << " ";
 		switch (node->type)
 		{
-			case TokenType::PlusOp: out << "+ "; break;
-			case TokenType::MinusOp: out << "- "; break;
+			case TokenType::AddOp: out << "+ "; break;
+			case TokenType::SubtractOp: out << "- "; break;
 			case TokenType::MultiplicationOp: out << "* "; break;
 			case TokenType::DivisionOp: out << "/ "; break;
 			default: assert(false);
@@ -1446,8 +1481,8 @@ struct CGenerator : AST::Visitor
 
 		switch (node->type)
 		{
-			case TokenType::PlusOp: out << "+ "; break;
-			case TokenType::MinusOp: out << "- "; break;
+			case TokenType::AddOp: out << "+ "; break;
+			case TokenType::SubtractOp: out << "- "; break;
 			case TokenType::IncrementOp: out << "++ "; break;
 			case TokenType::DecrementOp: out << "-- "; break;
 			default: assert(false);
