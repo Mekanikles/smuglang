@@ -20,3 +20,5 @@ printf("Hello integer expressions %i, %i\n", 5 * 4 - 3 / 2, 1 + 2 * 3);
 printf("Hello float expression %f\n", 5.2 + 4.1 - .3 / .002 * 1.04);
 
 printf("Hello float expressions %f, %f\n", 5.1 * 4.4 - .33 / 2.22, 1.0 + 2.1 * .3);
+
+printf("Hello sub expression %i\n", (5 + 4) - (3 + 2) - (((1))));

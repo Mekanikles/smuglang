@@ -1006,9 +1006,18 @@ bool acceptBinaryOperator()
 	return false;
 }
 
+bool parseExpression(AST::Expression** outExpr);
+
 bool parsePrimaryExpression(AST::Expression** outNode)
 {
-	if (acceptUnaryOperator())
+	if (accept(TokenType::OpenParenthesis))
+	{
+		if (!parseExpression(outNode))
+			error("Expected expression");
+
+		expect(TokenType::CloseParenthesis);
+	}
+	else if (acceptUnaryOperator())
 	{
 		auto uop = createNode<AST::UnaryOp>();
 		uop->type = lastToken().type;
@@ -1085,47 +1094,48 @@ bool hasHigherOperatorPrecedence(TokenType left, TokenType right)
 }
 
 
-bool parseExpression(ScannerFactory* scannerFactory, AST::Expression** outExpr)
+bool parseExpression(AST::Expression** outExpr)
 {
-	vector<TokenType> binOpStack;
-	vector<AST::Expression*> exprStack;
 
 	// Shunt all the yards!
 	AST::Expression* exprNode = nullptr;
-	if (parsePrimaryExpression(&exprNode))
+	if (!parsePrimaryExpression(&exprNode))
+		return false;
+
+	vector<TokenType> binOpStack;
+	vector<AST::Expression*> exprStack;
+
+	exprStack.push_back(exprNode);
+
+	while (acceptBinaryOperator())
 	{
-		exprStack.push_back(exprNode);
+		const auto op = lastToken().type;
 
-		while (acceptBinaryOperator())
+		// Resolve as many previous ops as possible
+		while (binOpStack.size() > 0 && !hasHigherOperatorPrecedence(binOpStack.back(), op))
 		{
-			const auto op = lastToken().type;
+			assert(exprStack.size() > 1);
+			auto* bop = createNode<AST::BinaryOp>();
+			bop->type = binOpStack.back();
+			binOpStack.pop_back();
+			bop->right = exprStack.back();
+			exprStack.pop_back();
+			bop->left = exprStack.back();
 
-			// Resolve as many previous ops as possible
-			while (binOpStack.size() > 0 && !hasHigherOperatorPrecedence(binOpStack.back(), op))
-			{
-				assert(exprStack.size() > 1);
-				auto* bop = createNode<AST::BinaryOp>();
-				bop->type = binOpStack.back();
-				binOpStack.pop_back();
-				bop->right = exprStack.back();
-				exprStack.pop_back();
-				bop->left = exprStack.back();
+			exprStack.back() = bop;	
+		}
 
-				exprStack.back() = bop;	
-			}
+		binOpStack.push_back(op);
 
-			binOpStack.push_back(op);
-
-			if (parsePrimaryExpression(&exprNode))
-			{
-				exprStack.push_back(exprNode);
-				continue;
-			}
-			else
-			{
-				error("Expected primary expression");
-				return true;
-			}
+		if (parsePrimaryExpression(&exprNode))
+		{
+			exprStack.push_back(exprNode);
+			continue;
+		}
+		else
+		{
+			error("Expected primary expression");
+			return true;
 		}
 	}
 
@@ -1152,7 +1162,7 @@ bool parseCallParameters(ScannerFactory* scannerFactory, AST::Call* call)
 	if (accept(TokenType::OpenParenthesis))
 	{
 		AST::Expression* exprNode;
-		while (parseExpression(scannerFactory, &exprNode))
+		while (parseExpression(&exprNode))
 		{
 			call->args.push_back(exprNode);
 
@@ -1462,6 +1472,7 @@ struct CGenerator : AST::Visitor
 	{	
 		auto& out = m_body;
 
+		out << "(";
 		node->left->accept(this);
 		out << " ";
 		switch (node->type)
@@ -1473,6 +1484,7 @@ struct CGenerator : AST::Visitor
 			default: assert(false);
 		}
 		node->right->accept(this);
+		out << ")";
 	}
 
 	void visit(AST::UnaryOp* node) override
