@@ -132,11 +132,6 @@ string toString(const Token& t)
 		return toString(t.type);
 }
 
-struct ParseError
-{
-	string error;
-};
-
 class BufferedInputStream
 {
 public:
@@ -199,7 +194,7 @@ public:
 			buffered = fillBuffer();
 
 		if (buffered > count)
-			return m_circBuffer[m_begin + count];
+			return m_circBuffer[(m_begin + count) % BUF_SIZE];
 		else
 			return EOF;
 	}
@@ -262,6 +257,16 @@ private:
 	uint m_column = 1;
 };
 
+struct ScannerError
+{
+	string msg;
+	uint column;
+	uint row;
+};
+
+vector<ScannerError> s_scannerErrors;
+int s_newScannerErrors = 0;
+
 class Scanner
 {
 public:	
@@ -270,7 +275,7 @@ public:
 	{
 	}
 
-	virtual bool getToken(Token* outToken, ParseError* outError) = 0;
+	virtual bool getToken(Token* outToken) = 0;
 
 	uint currentColumn() { return m_inStream.currentColumn(); }
 	uint currentRow() { return m_inStream.currentRow(); }
@@ -284,7 +289,16 @@ protected:
 		Nothing
 	};
 
-	ScanResult scanComments(ParseError* outParseError)
+	void error(string msg)
+	{
+		const uint column = currentColumn();
+		const uint row = currentRow();
+
+		s_scannerErrors.push_back(ScannerError { msg, column, row });
+		s_newScannerErrors++;
+	}
+
+	ScanResult scanComments()
 	{
 		const char n1 = m_inStream.peek();
 		const char n2 = m_inStream.lookAhead();
@@ -344,7 +358,6 @@ protected:
 
 protected:
 	BufferedInputStream& m_inStream;
-	int m_blockCommentLevel = 0;
 };
 
 class TopLevelScanner : public Scanner
@@ -491,14 +504,13 @@ public:
 		return ret;
 	}
 
-	bool getToken(Token* outToken, ParseError* outError) override
+	bool getToken(Token* outToken) override
 	{
-		ParseError error;
 		outToken->type = TokenType::EndOfScan;
 
 		while (m_inStream)
 		{
-			auto scanRes = Scanner::scanComments(outError);
+			auto scanRes = Scanner::scanComments();
 			if (scanRes == ScanResult::FoundToken)
 				return true;
 			else if (scanRes == ScanResult::Error)
@@ -632,7 +644,8 @@ public:
 			}
 
 			// Don't let anything unparsed through
-			assert(false);
+			m_inStream.ignore();			
+			error("Unrecognized character");
 		}
 
 		return true;
@@ -858,7 +871,6 @@ struct ParserError
 	uint row;
 };
 
-
 vector<Token> s_tokens;
 Token s_currentToken = Token(TokenType::StartOfScan);
 vector<Scanner*> s_scanners;
@@ -915,7 +927,7 @@ int newErrors() { const int ret = s_newErrors; s_newErrors = 0; return ret; }
 void advanceToken()
 {
 	s_tokens.push_back(s_currentToken);
-	getScanner()->getToken(&s_currentToken, nullptr);
+	getScanner()->getToken(&s_currentToken);
 	//printLine(string("Found token: ") + toString(s_currentToken));
 }
 
@@ -1157,7 +1169,7 @@ bool parseExpression(AST::Expression** outExpr)
 	return true;
 }
 
-bool parseCallParameters(ScannerFactory* scannerFactory, AST::Call* call)
+bool parseCallParameters(AST::Call* call)
 {
 	if (accept(TokenType::OpenParenthesis))
 	{
@@ -1206,7 +1218,7 @@ void skipCurrentStatement()
 }
 
 // TODO: Rename parseModule
-bool parseTopLevel(ScannerFactory* scannerFactory, AST::Module* module)
+bool parseTopLevel(AST::Module* module)
 {
 	while(true)
 	{
@@ -1241,7 +1253,8 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Module* module)
 		}
 		else if (accept(TokenType::Symbol))
 		{
-			string symbol = lastToken().symbol;
+			Token t = lastToken();
+			string symbol = t.symbol;
 
 			// Function call
 			if (peek(TokenType::OpenParenthesis))
@@ -1249,7 +1262,7 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Module* module)
 				auto node = createNode<AST::Call>();
 				node->function = symbol;
 
-				if (!parseCallParameters(scannerFactory, node))
+				if (!parseCallParameters(node))
 				{
 					error(lastToken(), "Call parameter list expected");
 				}
@@ -1267,7 +1280,7 @@ bool parseTopLevel(ScannerFactory* scannerFactory, AST::Module* module)
 			}
 			else
 			{
-				error(lastToken(), "No support for non-call symbols yet!");
+				error(t, "No support for non-call symbols yet!");
 			}
 		}
 		else if (newErrors())
@@ -1294,11 +1307,11 @@ bool parse(ScannerFactory* scannerFactory, AST* ast)
 	auto* node = createNode<AST::Module>();
 
 	advanceToken();
-	parseTopLevel(scannerFactory, node);
+	parseTopLevel(node);
 	expect(TokenType::EndOfScan);
 
 	ast->root = node;
-	return s_parserErrors.size() == 0;
+	return s_parserErrors.size() == 0 && s_scannerErrors.size() == 0;
 }
 
 void printAST(AST* ast, int indent = 0)
@@ -1361,33 +1374,6 @@ void printTokens(const vector<Token>& tokens)
 	}
 }
 
-/*
-struct CExpressionGenerator
-{
-	CExpressionGenerator(std::ostream* out, int indent)
-		: m_out(out)
-		, m_indent(indent)
-	{}
-
-	void visit(AST::Call* node) override
-	{
-		//return "";
-	};
-
-	void visit(AST::StringLiteral* node) override
-	{
-		auto& out = m_head;
-
-		if (node->type == AST::Import::Type_C)
-			out << "#include <" << node->file << ">\n";
-			
-		//return "";
-	};
-
-	std::ostream* m_out;
-	int m_indent;
-}
-*/
 struct CGenerator : AST::Visitor
 {
 	CGenerator(std::ostream* out)
@@ -1427,32 +1413,9 @@ struct CGenerator : AST::Visitor
 			out << "#include <" << node->file << ">\n";
 	}
 
-	void appendArg(std::ostream& out, AST::Node* node)
-	{
-		if (auto* n = dynamic_cast<AST::StringLiteral*>(node))
-		{
-			out << n->value;
-		}
-		else if (auto* n = dynamic_cast<AST::IntegerLiteral*>(node))
-		{
-			out << n->value;
-		}
-		else if (auto* n = dynamic_cast<AST::FloatLiteral*>(node))
-		{
-			out << n->value;
-		}
-	}
-
 	void visit(AST::Call* node) override
 	{
 		auto& out = m_body;
-		/*CExpressionGenerator exprGen(out, m_indent);
-
-		for (auto a : node->args)
-		{
-			string s = a->accept(exprGen);
-			print(s);
-		}*/
 
 		out << indent(m_indent) << node->function << "(";
 		int argCount = node->args.size();
@@ -1529,6 +1492,7 @@ struct CGenerator : AST::Visitor
 	std::stringstream m_head;
 	std::stringstream m_body;
 	int m_indent;
+	unsigned m_tempVarCount = 0;
 }; 
 
 
@@ -1540,19 +1504,34 @@ std::ifstream& gotoLine(std::ifstream& file, unsigned int num){
     return file;
 }
 
-void printPointAtColumn(uint column, int indent = 0)
+void printPointAtColumn(int column, int indent = 0)
 {
 	indent = ((column - 1) / 4) + 1;
 	printIndent(indent);
-	uint rest = (column - 1) % 4;
+	int rest = std::max((column - 1) % 4, 0);
 	for (int i = 0; i < rest; ++i)
 		print(" ");
 	printLine("\033[1;31m^\033[0m");
 }
 
+void printScannerErrors(std::ifstream& file)
+{
+	for (auto e : s_scannerErrors)
+	{
+		printLine(string("\033[1m") + std::to_string(e.row) + 
+				":" + std::to_string(e.column) + ": \033[31mError: \033[39m" + e.msg + "\033[0m");
+
+		// TODO: Make into segment surrounding error instead, to support really long lines
+		char line[256];
+		auto& fileAtLine = gotoLine(file, e.row);
+		fileAtLine.getline(line, 256);
+		printLine(string(line), 1);
+		printPointAtColumn(e.column, 1);
+	}
+}
+
 void printParserErrors(std::ifstream& file)
 {
-	int hej;
 	for (auto e : s_parserErrors)
 	{
 		printLine(string("\033[1m") + std::to_string(e.row) + 
@@ -1579,13 +1558,13 @@ int main(int argc, char** argv)
 	BufferedInputStream inStream(inFile);
 	ScannerFactory scannerFactory(inStream);
 	AST ast;
-	ParseError error;
 
 	LOG("Parsing...");
 	if (!parse(&scannerFactory, &ast))
 	{
 		LOG("Parse fail!");
 		auto f = std::ifstream(args[0]);
+		printScannerErrors(f);
 		printParserErrors(f);
 	}
 	else
