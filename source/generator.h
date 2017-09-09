@@ -105,6 +105,16 @@ struct CGenerator : AST::Visitor
 		}
 	}
 
+	void visit(AST::SymbolDeclaration* node) override
+	{
+		m_body << indent(m_indent) << "const char* " << node->symbol << ";\n"; 
+	}
+
+	void visit(AST::SymbolExpression* node) override
+	{
+		m_body << node->symbol; 
+	}
+
 	void visit(AST::StringLiteral* node) override
 	{	m_body << node->value; }
 

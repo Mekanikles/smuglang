@@ -295,14 +295,16 @@ public:
 				}
 			}
 
-			// Symbols
+			// Symbols and keywords
 			if (isalpha(n))
 			{
 				string w = scanWord();
 				// TODO: Difference between toplevel scan and body scan?
 				if (w == "import")
 					*outToken = Token(TokenType::Import);
-				else	
+				else if (w == "var")
+					*outToken = Token(TokenType::Var);
+				else
 					*outToken = Token(TokenType::Symbol, w);
 				return true;
 			}

@@ -7,6 +7,8 @@ struct AST
 	struct Module;
 	struct Import;
 	struct Call;
+	struct SymbolDeclaration;
+	struct SymbolExpression;
 	struct StringLiteral;
 	struct IntegerLiteral;
 	struct FloatLiteral;
@@ -20,7 +22,9 @@ struct AST
 		virtual void visit(Module* node) { assert(false); }
 		virtual void visit(Import* node) { visit((Statement*)node); }
 		virtual void visit(Call* node) { visit((Statement*)node); }
+		virtual void visit(SymbolDeclaration* node) { visit((Expression*)node);}	
 		virtual void visit(Expression* node) { assert(false); }
+		virtual void visit(SymbolExpression* node) { visit((Expression*)node);}
 		virtual void visit(StringLiteral* node) { visit((Expression*)node);}
 		virtual void visit(IntegerLiteral* node) { visit((Expression*)node); }
 		virtual void visit(FloatLiteral* node) { visit((Expression*)node);  }
@@ -81,8 +85,8 @@ struct AST
 	struct StringLiteral : NodeImpl<StringLiteral, Expression>
 	{
 		string value;
-		string toString() override 
-		{ 
+		string toString() override
+		{
 			string s = "StringLiteral(" + value + ")";
 			return s;
 		}
@@ -106,6 +110,28 @@ struct AST
 			string s = "FloatLiteral(" + value + ")";
 			return s;
 		}
+	};
+
+	struct SymbolDeclaration : NodeImpl<SymbolDeclaration, Statement>
+	{
+		string symbol;
+
+		string toString() override 
+		{ 
+			string s = "VariableDeclaration(" + symbol + ")";
+			return s; 
+		}
+	};
+
+	struct SymbolExpression : NodeImpl<SymbolExpression, Expression>
+	{
+		string symbol;
+
+		string toString() override 
+		{ 
+			string s = "VariableExpression(" + symbol + ")";
+			return s; 
+		}		
 	};
 
 	// TODO: split functions into calls and call-expression?

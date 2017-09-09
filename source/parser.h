@@ -84,7 +84,7 @@ bool accept(TokenType type)
 	return false;
 }
 
-bool expect(TokenType type)
+bool expect(TokenType type, bool skipOnError = true)
 {
 	//printLine(string("Expect: ") + toString(type) + ((s_currentToken.type != type)? (string(" (got ") + toString(s_currentToken.type) + ")") : ""));
 	if (accept(type))
@@ -94,7 +94,8 @@ bool expect(TokenType type)
 			string("Expected ") + toString(type) + " but got " + 
 			toString(s_currentToken.type);
 	error(s_currentToken, errMsg);
-	advanceToken();	
+	if (skipOnError)
+		advanceToken();	
 	return false;
 }
 
@@ -180,6 +181,7 @@ bool parsePrimaryExpression(AST::Expression** outNode)
 		else
 		{
 			error("Expected primary expression");
+			*outNode = nullptr;
 			return true;
 		}
 	}
@@ -199,6 +201,12 @@ bool parsePrimaryExpression(AST::Expression** outNode)
 	{
 		auto* expr = createNode<AST::FloatLiteral>();
 		expr->value = lastToken().symbol;
+		*outNode = expr;
+	}
+	else if (accept(TokenType::Symbol))
+	{
+		auto* expr = createNode<AST::SymbolExpression>();
+		expr->symbol = lastToken().symbol;
 		*outNode = expr;
 	}
 	else
@@ -242,7 +250,6 @@ bool hasHigherOperatorPrecedence(TokenType left, TokenType right)
 	return (r > l);
 }
 
-
 bool parseExpression(AST::Expression** outExpr)
 {
 
@@ -284,6 +291,7 @@ bool parseExpression(AST::Expression** outExpr)
 		else
 		{
 			error("Expected primary expression");
+			*outExpr = nullptr;
 			return true;
 		}
 	}
@@ -308,32 +316,26 @@ bool parseExpression(AST::Expression** outExpr)
 
 bool parseCallParameters(AST::Call* call)
 {
-	if (accept(TokenType::OpenParenthesis))
+	AST::Expression* exprNode;
+	while (parseExpression(&exprNode))
 	{
-		AST::Expression* exprNode;
-		while (parseExpression(&exprNode))
+		call->args.push_back(exprNode);
+
+		if (peek(TokenType::CloseParenthesis))
 		{
-			call->args.push_back(exprNode);
-
-			if (peek(TokenType::CloseParenthesis))
-			{
-				break;
-			}
-			else if (expect(TokenType::Comma))
-			{
-				continue;
-			}
-			else
-			{
-				break;
-			}
+			break;
 		}
-
-		expect(TokenType::CloseParenthesis);
-
-		return true;
+		else if (expect(TokenType::Comma))
+		{
+			continue;
+		}
+		else
+		{
+			break;
+		}
 	}
-	return false;
+
+	return true;
 }
 
 string stringSymbolValue(string symbol)
@@ -342,7 +344,7 @@ string stringSymbolValue(string symbol)
 }
 
 
-void skipCurrentStatement()
+void skipToNextStatement()
 {
 	// TODO: Can this be generalized for non semi-colon statements?
 	// If we encountered errors and could not parse anymore statements, try to jump to next statement
@@ -354,80 +356,114 @@ void skipCurrentStatement()
 	}
 }
 
-// TODO: Rename parseModule
-bool parseTopLevel(AST::Module* module)
+bool parseSymbolDeclaration(AST::Statement** outStatement)
 {
-	while(true)
+	if (accept(TokenType::Var))
 	{
-		if (accept(TokenType::Import))
+		if (expect(TokenType::Symbol))
 		{
-			AST::Import::Type importType = AST::Import::Type_Native;
-
-			// optional import params
-			// TODO: invoke new parameter list scanner?
-			if (accept(TokenType::OpenParenthesis))
-			{
-				expect(TokenType::StringLiteral);	
-				if (stringSymbolValue(lastToken().symbol) != "c")
-					error(lastToken(), "Only 'c' imports type specifier is supported");
-
-				importType = AST::Import::Type_C;
-
-				expect(TokenType::CloseParenthesis);	
-			}
-		
-			expect(TokenType::StringLiteral);
-			const string file = stringSymbolValue(lastToken().symbol);
-
-			expect(TokenType::SemiColon);
-
-			auto node = createNode<AST::Import>();
-			node->file = file;
-			if(importType != AST::Import::Type_C)
-				error(lastToken(), "Only 'c' type imports are supported");
-			node->type = importType;
-			module->addStatement(node);
-		}
-		else if (accept(TokenType::Symbol))
-		{
-			Token t = lastToken();
-			string symbol = t.symbol;
-
-			// Function call
-			if (peek(TokenType::OpenParenthesis))
-			{
-				auto node = createNode<AST::Call>();
-				node->function = symbol;
-
-				if (!parseCallParameters(node))
-				{
-					error(lastToken(), "Call parameter list expected");
-				}
-
-				if (!newErrors())
-				{
-					expect(TokenType::SemiColon);
-
-					module->addStatement(node);
-				}
-				else
-				{
-					skipCurrentStatement();
-				}		
-			}
-			else
-			{
-				error(t, "No support for non-call symbols yet!");
-			}
-		}
-		else if (newErrors())
-		{
-			skipCurrentStatement();
+			auto* node = createNode<AST::SymbolDeclaration>();
+			node->symbol = lastToken().symbol;
+			*outStatement = node;
 		}
 		else
 		{
-			// TODO: Can module parse return false?
-			return true;
+			*outStatement = nullptr;
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+bool parseStatement(AST::Statement** outStatement)
+{
+	printLine(string("Trying to parse statement, with token: ") + toString(s_currentToken));
+	if (accept(TokenType::Import))
+	{
+		AST::Import::Type importType = AST::Import::Type_Native;
+
+		// optional import params
+		// TODO: invoke new parameter list scanner?
+		if (accept(TokenType::OpenParenthesis))
+		{
+			expect(TokenType::StringLiteral);	
+			if (stringSymbolValue(lastToken().symbol) != "c")
+				error(lastToken(), "Only 'c' imports type specifier is supported");
+
+			importType = AST::Import::Type_C;
+
+			expect(TokenType::CloseParenthesis);	
+		}
+	
+		expect(TokenType::StringLiteral);
+		const string file = stringSymbolValue(lastToken().symbol);
+
+		expect(TokenType::SemiColon);
+
+		auto node = createNode<AST::Import>();
+		node->file = file;
+		if(importType != AST::Import::Type_C)
+			error(lastToken(), "Only 'c' type imports are supported");
+		node->type = importType;
+		*outStatement = node;
+	}
+	else if (accept(TokenType::Symbol))
+	{
+		Token t = lastToken();
+		string symbol = t.symbol;
+
+		// Function call
+		if (expect(TokenType::OpenParenthesis))
+		{
+			auto node = createNode<AST::Call>();
+			node->function = symbol;
+
+			if (!parseCallParameters(node))
+			{
+				error(lastToken(), "Call parameter list expected");
+			}
+
+			if (!newErrors())
+			{
+				expect(TokenType::CloseParenthesis);
+				expect(TokenType::SemiColon);
+
+				*outStatement = node;
+			}
+			else
+			{
+				skipToNextStatement();
+			}		
+		}
+	}
+	else if (parseSymbolDeclaration(outStatement))
+	{
+		expect(TokenType::SemiColon, false);
+	}
+	else
+	{
+		return false;
+	}
+
+	return true;
+}
+
+// TODO: Rename parseModule
+bool parseTopLevel(AST::Module* module)
+{
+	while(!peek(TokenType::EndOfScan))
+	{
+		AST::Statement* stmnt;
+		if (parseStatement(&stmnt))
+		{
+			module->addStatement(stmnt);
+		}
+		else
+		{
+			error("Expected statement");
+			skipToNextStatement();
 		}
 	}
 

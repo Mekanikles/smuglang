@@ -14,7 +14,7 @@ printf("Hello special integer %u, %i\n", 0xFFF16, 0b1111101);
 printf("Hello floats %f, %f, %f, %f, %f\n", 1.0, 1.2, .2, .2e2, .3E2);
 
 printf("Hello integer expression %i\n", 5 + 4 - 3 / 2 * 1);
-f;
+
 printf("Hello integer expressions %i, %i\n", 5 * 4 - 3 / 2, 1 + 2 * 3);
 
 printf("Hello float expression %f\n", 5.2 + 4.1 - .3 / .002 * 1.04);
@@ -22,3 +22,6 @@ printf("Hello float expression %f\n", 5.2 + 4.1 - .3 / .002 * 1.04);
 printf("Hello float expressions %f, %f\n", 5.1 * 4.4 - .33 / 2.22, 1.0 + 2.1 * .3);
 
 printf("Hello sub expression %i\n", (5 + 4) - (3 + 2) - (((1))));
+
+var hejhej;
+printf("%s", hejhej);

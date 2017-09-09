@@ -9,6 +9,7 @@ enum class TokenType
 	IntegerLiteral,
 	FloatLiteral,
 	Symbol,
+	Var,
 	CompilerDirective,
 	SemiColon,
 	Comma,
@@ -46,6 +47,7 @@ string toString(TokenType type)
 		case TokenType::IntegerLiteral: return "Integer Literal";
 		case TokenType::FloatLiteral: return "Float Literal";
 		case TokenType::Symbol: return "Symbol";
+		case TokenType::Var: return "Var";
 		case TokenType::CompilerDirective: return "Compiler Directive";		
 		case TokenType::SemiColon: return "Semi Colon";
 		case TokenType::Comma: return "Comma";
