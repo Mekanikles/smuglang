@@ -115,6 +115,7 @@ struct AST
 	struct SymbolDeclaration : NodeImpl<SymbolDeclaration, Statement>
 	{
 		string symbol;
+		Expression* initExpression = nullptr;
 
 		string toString() override 
 		{ 
@@ -154,7 +155,7 @@ struct AST
 	struct UnaryOp : NodeImpl<UnaryOp, Expression>
 	{
 		TokenType type;
-		Expression* expr;
+		Expression* expr = nullptr;
 
 		string toString() override 
 		{ 
@@ -173,7 +174,7 @@ struct AST
 	struct UnaryPostfixOp : NodeImpl<UnaryPostfixOp, Expression>
 	{
 		TokenType type;
-		Expression* expr;
+		Expression* expr = nullptr;
 
 		string toString() override 
 		{ 
@@ -192,8 +193,8 @@ struct AST
 	struct BinaryOp : NodeImpl<BinaryOp, Expression>
 	{
 		TokenType type;
-		Expression* left;
-		Expression* right;
+		Expression* left = nullptr;
+		Expression* right = nullptr;
 
 		string toString() override 
 		{ 

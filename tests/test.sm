@@ -23,5 +23,5 @@ printf("Hello float expressions %f, %f\n", 5.1 * 4.4 - .33 / 2.22, 1.0 + 2.1 * .
 
 printf("Hello sub expression %i\n", (5 + 4) - (3 + 2) - (((1))));
 
-var hejhej;
-printf("%s", hejhej);
+var v = "World!";
+printf("Hello variable %s", v);

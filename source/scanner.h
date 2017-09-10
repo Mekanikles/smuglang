@@ -282,6 +282,13 @@ public:
 				return true;
 			}
 
+			if (n == '=')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::Equals);
+				return true;
+			}
+
 			// Compiler directive
 			if (n == '#')
 			{

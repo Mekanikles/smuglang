@@ -360,15 +360,28 @@ bool parseSymbolDeclaration(AST::Statement** outStatement)
 {
 	if (accept(TokenType::Var))
 	{
-		if (expect(TokenType::Symbol))
-		{
-			auto* node = createNode<AST::SymbolDeclaration>();
-			node->symbol = lastToken().symbol;
-			*outStatement = node;
-		}
-		else
+		if (!expect(TokenType::Symbol))
 		{
 			*outStatement = nullptr;
+			return true;
+		}
+			
+		auto* node = createNode<AST::SymbolDeclaration>();
+		node->symbol = lastToken().symbol;
+		*outStatement = node;
+
+		// Optional initializatino
+		if (accept(TokenType::Equals))
+		{
+			AST::Expression* expr;
+			if (parseExpression(&expr))
+			{
+				node->initExpression = expr;
+			}
+			else
+			{
+				error("Expected expression");
+			}
 		}
 
 		return true;
