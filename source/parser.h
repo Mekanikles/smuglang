@@ -356,21 +356,43 @@ void skipToNextStatement()
 	}
 }
 
+// TODO: Expand this to any expression
+bool parseTypeExpression(AST::SymbolExpression** outExpr)
+{
+	if (accept(TokenType::Symbol))
+	{
+		auto* node = createNode<AST::SymbolExpression>();
+		node->symbol = lastToken().symbol;
+		*outExpr = node;
+		return true;
+	}
+
+	return false;
+}
+
 bool parseSymbolDeclaration(AST::Statement** outStatement)
 {
 	if (accept(TokenType::Var))
 	{
-		if (!expect(TokenType::Symbol))
-		{
-			*outStatement = nullptr;
-			return true;
-		}
-			
 		auto* node = createNode<AST::SymbolDeclaration>();
-		node->symbol = lastToken().symbol;
 		*outStatement = node;
 
-		// Optional initializatino
+		if (accept(TokenType::OpenParenthesis))
+		{
+			AST::SymbolExpression* expr;
+			parseTypeExpression(&expr);
+
+			node->typeExpression = expr;
+
+			expect(TokenType::CloseParenthesis);
+		}
+
+		if (!expect(TokenType::Symbol))
+			return true;
+			
+		node->symbol = lastToken().symbol;
+
+		// Optional initialization
 		if (accept(TokenType::Equals))
 		{
 			AST::Expression* expr;
@@ -484,7 +506,7 @@ bool parseTopLevel(AST::Module* module)
 }
 
 
-bool parse(ScannerFactory* scannerFactory, AST* ast)
+bool parse(ScannerFactory* scannerFactory, AST::AST* ast)
 {
 	// TODO: Should scanner be pushed/popped? All parsers need to do it to be safe
 	auto s = ScopedScanner<TopLevelScanner>(scannerFactory->scanTopLevel());

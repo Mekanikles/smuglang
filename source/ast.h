@@ -1,7 +1,8 @@
 #pragma once
 
-struct AST
+namespace AST
 {
+	struct Node;
 	struct Statement;
 	struct Expression;
 	struct Module;
@@ -16,21 +17,26 @@ struct AST
 	struct UnaryPostfixOp;
 	struct BinaryOp;
 
+	struct Visitor;
+	void visitChildren(Statement* node, Visitor* v);
+	void visitChildren(Module* node, Visitor* v);
+	void visitChildren(Expression* node, Visitor* v);
+
 	struct Visitor
 	{
-		virtual void visit(Statement* node) { assert(false); }
-		virtual void visit(Module* node) { assert(false); }
+		virtual void visit(Statement* node) { visitChildren(node, this); }
+		virtual void visit(Module* node) { visitChildren(node, this); }
 		virtual void visit(Import* node) { visit((Statement*)node); }
 		virtual void visit(Call* node) { visit((Statement*)node); }
 		virtual void visit(SymbolDeclaration* node) { visit((Expression*)node);}	
-		virtual void visit(Expression* node) { assert(false); }
+		virtual void visit(Expression* node) { visitChildren(node, this); }
 		virtual void visit(SymbolExpression* node) { visit((Expression*)node);}
 		virtual void visit(StringLiteral* node) { visit((Expression*)node);}
 		virtual void visit(IntegerLiteral* node) { visit((Expression*)node); }
-		virtual void visit(FloatLiteral* node) { visit((Expression*)node);  }
-		virtual void visit(UnaryOp* node) { visit((Expression*)node);  }
+		virtual void visit(FloatLiteral* node) { visit((Expression*)node); }
+		virtual void visit(UnaryOp* node) { visit((Expression*)node); }
 		virtual void visit(UnaryPostfixOp* node) { visit((Expression*)node); }
-		virtual void visit(BinaryOp* node) { visit((Expression*)node);  }
+		virtual void visit(BinaryOp* node) { visit((Expression*)node); }
 	};
 
 	struct Node
@@ -42,11 +48,17 @@ struct AST
 		virtual string toString() = 0;
 	};
 
+	void visitChildren(Node* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
+
 	struct Statement : Node
 	{};
 
+	void visitChildren(Statement* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
+
 	struct Expression : Node
 	{};
+
+	void visitChildren(Expression* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
 
 	template<typename T, typename P = Node>
 	struct NodeImpl : P
@@ -57,6 +69,7 @@ struct AST
 	struct Module : NodeImpl<Module>
 	{
 		vector<Statement*> statements;
+		SymbolScope scope;
 		string toString() override { return "Module"; }
 		const vector<Node*> getChildren() override
 		{
@@ -68,6 +81,8 @@ struct AST
 			statements.push_back(s);
 		}
 	};
+
+	void visitChildren(Module* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
 
 	struct Import : NodeImpl<Import, Statement>
 	{	
@@ -115,7 +130,9 @@ struct AST
 	struct SymbolDeclaration : NodeImpl<SymbolDeclaration, Statement>
 	{
 		string symbol;
+		SymbolExpression* typeExpression = nullptr;
 		Expression* initExpression = nullptr;
+		Symbol* symbolObj = nullptr;
 
 		string toString() override 
 		{ 
@@ -127,6 +144,7 @@ struct AST
 	struct SymbolExpression : NodeImpl<SymbolExpression, Expression>
 	{
 		string symbol;
+		Symbol* symbolObj = nullptr;
 
 		string toString() override 
 		{ 
@@ -211,8 +229,11 @@ struct AST
 		}
 	};
 
-	Node* root = nullptr;
-};
+	struct AST
+	{
+		Node* root = nullptr;
+	};
+}
 
 vector<AST::Node*> s_nodes;
 

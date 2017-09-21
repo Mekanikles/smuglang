@@ -7,7 +7,7 @@ struct CGenerator : AST::Visitor
 		, m_indent(0)
 	{}
 
-	void run(AST* ast)
+	void run(AST::AST* ast)
 	{
 		ast->root->accept(this);
 
@@ -108,7 +108,10 @@ struct CGenerator : AST::Visitor
 	void visit(AST::SymbolDeclaration* node) override
 	{
 		auto& out = m_body;
-		out << indent(m_indent) << "const char* " << node->symbol;
+		out << indent(m_indent);
+		assert(node->typeExpression);
+		node->typeExpression->accept(this);
+		out << " " << node->symbol;
 		if (node->initExpression)
 		{
 			out << " = ";

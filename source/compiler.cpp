@@ -11,10 +11,62 @@
 #include "input.h"
 #include "token.h"
 #include "scanner.h"
+#include "symbols.h"
 #include "ast.h"
 #include "parser.h"
 #include "generator.h"
 #include "output.h"
+
+vector<Symbol*> s_unresolvedSymbols;
+
+struct SymbolResolver : AST::Visitor
+{
+	SymbolResolver()
+	{}
+
+	void visit(AST::Module* node) override
+	{
+		m_currentScope = &node->scope;
+		AST::Visitor::visit(node);
+	}
+
+	void visit(AST::SymbolDeclaration* node) override
+	{
+		assert(node->typeExpression);
+		
+		Symbol* symbol;
+		// Make sure symbol is not declared in same scope
+		// 	It is okay to overshadow parent scope declarations.
+		if (m_currentScope->getSymbolInScope(node->symbol, &symbol))
+		{
+			assert(false);
+		}
+
+		// TODO: Add type information
+		symbol = createSymbol(node->symbol);
+		m_currentScope->addSymbol(symbol);
+		node->symbolObj = symbol;
+	}
+
+	void visit(AST::SymbolExpression* node) override
+	{
+		Symbol* symbol;
+		if (m_currentScope->lookUpSymbolName(node->symbol, &symbol))
+		{
+			node->symbolObj = symbol;
+		}
+		else
+		{
+			assert(false);
+		}
+	}
+
+	SymbolScope* m_currentScope = nullptr;
+};
+
+
+
+
 
 int main(int argc, char** argv)
 {
@@ -27,7 +79,7 @@ int main(int argc, char** argv)
 
 	BufferedInputStream inStream(inFile);
 	ScannerFactory scannerFactory(inStream);
-	AST ast;
+	AST::AST ast;
 
 	LOG("Parsing...");
 	if (!parse(&scannerFactory, &ast))
@@ -42,6 +94,10 @@ int main(int argc, char** argv)
 		LOG("Parse success!");
 		printLine("Tokens:");
 		printTokens(s_tokens);
+
+		LOG("Resolving symbols...");
+		SymbolResolver symbolResolver;
+		ast.root->accept(&symbolResolver);
 
 		printLine("AST:");
 		printAST(&ast, 1);

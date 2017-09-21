@@ -1,6 +1,6 @@
 #pragma once
 
-void printAST(AST* ast, int indent = 0)
+void printAST(AST::AST* ast, int indent = 0)
 {
 	/*
 		Module
