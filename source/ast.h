@@ -42,6 +42,8 @@ namespace AST
 		virtual void visit(BinaryOp* node) { visit((Expression*)node); }
 	};
 
+	static int s_nodeCount = 0;
+
 	struct Node
 	{
 		virtual ~Node() = default;
@@ -49,6 +51,8 @@ namespace AST
 		virtual const vector<Node*> getChildren() { return vector<Node*>(); }
 		virtual void accept(Visitor* v) = 0;
 		virtual string toString() = 0;
+
+		int order = s_nodeCount++;
 	};
 
 	void visitChildren(Node* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }

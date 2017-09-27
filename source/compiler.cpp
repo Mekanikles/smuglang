@@ -86,7 +86,14 @@ struct SymbolExpressionScanner : AST::Visitor
 				symbol = createSymbol(node->symbol);
 				m_unresolvedSymbols.push_back(symbol);
 			}
-		}	
+		}
+		else
+		{
+			if (symbol->declNode->order > node->order)
+			{	
+				printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization");
+			}
+		}
 		
 		node->symbolObj = symbol;
 	}
