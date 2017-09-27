@@ -17,11 +17,9 @@
 #include "generator.h"
 #include "output.h"
 
-vector<Symbol*> s_unresolvedSymbols;
-
-struct SymbolResolver : AST::Visitor
+struct SymbolDeclarationScanner : AST::Visitor
 {
-	SymbolResolver()
+	SymbolDeclarationScanner()
 	{}
 
 	void visit(AST::Module* node) override
@@ -32,7 +30,7 @@ struct SymbolResolver : AST::Visitor
 
 	void visit(AST::SymbolDeclaration* node) override
 	{
-		assert(node->typeExpression);
+		assert(node->typeExpr);
 		
 		Symbol* symbol;
 		// Make sure symbol is not declared in same scope
@@ -44,29 +42,83 @@ struct SymbolResolver : AST::Visitor
 
 		// TODO: Add type information
 		symbol = createSymbol(node->symbol);
+		symbol->declNode = node;
 		m_currentScope->addSymbol(symbol);
 		node->symbolObj = symbol;
+	}
+
+	SymbolScope* m_currentScope = nullptr;	
+};
+
+struct SymbolExpressionScanner : AST::Visitor
+{
+	SymbolExpressionScanner()
+	{}
+
+	void visit(AST::Module* node) override
+	{
+		m_currentScope = &node->scope;
+		AST::Visitor::visit(node);
+	}
+
+	Symbol* findUnresolved(const string& symbol)
+	{
+		for (Symbol* s : m_unresolvedSymbols)
+		{
+			if (symbol == s->name)
+			{
+				return s;
+			}
+		}
+
+		return nullptr;
 	}
 
 	void visit(AST::SymbolExpression* node) override
 	{
 		Symbol* symbol;
-		if (m_currentScope->lookUpSymbolName(node->symbol, &symbol))
+		if (!m_currentScope->lookUpSymbolName(node->symbol, &symbol))
 		{
-			node->symbolObj = symbol;
-		}
-		else
-		{
-			assert(false);
-		}
+			symbol = findUnresolved(node->symbol);
+			if (!symbol)
+			{
+				printLine(string("Modules does not define symbol: ") + node->symbol);
+				symbol = createSymbol(node->symbol);
+				m_unresolvedSymbols.push_back(symbol);
+			}
+		}	
+		
+		node->symbolObj = symbol;
 	}
 
 	SymbolScope* m_currentScope = nullptr;
+	vector<Symbol*> m_unresolvedSymbols;
 };
 
+vector<Symbol*> m_externalSymbols;
 
+void resolveSymbols(AST::AST* ast)
+{
+	SymbolDeclarationScanner sd;
+	ast->root->accept(&sd);
 
+	SymbolExpressionScanner se;
+	ast->root->accept(&se);
 
+	for (auto* s : se.m_unresolvedSymbols)
+	{
+		if (s->name == "int")
+		{
+			printLine(string("Found primitive symbol: ") + s->name);
+			m_externalSymbols.push_back(s);
+		}
+		else
+		{
+			printLine(string("Could not resolve symbol: ") + s->name);
+			assert(false);
+		}
+	}
+}
 
 int main(int argc, char** argv)
 {
@@ -96,8 +148,7 @@ int main(int argc, char** argv)
 		printTokens(s_tokens);
 
 		LOG("Resolving symbols...");
-		SymbolResolver symbolResolver;
-		ast.root->accept(&symbolResolver);
+		resolveSymbols(&ast);
 
 		printLine("AST:");
 		printAST(&ast, 1);
@@ -111,7 +162,7 @@ int main(int argc, char** argv)
 
 		assert(std::regex_search(args[0], matches, filenameRegex));
 		{
-			string outFileName = string(".smug/") + matches[2].str() + ".smc";
+			string outFileName = string(".smug/") + matches[2].str() + ".c";
 			std::ofstream outFile(outFileName);
 
 			printLine("Generated C:");

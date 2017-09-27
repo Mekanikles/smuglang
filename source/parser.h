@@ -370,26 +370,26 @@ bool parseTypeExpression(AST::SymbolExpression** outExpr)
 	return false;
 }
 
-bool parseSymbolDeclaration(AST::Statement** outStatement)
+bool parseSymbolDeclaration(AST::Declaration** outDeclaration)
 {
 	if (accept(TokenType::Var))
 	{
 		auto* node = createNode<AST::SymbolDeclaration>();
-		*outStatement = node;
+		*outDeclaration = node;
 
 		if (accept(TokenType::OpenParenthesis))
 		{
 			AST::SymbolExpression* expr;
 			parseTypeExpression(&expr);
 
-			node->typeExpression = expr;
+			node->typeExpr = expr;
 
 			expect(TokenType::CloseParenthesis);
 		}
 
 		if (!expect(TokenType::Symbol))
 			return true;
-			
+		
 		node->symbol = lastToken().symbol;
 
 		// Optional initialization
@@ -398,7 +398,7 @@ bool parseSymbolDeclaration(AST::Statement** outStatement)
 			AST::Expression* expr;
 			if (parseExpression(&expr))
 			{
-				node->initExpression = expr;
+				node->initExpr = expr;
 			}
 			else
 			{
@@ -414,6 +414,8 @@ bool parseSymbolDeclaration(AST::Statement** outStatement)
 
 bool parseStatement(AST::Statement** outStatement)
 {
+	AST::Declaration* declaration;
+
 	printLine(string("Trying to parse statement, with token: ") + toString(s_currentToken));
 	if (accept(TokenType::Import))
 	{
@@ -473,9 +475,10 @@ bool parseStatement(AST::Statement** outStatement)
 			}		
 		}
 	}
-	else if (parseSymbolDeclaration(outStatement))
+	else if (parseSymbolDeclaration(&declaration))
 	{
 		expect(TokenType::SemiColon, false);
+		*outStatement = declaration;
 	}
 	else
 	{

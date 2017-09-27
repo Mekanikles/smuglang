@@ -12,7 +12,12 @@ struct Symbol
 	string name;
 	// TODO Type;
 
-	AST::SymbolDeclaration* declaration = nullptr;
+	AST::SymbolDeclaration* declNode = nullptr;
+
+	bool Isdeclared()
+	{
+		return declNode != nullptr;
+	}	
 };
 
 vector<Symbol*> s_symbols;

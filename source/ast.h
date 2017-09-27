@@ -4,6 +4,7 @@ namespace AST
 {
 	struct Node;
 	struct Statement;
+	struct Declaration;
 	struct Expression;
 	struct Module;
 	struct Import;
@@ -18,12 +19,14 @@ namespace AST
 	struct BinaryOp;
 
 	struct Visitor;
+	void visitChildren(Declaration* node, Visitor* v);
 	void visitChildren(Statement* node, Visitor* v);
 	void visitChildren(Module* node, Visitor* v);
 	void visitChildren(Expression* node, Visitor* v);
 
 	struct Visitor
 	{
+		virtual void visit(Declaration* node) { visitChildren(node, this); }
 		virtual void visit(Statement* node) { visitChildren(node, this); }
 		virtual void visit(Module* node) { visitChildren(node, this); }
 		virtual void visit(Import* node) { visit((Statement*)node); }
@@ -55,22 +58,22 @@ namespace AST
 
 	void visitChildren(Statement* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
 
+	struct Declaration : Statement
+	{};
+
+	void visitChildren(Declaration* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
+
 	struct Expression : Node
 	{};
 
 	void visitChildren(Expression* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
 
-	template<typename T, typename P = Node>
-	struct NodeImpl : P
+	struct Scope : Node
 	{
-		void accept(Visitor* v) override { v->visit((T*)this); }
-	};
-
-	struct Module : NodeImpl<Module>
-	{
-		vector<Statement*> statements;
 		SymbolScope scope;
-		string toString() override { return "Module"; }
+		vector<Statement*> statements;
+
+		string toString() override { return "Scope"; }
 		const vector<Node*> getChildren() override
 		{
 			return vector<Node*>(statements.begin(), statements.end());
@@ -79,12 +82,44 @@ namespace AST
 		void addStatement(Statement* s)
 		{
 			statements.push_back(s);
-		}
+		}	
+	};
+
+	template<typename T, typename P = Node>
+	struct NodeImpl : P
+	{
+		void accept(Visitor* v) override { v->visit((T*)this); }
+	};
+
+	struct Module : public NodeImpl<Module, Scope>
+	{
+
 	};
 
 	void visitChildren(Module* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
 
-	struct Import : NodeImpl<Import, Statement>
+	struct Assignment : public NodeImpl<Assignment, Statement>
+	{
+		string symbol;
+		Expression* expr = nullptr;
+		Symbol* symbolObj = nullptr;
+
+		string toString() override 
+		{ 
+			string s = "Assigment(" + symbol + ")";
+			return s; 
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.reserve(1);
+			ret.push_back(expr);
+			return ret;
+		}	
+	};
+
+	struct Import : public NodeImpl<Import, Statement>
 	{	
 		enum Type
 		{
@@ -97,7 +132,7 @@ namespace AST
 		string toString() override { return string("Import(file:") + file + ")"; }	
 	};
 
-	struct StringLiteral : NodeImpl<StringLiteral, Expression>
+	struct StringLiteral : public NodeImpl<StringLiteral, Expression>
 	{
 		string value;
 		string toString() override
@@ -107,7 +142,7 @@ namespace AST
 		}
 	};
 
-	struct IntegerLiteral : NodeImpl<IntegerLiteral, Expression>
+	struct IntegerLiteral : public NodeImpl<IntegerLiteral, Expression>
 	{
 		string value;
 		string toString() override 
@@ -117,7 +152,7 @@ namespace AST
 		}
 	};
 
-	struct FloatLiteral : NodeImpl<FloatLiteral, Expression>
+	struct FloatLiteral : public NodeImpl<FloatLiteral, Expression>
 	{
 		string value;
 		string toString() override 
@@ -127,35 +162,21 @@ namespace AST
 		}
 	};
 
-	struct SymbolDeclaration : NodeImpl<SymbolDeclaration, Statement>
-	{
-		string symbol;
-		SymbolExpression* typeExpression = nullptr;
-		Expression* initExpression = nullptr;
-		Symbol* symbolObj = nullptr;
-
-		string toString() override 
-		{ 
-			string s = "VariableDeclaration(" + symbol + ")";
-			return s; 
-		}
-	};
-
-	struct SymbolExpression : NodeImpl<SymbolExpression, Expression>
+	struct SymbolExpression : public NodeImpl<SymbolExpression, Expression>
 	{
 		string symbol;
 		Symbol* symbolObj = nullptr;
 
 		string toString() override 
 		{ 
-			string s = "VariableExpression(" + symbol + ")";
+			string s = "SymbolExpression(" + symbol + ")";
 			return s; 
 		}		
 	};
 
 	// TODO: split functions into calls and call-expression?
 	//	for funcs that can act as an expression/operand
-	struct Call : NodeImpl<Call, Statement>
+	struct Call : public NodeImpl<Call, Statement>
 	{
 		string function;
 		vector<Expression*> args;
@@ -170,7 +191,7 @@ namespace AST
 		}
 	};
 
-	struct UnaryOp : NodeImpl<UnaryOp, Expression>
+	struct UnaryOp : public NodeImpl<UnaryOp, Expression>
 	{
 		TokenType type;
 		Expression* expr = nullptr;
@@ -189,7 +210,7 @@ namespace AST
 		}
 	};
 
-	struct UnaryPostfixOp : NodeImpl<UnaryPostfixOp, Expression>
+	struct UnaryPostfixOp : public NodeImpl<UnaryPostfixOp, Expression>
 	{
 		TokenType type;
 		Expression* expr = nullptr;
@@ -208,7 +229,7 @@ namespace AST
 		}
 	};
 
-	struct BinaryOp : NodeImpl<BinaryOp, Expression>
+	struct BinaryOp : public NodeImpl<BinaryOp, Expression>
 	{
 		TokenType type;
 		Expression* left = nullptr;
@@ -227,6 +248,29 @@ namespace AST
 			ret.push_back(right);
 			return ret;
 		}
+	};
+
+	struct SymbolDeclaration : public NodeImpl<SymbolDeclaration, Declaration>
+	{
+		string symbol;
+		SymbolExpression* typeExpr = nullptr;
+		Expression* initExpr = nullptr;
+		Symbol* symbolObj = nullptr;
+
+		string toString() override 
+		{ 
+			string s = "SymbolDeclaration(" + symbol + ")";
+			return s; 
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.reserve(2);
+			ret.push_back(typeExpr);
+			ret.push_back(initExpr);
+			return ret;
+		}		
 	};
 
 	struct AST

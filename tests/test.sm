@@ -25,9 +25,9 @@ printf("Hello sub expression %i\n", (5 + 4) - (3 + 2) - (((1))));
 
 var(int) s = 5;
 var(int) i = 10;
-var(int) b = 3;
 
 printf("Hello variable 1: %i\n", i);
 printf("Hello variable 2: %i\n", s);
 printf("Hello variable 3: %i\n", b);
 
+var(int) b = 3;

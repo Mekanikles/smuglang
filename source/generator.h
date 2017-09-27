@@ -23,6 +23,20 @@ struct CGenerator : AST::Visitor
 		out << "int main()\n{\n";
 		{
 			m_indent++;
+
+			// Declare all symbols in scope
+			for (Symbol* s : node->scope.symbols)
+			{
+				AST::SymbolDeclaration* declNode = s->declNode;
+				assert(declNode);
+
+				assert(declNode->typeExpr);
+				out << indent(m_indent);
+				declNode->typeExpr->accept(this);
+				out << " " << declNode->symbol;
+				out << ";\n";
+			}
+
 			for (auto s : node->statements)
 			{
 				s->accept(this);
@@ -108,14 +122,12 @@ struct CGenerator : AST::Visitor
 	void visit(AST::SymbolDeclaration* node) override
 	{
 		auto& out = m_body;
-		out << indent(m_indent);
-		assert(node->typeExpression);
-		node->typeExpression->accept(this);
-		out << " " << node->symbol;
-		if (node->initExpression)
+		if (node->initExpr)
 		{
+			out << indent(m_indent);
+			out << node->symbol;
 			out << " = ";
-			node->initExpression->accept(this);
+			node->initExpr->accept(this);
 		}
 		out << ";\n"; 
 	}
