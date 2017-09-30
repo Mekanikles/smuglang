@@ -377,20 +377,20 @@ bool parseSymbolDeclaration(AST::Declaration** outDeclaration)
 		auto* node = createNode<AST::SymbolDeclaration>();
 		*outDeclaration = node;
 
-		if (accept(TokenType::OpenParenthesis))
-		{
-			AST::SymbolExpression* expr;
-			parseTypeExpression(&expr);
-
-			node->typeExpr = expr;
-
-			expect(TokenType::CloseParenthesis);
-		}
-
 		if (!expect(TokenType::Symbol))
 			return true;
 		
 		node->symbol = lastToken().symbol;
+
+		// Optional type declaration
+		if (accept(TokenType::Colon))
+		{
+			// TODO: Should handle generic expressions
+			AST::SymbolExpression* expr;
+			parseTypeExpression(&expr);
+
+			node->typeExpr = expr;
+		}
 
 		// Optional initialization
 		if (accept(TokenType::Equals))

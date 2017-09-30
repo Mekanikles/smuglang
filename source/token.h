@@ -10,10 +10,12 @@ enum class TokenType
 	FloatLiteral,
 	Symbol,
 	Var,
+	Func,
 	Equals,
 	CompilerDirective,
 	SemiColon,
 	Comma,
+	Colon,
 	AddOp,
 	SubtractOp,
 	MultiplicationOp,
@@ -49,10 +51,12 @@ string toString(TokenType type)
 		case TokenType::FloatLiteral: return "Float Literal";
 		case TokenType::Symbol: return "Symbol";
 		case TokenType::Var: return "Var";
+		case TokenType::Func: return "Func";
 		case TokenType::Equals: return "Equals";
 		case TokenType::CompilerDirective: return "Compiler Directive";		
 		case TokenType::SemiColon: return "Semi Colon";
 		case TokenType::Comma: return "Comma";
+		case TokenType::Colon: return "Colon";
 		case TokenType::AddOp: return "Operator add";
 		case TokenType::SubtractOp: return "Operator subtract";
 		case TokenType::MultiplicationOp: return "Operator multiplication";

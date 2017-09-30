@@ -275,6 +275,13 @@ public:
 				return true;
 			}
 
+			if (n == ':')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::Colon);
+				return true;
+			}	
+
 			if (n == ',')
 			{
 				m_inStream.ignore();
@@ -311,6 +318,8 @@ public:
 					*outToken = Token(TokenType::Import);
 				else if (w == "var")
 					*outToken = Token(TokenType::Var);
+				else if (w == "func")
+					*outToken = Token(TokenType::Func);
 				else
 					*outToken = Token(TokenType::Symbol, w);
 				return true;
