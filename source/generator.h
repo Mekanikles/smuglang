@@ -9,7 +9,7 @@ struct Output
 
 struct SymbolTranslation
 {
-	string symbol;
+	Symbol* symbol;
 	string translation;
 };
 
@@ -17,14 +17,14 @@ struct SymbolTranslation
 //	Add data* to symbol for this instead?
 vector<SymbolTranslation> s_functionTranslations;
 
-const string& translateFunctionSymbol(const string& symbol)
+const string& translateFunctionSymbol(const Symbol* symbol)
 {
 	for (auto& e : s_functionTranslations)
 	{
 		if (e.symbol == symbol)
 			return e.translation;
 	}
-	return symbol;
+	return symbol->name;
 }
 
 struct BodyGenerator : AST::Visitor
@@ -38,6 +38,9 @@ struct BodyGenerator : AST::Visitor
 	{
 		auto& out = *m_out.body;
 
+		out << indent(m_indent) << "{\n";
+		m_indent++;
+
 		// Declare all symbols in scope
 		for (Symbol* s : node->scope.symbols)
 		{
@@ -48,10 +51,18 @@ struct BodyGenerator : AST::Visitor
 			if (s->isFunction)
 			{
 				AST::FunctionDeclaration* declNode = (AST::FunctionDeclaration*)s->declNode;
-				assert(declNode->funcLiteral);
-				const string name = declNode->symbol;
-				generateFunctionLiteral(declNode->funcLiteral, name);
-				s_functionTranslations.push_back(SymbolTranslation{declNode->symbol, name});
+
+				if (declNode->funcLiteral)
+				{
+					const string name = string("__") + declNode->symbol + "_" + std::to_string(declNode->order);
+					generateFunctionLiteral(declNode->funcLiteral, name);
+					s_functionTranslations.push_back(SymbolTranslation{declNode->symbolObj, name});
+				}
+				else
+				{
+					// TODO: Handle duplicate externals
+					//*m_out.data << "extern int " << declNode->symbolObj->name << "();\n";
+				}
 			}
 			else
 			{
@@ -74,6 +85,9 @@ struct BodyGenerator : AST::Visitor
 		{
 			s->accept(this);
 		}
+
+		m_indent--;
+		out << indent(m_indent) << "}\n";
 	}
 
 	void visit(AST::Import* node) override
@@ -88,7 +102,8 @@ struct BodyGenerator : AST::Visitor
 	{
 		auto& out = *m_out.body;
 
-		const string& name = translateFunctionSymbol(node->function);
+		assert(node->expr);
+		const string& name = translateFunctionSymbol(node->expr->symbolObj);
 
 		out << indent(m_indent) << name << "(";
 		int argCount = node->args.size();
@@ -208,7 +223,7 @@ struct BodyGenerator : AST::Visitor
 		auto& out = *m_out.data;
 
 		Output output { m_out.imports, m_out.data, m_out.data };
-		BodyGenerator bodyGenerator(output, m_indent);
+		BodyGenerator bodyGenerator(output, 0);
 
 		// TODO: Add support for out params
 		out << "void " << name << "(";
@@ -229,12 +244,10 @@ struct BodyGenerator : AST::Visitor
 				out << ", ";
 		}
 
-		out << ")\n{\n";
+		out << ")\n";
 
 		// Generate body
 		node->body->accept(&bodyGenerator);
-
-		out << "}\n";
 
 		return name;
 	}
@@ -277,15 +290,12 @@ struct CGenerator : AST::Visitor
 	void visit(AST::Module* node) override
 	{
 		auto& out = m_body;
-		out << "int main()\n{\n";
+		out << "int main()\n";
 		{
-			m_indent++;
-
 			Output output { &m_imports, &m_data, &m_body };
 			BodyGenerator bodyGenerator(output, m_indent);
 			node->body->accept(&bodyGenerator);
 		}
-		out << "}\n";
 	}
 
 	std::ostream* m_out;

@@ -316,6 +316,8 @@ public:
 				// TODO: Difference between toplevel scan and body scan?
 				if (w == "import")
 					*outToken = Token(TokenType::Import);
+				else if (w == "extern")
+					*outToken = Token(TokenType::Extern);	
 				else if (w == "var")
 					*outToken = Token(TokenType::Var);
 				else if (w == "func")

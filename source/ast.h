@@ -93,7 +93,7 @@ namespace AST
 		void accept(Visitor* v) override { v->visit((T*)this); }
 	};
 
-	struct StatementBody : NodeImpl<StatementBody>
+	struct StatementBody : public NodeImpl<StatementBody, Statement>
 	{
 		SymbolScope scope;
 		vector<Statement*> statements;
@@ -236,8 +236,10 @@ namespace AST
 	//	for funcs that can act as an expression/operand
 	struct Call : public NodeImpl<Call, Statement>
 	{
-		string function;
+		string function; // TODO: Remove?
+		SymbolExpression* expr = nullptr;
 		vector<Expression*> args;
+
 		string toString() override 
 		{ 
 			string s = "Call(" + function + ")";
@@ -245,7 +247,11 @@ namespace AST
 		}
 		const vector<Node*> getChildren() override
 		{
-			return vector<Node*>(args.begin(), args.end());
+			vector<Node*> ret;
+			assert(expr);
+			ret.push_back(expr);
+			ret.insert(ret.end(), args.begin(), args.end());
+			return ret;
 		}
 	};
 
@@ -409,20 +415,23 @@ namespace AST
 	struct FunctionDeclaration : public NodeImpl<FunctionDeclaration, Declaration>
 	{
 		string symbol;
-		FunctionLiteral* funcLiteral;
+		FunctionLiteral* funcLiteral = nullptr;
 		Symbol* symbolObj = nullptr;
 
 		string toString() override 
 		{ 
-			string s = "FunctionDeclaration(" + symbol + ")";
+			string s;
+			if (!funcLiteral)
+				s = "External ";
+			s += "FunctionDeclaration(" + symbol + ")";
 			return s;
 		}
 
 		const vector<Node*> getChildren() override
 		{
-			assert(funcLiteral);
 			auto ret =  vector<Node*>();
-			ret.push_back(funcLiteral);
+			if (funcLiteral)
+				ret.push_back(funcLiteral);
 			return ret;
 		}
 	};

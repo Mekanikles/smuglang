@@ -3,6 +3,7 @@
 enum class TokenType
 {
 	Import,
+	Extern,
 	OpenParenthesis,
 	CloseParenthesis,
 	OpenBrace,
@@ -46,6 +47,7 @@ string toString(TokenType type)
 	switch (type)
 	{
 		case TokenType::Import: return "Import";
+		case TokenType::Extern: return "Extern";
 		case TokenType::OpenParenthesis: return "Opening Parenthesis";
 		case TokenType::CloseParenthesis: return "Closing Parenthesis";
 		case TokenType::OpenBrace: return "Opening brace";

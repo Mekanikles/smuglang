@@ -453,11 +453,15 @@ bool parseFuncLiteralSignature(AST::FuncLiteralSignature** outSignature)
 
 bool parseStatement(AST::Statement** outStatement);
 
+SymbolScope* s_currentScope = nullptr;
 bool parseStatementBody(AST::StatementBody** outStatementBody)
 {
 	if (accept(TokenType::OpenBrace))
 	{
 		auto* node = createNode<AST::StatementBody>();
+		node->scope.parentScope = s_currentScope;
+		s_currentScope = &node->scope;
+
 		*outStatementBody = node;
 
 		AST::Statement* statement;
@@ -467,27 +471,16 @@ bool parseStatementBody(AST::StatementBody** outStatementBody)
 		}
 
 		expect(TokenType::CloseBrace);
+
+		s_currentScope = node->scope.parentScope;
+
 		return true;
 	}
 	return false;
 }
 
-// TODO: Should output statement?
-bool parseDeclarationStatement(AST::Declaration** outDeclaration)
+bool parseFunctionDeclaration(bool external, AST::FunctionDeclaration** outDeclaration)
 {
-	if (accept(TokenType::Var))
-	{
-		AST::SymbolDeclaration* symbolDecl;
-		if (!parseSymbolDeclaration(&symbolDecl))
-		{
-			*outDeclaration = nullptr;
-			return true;
-		}
-
-		// TODO: Set storage qualifier
-		*outDeclaration = symbolDecl;
-		return true;
-	}
 	if (accept(TokenType::Func))
 	{
 		auto* node = createNode<AST::FunctionDeclaration>();
@@ -499,7 +492,7 @@ bool parseDeclarationStatement(AST::Declaration** outDeclaration)
 		node->symbol = lastToken().symbol;
 
 		AST::FuncLiteralSignature* signature;
-		if (!parseFuncLiteralSignature(&signature))
+		if (!external && !parseFuncLiteralSignature(&signature))
 		{
 			// TODO: Require parameter list?
 			error("Expected function parameter list");
@@ -508,24 +501,74 @@ bool parseDeclarationStatement(AST::Declaration** outDeclaration)
 		}
 
 		AST::StatementBody* statementBody = nullptr;
-		if (!parseStatementBody(&statementBody))
+		if (!external && !parseStatementBody(&statementBody))
 		{
 			error("Expected statement body");
 		}
 
-		auto* func = createNode<AST::FunctionLiteral>();
-		func->signature = signature;
-		func->body = statementBody;
+		if (!external)
+		{
+			auto* func = createNode<AST::FunctionLiteral>();
+			func->signature = signature;
+			func->body = statementBody;
 
-		node->funcLiteral = func;
+			node->funcLiteral = func;
+		}
+
+		*outDeclaration = node;
 		return true;
 	}
+
+	return false;
+}
+
+// TODO: Should output statement?
+bool parseDeclarationStatement(AST::Declaration** outDeclaration)
+{
+	bool isExternalDecl = false;
+	// Optional external declaration qualifier
+	if (accept(TokenType::Extern))
+	{
+		isExternalDecl = true;
+	}
+
+	AST::FunctionDeclaration* funcDecl;
+	if (accept(TokenType::Var))
+	{
+		// TODO: use-case?
+		if (isExternalDecl)
+			error("External non-function declarations not yet supported");
+
+		AST::SymbolDeclaration* symbolDecl;
+		if (!parseSymbolDeclaration(&symbolDecl))
+		{
+			*outDeclaration = nullptr;
+			return true;
+		}
+
+		// TODO: Set storage qualifier
+		*outDeclaration = symbolDecl;
+		return true;
+	}
+	else if (parseFunctionDeclaration(isExternalDecl, &funcDecl))
+	{
+
+		*outDeclaration = funcDecl;
+		return true;
+	}
+	else if (isExternalDecl)
+	{
+		error("Expected declaration statement");
+		return true;
+	}
+
 	return false;
 }
 
 bool parseStatement(AST::Statement** outStatement)
 {
 	AST::Declaration* declaration;
+	AST::StatementBody* statementBody;
 
 	if (accept(TokenType::Import))
 	{
@@ -563,9 +606,13 @@ bool parseStatement(AST::Statement** outStatement)
 
 		// Function call
 		if (expect(TokenType::OpenParenthesis))
-		{
+		{	
 			auto node = createNode<AST::Call>();
 			node->function = symbol;
+
+			auto* expr = createNode<AST::SymbolExpression>();
+			expr->symbol = symbol;
+			node->expr = expr;
 
 			if (!parseCallParameters(node))
 			{
@@ -591,6 +638,10 @@ bool parseStatement(AST::Statement** outStatement)
 		expect(TokenType::SemiColon, false);
 		*outStatement = declaration;
 	}
+	else if (parseStatementBody(&statementBody))
+	{
+		*outStatement = statementBody;
+	}
 	else
 	{
 		return false;
@@ -604,6 +655,8 @@ bool parseTopLevel(AST::Module* module)
 {
 	auto* body = createNode<AST::StatementBody>();
 	module->body = body;
+
+	s_currentScope = &body->scope;
 
 	while(!peek(TokenType::EndOfScan))
 	{

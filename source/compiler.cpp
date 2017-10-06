@@ -48,6 +48,8 @@ struct SymbolDeclarationScanner : AST::Visitor
 		m_currentScope->addSymbol(symbol);
 		node->symbolObj = symbol;
 
+		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)m_currentScope));
+
 		AST::Visitor::visit(node);
 	}
 
@@ -66,6 +68,8 @@ struct SymbolDeclarationScanner : AST::Visitor
 		symbol->isParam = node->isParam;
 		m_currentScope->addSymbol(symbol);
 		node->symbolObj = symbol;
+
+		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)m_currentScope));
 
 		AST::Visitor::visit(node);
 	}
@@ -126,7 +130,9 @@ struct SymbolExpressionScanner : AST::Visitor
 			if (symbol->declNode->order > node->order)
 			{	
 				// TODO: add line/column
-				printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization");
+				// TODO: Replace function check with static, or proper initialization order
+				if (!symbol->isFunction)
+					printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization");
 			}
 		}
 		
@@ -153,9 +159,12 @@ void resolveTypes()
 		Type type;
 		if (s->isFunction)
 		{
+			// TODO: Fix this for external declarations
 			AST::FunctionDeclaration* node = (AST::FunctionDeclaration*)s->declNode;
-			assert(node->funcLiteral);
-			type = node->funcLiteral->getType();
+			if (node->funcLiteral)
+				type = node->funcLiteral->getType();
+			else
+				type.isFunction = true;
 		}
 		else
 		{		
@@ -201,6 +210,7 @@ void resolveSymbols(AST::AST* ast)
 		}
 		else
 		{
+			printLine(string("Could not resolve symbol: ") + s->name);
 			assert(false);
 		}
 	}

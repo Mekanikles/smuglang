@@ -74,13 +74,20 @@ struct SymbolScope
 
 	bool lookUpSymbolName(const string& name, Symbol** outSymbol)
 	{
+		//printLine(string("Looking for symbol: ") + name + " in scope: " + std::to_string((long)this));
+
+		if (getSymbolInScope(name, outSymbol))
+			return true;
+
+		//printLine(string("Symbol not found, looking at parent: ") + std::to_string((long)parentScope), 1);
+
 		if (parentScope)
 		{
 			if (parentScope->lookUpSymbolName(name, outSymbol))
 				return true;
 		}
 
-		return getSymbolInScope(name, outSymbol);
+		return false;
 	}
 };
 

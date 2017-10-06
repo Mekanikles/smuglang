@@ -14,4 +14,4 @@ fi
 
 
 mkdir -p .smug
-gcc -xc $(./bin/smugc $1) -o $OUTPUT
+gcc -xc $(./bin/smugc $1) -o $OUTPUT -Wno-implicit-function-declaration
