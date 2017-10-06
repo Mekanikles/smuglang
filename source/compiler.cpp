@@ -11,6 +11,7 @@
 #include "input.h"
 #include "token.h"
 #include "scanner.h"
+#include "types.h"
 #include "symbols.h"
 #include "ast.h"
 #include "parser.h"
@@ -22,16 +23,36 @@ struct SymbolDeclarationScanner : AST::Visitor
 	SymbolDeclarationScanner()
 	{}
 
-	void visit(AST::Module* node) override
+	void visit(AST::StatementBody* node) override
 	{
+		auto oldScope = m_currentScope;
 		m_currentScope = &node->scope;
+		AST::Visitor::visit(node);
+		m_currentScope = oldScope;
+	}
+
+	// TODO: Copy paste code, generalize declarations somehow
+	void visit(AST::FunctionDeclaration* node) override
+	{
+		//assert(node->typeExpr);
+		
+		Symbol* symbol;
+		if (m_currentScope->getSymbolInScope(node->symbol, &symbol))
+		{
+			assert(false);
+		}
+
+		symbol = createSymbol(node->symbol);
+		symbol->declNode = node;
+		symbol->isFunction = true;
+		m_currentScope->addSymbol(symbol);
+		node->symbolObj = symbol;
+
 		AST::Visitor::visit(node);
 	}
 
 	void visit(AST::SymbolDeclaration* node) override
 	{
-		assert(node->typeExpr);
-		
 		Symbol* symbol;
 		// Make sure symbol is not declared in same scope
 		// 	It is okay to overshadow parent scope declarations.
@@ -40,11 +61,22 @@ struct SymbolDeclarationScanner : AST::Visitor
 			assert(false);
 		}
 
-		// TODO: Add type information
 		symbol = createSymbol(node->symbol);
 		symbol->declNode = node;
+		symbol->isParam = node->isParam;
 		m_currentScope->addSymbol(symbol);
 		node->symbolObj = symbol;
+
+		AST::Visitor::visit(node);
+	}
+
+	void visit(AST::FunctionLiteral* node) override
+	{
+		assert(node->body);
+		auto oldScope = m_currentScope;
+		m_currentScope = &node->body->scope;
+		AST::Visitor::visit(node);
+		m_currentScope = oldScope;
 	}
 
 	SymbolScope* m_currentScope = nullptr;	
@@ -55,10 +87,12 @@ struct SymbolExpressionScanner : AST::Visitor
 	SymbolExpressionScanner()
 	{}
 
-	void visit(AST::Module* node) override
+	void visit(AST::StatementBody* node) override
 	{
+		auto oldScope = m_currentScope;
 		m_currentScope = &node->scope;
 		AST::Visitor::visit(node);
+		m_currentScope = oldScope;
 	}
 
 	Symbol* findUnresolved(const string& symbol)
@@ -82,7 +116,7 @@ struct SymbolExpressionScanner : AST::Visitor
 			symbol = findUnresolved(node->symbol);
 			if (!symbol)
 			{
-				printLine(string("Modules does not define symbol: ") + node->symbol);
+				printLine(string("Module does not define symbol: ") + node->symbol);
 				symbol = createSymbol(node->symbol);
 				m_unresolvedSymbols.push_back(symbol);
 			}
@@ -91,6 +125,7 @@ struct SymbolExpressionScanner : AST::Visitor
 		{
 			if (symbol->declNode->order > node->order)
 			{	
+				// TODO: add line/column
 				printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization");
 			}
 		}
@@ -104,6 +139,48 @@ struct SymbolExpressionScanner : AST::Visitor
 
 vector<Symbol*> m_externalSymbols;
 
+
+void resolveTypes()
+{
+	auto symbols = getSymbols(); // TODO: Store symbols per module
+	for (Symbol* s : symbols)
+	{
+		if (s->knowsType())
+			continue;
+
+		assert(s->isdeclared());
+
+		Type type;
+		if (s->isFunction)
+		{
+			AST::FunctionDeclaration* node = (AST::FunctionDeclaration*)s->declNode;
+			assert(node->funcLiteral);
+			type = node->funcLiteral->getType();
+		}
+		else
+		{		
+			AST::SymbolDeclaration* node = (AST::SymbolDeclaration*)s->declNode;	
+			// TODO: Add type information
+			if (node->typeExpr)
+			{
+				type = node->typeExpr->getType();
+				if (node->initExpr)
+				{
+					Type t2 = node->initExpr->getType();
+					assert(type == t2); 
+				}
+			}
+			else
+			{
+				assert(node->initExpr);
+				type = node->initExpr->getType();
+			}
+		}
+
+		s->type = type;
+	}
+}
+
 void resolveSymbols(AST::AST* ast)
 {
 	SymbolDeclarationScanner sd;
@@ -112,19 +189,23 @@ void resolveSymbols(AST::AST* ast)
 	SymbolExpressionScanner se;
 	ast->root->accept(&se);
 
+	// TODO: Make this generic external module lookup
+	//	Should external symbol information be "copied" into the module
+	//	so that it does not need to redo type resolving on next compile?
 	for (auto* s : se.m_unresolvedSymbols)
 	{
 		if (s->name == "int")
 		{
-			printLine(string("Found primitive symbol: ") + s->name);
+			s->type.isInt = true;
 			m_externalSymbols.push_back(s);
 		}
 		else
 		{
-			printLine(string("Could not resolve symbol: ") + s->name);
 			assert(false);
 		}
 	}
+
+	resolveTypes();
 }
 
 int main(int argc, char** argv)

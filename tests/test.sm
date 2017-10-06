@@ -31,3 +31,22 @@ printf("Hello variable 2: %i\n", s);
 printf("Hello variable 3: %i\n", b);
 
 var b : int = 3;
+
+doPrint();
+doParameterPrint(666);
+doMultiParameterPrint(42, 123);
+
+func doPrint()
+{
+	printf("Hello function!\n");
+};
+
+func doParameterPrint(p : int)
+{
+	printf("Hello integer parameter %i\n", p);
+};
+
+func doMultiParameterPrint(p : int, q : int)
+{
+	printf("Hello integer parameter 1: %i, 2: %i\n", p, q);
+};

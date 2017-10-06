@@ -5,6 +5,7 @@
 namespace AST
 {
 	struct SymbolDeclaration;
+	struct Declaration;
 }
 
 struct Symbol
@@ -12,12 +13,24 @@ struct Symbol
 	string name;
 	// TODO Type;
 
-	AST::SymbolDeclaration* declNode = nullptr;
+	Type type;
+	bool isParam = false;
+	bool isFunction = false;
 
-	bool Isdeclared()
+	AST::Declaration* declNode = nullptr;
+
+	bool isdeclared()
 	{
 		return declNode != nullptr;
-	}	
+	}
+
+	bool knowsType()
+	{
+		return type.isInt == true ||
+			   type.isFunction == true ||
+			   type.isFloat == true ||
+			   type.isString == true;
+	}
 };
 
 vector<Symbol*> s_symbols;
@@ -27,6 +40,11 @@ Symbol* createSymbol(string name)
 	Symbol* s = new Symbol { name };
 	s_symbols.push_back(s);
 	return s;
+}
+
+vector<Symbol*>& getSymbols()
+{
+	return s_symbols;
 }
 
 struct SymbolScope

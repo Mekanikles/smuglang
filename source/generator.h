@@ -1,53 +1,84 @@
 #pragma once
 
-struct CGenerator : AST::Visitor
+struct Output
 {
-	CGenerator(std::ostream* out)
+	std::ostream* imports;
+	std::ostream* data;
+	std::ostream* body;
+};
+
+struct SymbolTranslation
+{
+	string symbol;
+	string translation;
+};
+
+// TODO: This needs to be scoped to the same scope as symbol
+//	Add data* to symbol for this instead?
+vector<SymbolTranslation> s_functionTranslations;
+
+const string& translateFunctionSymbol(const string& symbol)
+{
+	for (auto& e : s_functionTranslations)
+	{
+		if (e.symbol == symbol)
+			return e.translation;
+	}
+	return symbol;
+}
+
+struct BodyGenerator : AST::Visitor
+{
+	BodyGenerator(const Output& out, int indent)
 		: m_out(out)
-		, m_indent(0)
+		, m_indent(indent)
 	{}
 
-	void run(AST::AST* ast)
+	void visit(AST::StatementBody* node) override
 	{
-		ast->root->accept(this);
+		auto& out = *m_out.body;
 
-		auto& out = *m_out;
-	
-		out << m_head.str();
-		out << m_body.str();
-	}
-
-	void visit(AST::Module* node) override
-	{
-		auto& out = m_body;
-		out << "int main()\n{\n";
+		// Declare all symbols in scope
+		for (Symbol* s : node->scope.symbols)
 		{
-			m_indent++;
+			// params are already declared in the signature
+			if (s->isParam)
+				continue;
 
-			// Declare all symbols in scope
-			for (Symbol* s : node->scope.symbols)
+			if (s->isFunction)
 			{
-				AST::SymbolDeclaration* declNode = s->declNode;
+				AST::FunctionDeclaration* declNode = (AST::FunctionDeclaration*)s->declNode;
+				assert(declNode->funcLiteral);
+				const string name = declNode->symbol;
+				generateFunctionLiteral(declNode->funcLiteral, name);
+				s_functionTranslations.push_back(SymbolTranslation{declNode->symbol, name});
+			}
+			else
+			{
+				// TODO: Unsafe cast
+				AST::SymbolDeclaration* declNode = (AST::SymbolDeclaration*)s->declNode;
 				assert(declNode);
 
-				assert(declNode->typeExpr);
-				out << indent(m_indent);
-				declNode->typeExpr->accept(this);
-				out << " " << declNode->symbol;
-				out << ";\n";
-			}
-
-			for (auto s : node->statements)
-			{
-				s->accept(this);
+				// TODO: Store all info in symbol, handle inferred types
+				if (declNode->typeExpr)
+				{
+					out << indent(m_indent);
+					declNode->typeExpr->accept(this);
+					out << " " << declNode->symbol;
+					out << ";\n";
+				}
 			}
 		}
-		out << "}\n";
+
+		for (auto s : node->statements)
+		{
+			s->accept(this);
+		}
 	}
 
 	void visit(AST::Import* node) override
 	{
-		auto& out = m_head;
+		auto& out = *m_out.imports;
 
 		if (node->type == AST::Import::Type_C)
 			out << "#include <" << node->file << ">\n";
@@ -55,9 +86,11 @@ struct CGenerator : AST::Visitor
 
 	void visit(AST::Call* node) override
 	{
-		auto& out = m_body;
+		auto& out = *m_out.body;
 
-		out << indent(m_indent) << node->function << "(";
+		const string& name = translateFunctionSymbol(node->function);
+
+		out << indent(m_indent) << name << "(";
 		int argCount = node->args.size();
 		if (argCount > 0)
 		{
@@ -73,7 +106,7 @@ struct CGenerator : AST::Visitor
 
 	void visit(AST::BinaryOp* node) override
 	{	
-		auto& out = m_body;
+		auto& out = *m_out.body;
 
 		out << "(";
 		node->left->accept(this);
@@ -92,7 +125,7 @@ struct CGenerator : AST::Visitor
 
 	void visit(AST::UnaryOp* node) override
 	{
-		auto& out = m_body;
+		auto& out = *m_out.body;
 
 		switch (node->type)
 		{
@@ -107,7 +140,7 @@ struct CGenerator : AST::Visitor
 
 	void visit(AST::UnaryPostfixOp* node) override
 	{
-		auto& out = m_body;
+		auto& out = *m_out.body;
 
 		node->expr->accept(this);
 
@@ -121,33 +154,143 @@ struct CGenerator : AST::Visitor
 
 	void visit(AST::SymbolDeclaration* node) override
 	{
-		auto& out = m_body;
-		if (node->initExpr)
+		auto& out = *m_out.body;
+
+		assert(node->symbolObj);
+		Type& t = node->symbolObj->type;
+
+		// Declaration has already been done in body
+		//	only initialization has to be generated
+		// Params will not be initialized inside function body
+		//	but instead by caller
+		// Static const functions does initialization on load instead
+		//	TODO: Generalize
+		if (!node->isParam && !t.isFunction && node->initExpr)
 		{
 			out << indent(m_indent);
 			out << node->symbol;
 			out << " = ";
 			node->initExpr->accept(this);
+			out << ";\n"; 
 		}
-		out << ";\n"; 
+		else
+		{
+			node->initExpr->accept(this);
+		}
 	}
 
 	void visit(AST::SymbolExpression* node) override
 	{
-		m_body << node->symbol; 
+		auto& out = *m_out.body;
+		out << node->symbol; 
 	}
 
 	void visit(AST::StringLiteral* node) override
-	{	m_body << node->value; }
+	{	
+		auto& out = *m_out.body;
+		out << node->value; 
+	}
 
 	void visit(AST::IntegerLiteral* node) override
-	{	m_body << node->value; }
+	{
+		auto& out = *m_out.body;
+		out << node->value; 
+	}
 
 	void visit(AST::FloatLiteral* node) override
-	{	m_body << node->value; }
+	{	
+		auto& out = *m_out.body;
+		out << node->value; 
+	}
+
+	string generateFunctionLiteral(AST::FunctionLiteral* node, const string& name)
+	{
+		auto& out = *m_out.data;
+
+		Output output { m_out.imports, m_out.data, m_out.data };
+		BodyGenerator bodyGenerator(output, m_indent);
+
+		// TODO: Add support for out params
+		out << "void " << name << "(";
+
+		int size = node->signature->params.size();
+		for (int i = 0; i < size; ++i)
+		{
+			AST::SymbolDeclaration* decl = node->signature->params[i];
+			// TODO: By this point, we should not need to evaluate exprs for types/symbols
+			//	we should be able to look to symbol/type tables
+			if (decl->typeExpr)
+				decl->typeExpr->accept(&bodyGenerator);
+			out << " " << decl->symbol;
+			if (decl->initExpr)
+				decl->initExpr->accept(&bodyGenerator);
+
+			if (i < size - 1)
+				out << ", ";
+		}
+
+		out << ")\n{\n";
+
+		// Generate body
+		node->body->accept(&bodyGenerator);
+
+		out << "}\n";
+
+		return name;
+	}
+
+	void visit(AST::FunctionLiteral* node) override
+	{	
+		static int count = 0;
+		auto& out = *m_out.body;
+		const string name = string("__lambda") + std::to_string(count++);
+		out << generateFunctionLiteral(node, name); 
+	}
+
+	void visit(AST::FunctionDeclaration* node) override
+	{	
+		// Do nothing, function literal has already been visited by body
+	}
+
+	Output m_out;
+	int m_indent;
+};
+
+struct CGenerator : AST::Visitor
+{
+	CGenerator(std::ostream* out)
+		: m_out(out)
+		, m_indent(0)
+	{}
+
+	void run(AST::AST* ast)
+	{
+		ast->root->accept(this);
+
+		auto& out = *m_out;
+	
+		out << m_imports.str();
+		out << m_data.str();
+		out << m_body.str();
+	}
+
+	void visit(AST::Module* node) override
+	{
+		auto& out = m_body;
+		out << "int main()\n{\n";
+		{
+			m_indent++;
+
+			Output output { &m_imports, &m_data, &m_body };
+			BodyGenerator bodyGenerator(output, m_indent);
+			node->body->accept(&bodyGenerator);
+		}
+		out << "}\n";
+	}
 
 	std::ostream* m_out;
-	std::stringstream m_head;
+	std::stringstream m_imports;
+	std::stringstream m_data;
 	std::stringstream m_body;
 	int m_indent;
 	unsigned m_tempVarCount = 0;

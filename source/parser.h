@@ -370,41 +370,80 @@ bool parseTypeExpression(AST::SymbolExpression** outExpr)
 	return false;
 }
 
-bool parseSymbolDeclaration(AST::Declaration** outDeclaration)
+bool parseSymbolDeclaration(AST::SymbolDeclaration** outDeclaration)
 {
-	if (accept(TokenType::Var))
+	if (!accept(TokenType::Symbol))
+		return false;
+	
+	auto* node = createNode<AST::SymbolDeclaration>();
+	*outDeclaration = node;
+
+	node->symbol = lastToken().symbol;
+
+	// Optional type declaration
+	if (accept(TokenType::Colon))
 	{
-		auto* node = createNode<AST::SymbolDeclaration>();
-		*outDeclaration = node;
+		// TODO: Should handle generic expressions
+		AST::SymbolExpression* expr;
+		parseTypeExpression(&expr);
 
-		if (!expect(TokenType::Symbol))
-			return true;
-		
-		node->symbol = lastToken().symbol;
+		node->typeExpr = expr;
+	}
 
-		// Optional type declaration
-		if (accept(TokenType::Colon))
+	// Optional initialization
+	if (accept(TokenType::Equals))
+	{
+		AST::Expression* expr;
+		if (parseExpression(&expr))
 		{
-			// TODO: Should handle generic expressions
-			AST::SymbolExpression* expr;
-			parseTypeExpression(&expr);
-
-			node->typeExpr = expr;
+			node->initExpr = expr;
 		}
-
-		// Optional initialization
-		if (accept(TokenType::Equals))
+		else
 		{
-			AST::Expression* expr;
-			if (parseExpression(&expr))
+			error("Expected expression");
+		}
+	}
+
+	return true;
+}
+
+bool parseParamDeclaration(AST::SymbolDeclaration** outDeclaration)
+{
+	AST::SymbolDeclaration* symbolDecl;
+	if (parseSymbolDeclaration(&symbolDecl))
+	{
+		symbolDecl->isParam = true;
+		*outDeclaration = symbolDecl;
+		return true;
+	}
+	return false;
+}
+
+bool parseFuncLiteralSignature(AST::FuncLiteralSignature** outSignature)
+{
+	if (accept(TokenType::OpenParenthesis))
+	{
+		auto* node = createNode<AST::FuncLiteralSignature>();
+		*outSignature = node;
+
+		AST::SymbolDeclaration* declNode;
+		while (parseParamDeclaration(&declNode))
+		{
+			node->addParameterDeclaration(declNode);
+
+			if (accept(TokenType::Comma))
 			{
-				node->initExpr = expr;
+				continue;
 			}
 			else
 			{
-				error("Expected expression");
+				break;
 			}
 		}
+
+		// TODO:: Add output params
+
+		expect(TokenType::CloseParenthesis);
 
 		return true;
 	}
@@ -412,11 +451,82 @@ bool parseSymbolDeclaration(AST::Declaration** outDeclaration)
 	return false;
 }
 
+bool parseStatement(AST::Statement** outStatement);
+
+bool parseStatementBody(AST::StatementBody** outStatementBody)
+{
+	if (accept(TokenType::OpenBrace))
+	{
+		auto* node = createNode<AST::StatementBody>();
+		*outStatementBody = node;
+
+		AST::Statement* statement;
+		while(parseStatement(&statement))
+		{
+			node->addStatement(statement);
+		}
+
+		expect(TokenType::CloseBrace);
+		return true;
+	}
+	return false;
+}
+
+// TODO: Should output statement?
+bool parseDeclarationStatement(AST::Declaration** outDeclaration)
+{
+	if (accept(TokenType::Var))
+	{
+		AST::SymbolDeclaration* symbolDecl;
+		if (!parseSymbolDeclaration(&symbolDecl))
+		{
+			*outDeclaration = nullptr;
+			return true;
+		}
+
+		// TODO: Set storage qualifier
+		*outDeclaration = symbolDecl;
+		return true;
+	}
+	if (accept(TokenType::Func))
+	{
+		auto* node = createNode<AST::FunctionDeclaration>();
+		*outDeclaration = node;
+
+		if (!expect(TokenType::Symbol))
+			return true;
+
+		node->symbol = lastToken().symbol;
+
+		AST::FuncLiteralSignature* signature;
+		if (!parseFuncLiteralSignature(&signature))
+		{
+			// TODO: Require parameter list?
+			error("Expected function parameter list");
+			*outDeclaration = nullptr;
+			return true;
+		}
+
+		AST::StatementBody* statementBody = nullptr;
+		if (!parseStatementBody(&statementBody))
+		{
+			error("Expected statement body");
+		}
+
+		auto* func = createNode<AST::FunctionLiteral>();
+		func->signature = signature;
+		func->body = statementBody;
+
+		node->funcLiteral = func;
+		return true;
+	}
+	return false;
+}
+
 bool parseStatement(AST::Statement** outStatement)
 {
 	AST::Declaration* declaration;
 
-	printLine(string("Trying to parse statement, with token: ") + toString(s_currentToken));
 	if (accept(TokenType::Import))
 	{
 		AST::Import::Type importType = AST::Import::Type_Native;
@@ -475,8 +585,9 @@ bool parseStatement(AST::Statement** outStatement)
 			}		
 		}
 	}
-	else if (parseSymbolDeclaration(&declaration))
+	else if (parseDeclarationStatement(&declaration))
 	{
+		// TODO: Should declarations ending in bodies require semi colon?
 		expect(TokenType::SemiColon, false);
 		*outStatement = declaration;
 	}
@@ -491,12 +602,15 @@ bool parseStatement(AST::Statement** outStatement)
 // TODO: Rename parseModule
 bool parseTopLevel(AST::Module* module)
 {
+	auto* body = createNode<AST::StatementBody>();
+	module->body = body;
+
 	while(!peek(TokenType::EndOfScan))
 	{
 		AST::Statement* stmnt;
 		if (parseStatement(&stmnt))
 		{
-			module->addStatement(stmnt);
+			body->addStatement(stmnt);
 		}
 		else
 		{

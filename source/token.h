@@ -5,6 +5,8 @@ enum class TokenType
 	Import,
 	OpenParenthesis,
 	CloseParenthesis,
+	OpenBrace,
+	CloseBrace,
 	StringLiteral,
 	IntegerLiteral,
 	FloatLiteral,
@@ -46,6 +48,8 @@ string toString(TokenType type)
 		case TokenType::Import: return "Import";
 		case TokenType::OpenParenthesis: return "Opening Parenthesis";
 		case TokenType::CloseParenthesis: return "Closing Parenthesis";
+		case TokenType::OpenBrace: return "Opening brace";
+		case TokenType::CloseBrace: return "Closing brace";
 		case TokenType::StringLiteral: return "String Literal";
 		case TokenType::IntegerLiteral: return "Integer Literal";
 		case TokenType::FloatLiteral: return "Float Literal";
@@ -53,6 +57,7 @@ string toString(TokenType type)
 		case TokenType::Var: return "Var";
 		case TokenType::Func: return "Func";
 		case TokenType::Equals: return "Equals";
+		// TODO: # should be its own token, compiler directive should be on parser level
 		case TokenType::CompilerDirective: return "Compiler Directive";		
 		case TokenType::SemiColon: return "Semi Colon";
 		case TokenType::Comma: return "Comma";

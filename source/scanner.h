@@ -404,6 +404,20 @@ public:
 				return true;
 			}
 
+			if (n == '{')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::OpenBrace);
+				return true;
+			}
+
+			if (n == '}')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::CloseBrace);
+				return true;
+			}
+
 			// Don't let anything unparsed through
 			m_inStream.ignore();			
 			error("Unrecognized character");
