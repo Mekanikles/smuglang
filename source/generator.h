@@ -54,7 +54,7 @@ struct BodyGenerator : AST::Visitor
 
 				if (declNode->funcLiteral)
 				{
-					const string name = string("__") + declNode->symbol + "_" + std::to_string(declNode->order);
+					const string name = string("") + declNode->symbol + "_" + std::to_string(declNode->order);
 					generateFunctionLiteral(declNode->funcLiteral, name);
 					s_functionTranslations.push_back(SymbolTranslation{declNode->symbolObj, name});
 				}
@@ -220,10 +220,13 @@ struct BodyGenerator : AST::Visitor
 
 	string generateFunctionLiteral(AST::FunctionLiteral* node, const string& name)
 	{
-		auto& out = *m_out.data;
-
-		Output output { m_out.imports, m_out.data, m_out.data };
+		std::stringstream imports;
+		std::stringstream data;
+		std::stringstream body;
+		Output output { &imports, &data, &body };
 		BodyGenerator bodyGenerator(output, 0);
+
+		auto& out = body;
 
 		// TODO: Add support for out params
 		out << "void " << name << "(";
@@ -248,6 +251,10 @@ struct BodyGenerator : AST::Visitor
 
 		// Generate body
 		node->body->accept(&bodyGenerator);
+
+		*m_out.imports << imports.str();
+		*m_out.data << data.str();
+		*m_out.data << body.str();
 
 		return name;
 	}

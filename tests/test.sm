@@ -29,7 +29,11 @@ var b : int = 3;
 	{
 		func doNoParamFunc()
 		{
-			printf("Hello inner function!\n");
+			localFunc();	
+			func localFunc()
+			{
+				printf("Hello inner local function!\n");
+			};
 		};
 
 		doNoParamFunc();	
