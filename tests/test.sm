@@ -25,6 +25,25 @@ printf("Hello variable should be 5: %i\n", i);
 printf("Hello garbage forward ref: %i\n", b);
 var b : int = 3;
 
+if (b == 3)
+	printf("Hello if-conditional\n");
+
+if (b == 4)
+	printf("ERROR");
+else
+	printf("Hello else condition\n");
+
+if (b == 4)
+	printf("ERROR");
+else if (b == 5)
+	printf("ERROR");
+else 
+{	
+	if (b == 3)
+		printf("Hello if-else conditional\n");
+}
+
+if (b == 3)
 {
 	{
 		func doNoParamFunc()

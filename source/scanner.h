@@ -289,13 +289,6 @@ public:
 				return true;
 			}
 
-			if (n == '=')
-			{
-				m_inStream.ignore();
-				*outToken = Token(TokenType::Equals);
-				return true;
-			}
-
 			// Compiler directive
 			if (n == '#')
 			{
@@ -317,7 +310,11 @@ public:
 				if (w == "import")
 					*outToken = Token(TokenType::Import);
 				else if (w == "extern")
-					*outToken = Token(TokenType::Extern);	
+					*outToken = Token(TokenType::Extern);
+				else if (w == "if")
+					*outToken = Token(TokenType::If);
+				else if (w == "else")
+					*outToken = Token(TokenType::Else);									
 				else if (w == "var")
 					*outToken = Token(TokenType::Var);
 				else if (w == "func")
@@ -365,9 +362,21 @@ public:
 				*outToken = Token(TokenType::DecrementOp);
 				return true;
 			}
+			else if (n == '=' && n2 == '=')
+			{
+				m_inStream.ignore(2);
+				*outToken = Token(TokenType::CompareOp);
+				return true;
+			}
 
 			// single-digit operators
-			if (n == '+')
+			if (n == '=')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::Equals);
+				return true;
+			}
+			else if (n == '+')
 			{
 				m_inStream.ignore();
 				*outToken = Token(TokenType::AddOp);

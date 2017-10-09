@@ -137,7 +137,11 @@ bool acceptUnaryPostfixOperator()
 
 bool acceptBinaryOperator()
 {
-	if (accept(TokenType::AddOp))
+	if (accept(TokenType::CompareOp))
+	{
+		return true;
+	}
+	else if (accept(TokenType::AddOp))
 	{
 		 return true;
 	}
@@ -232,9 +236,11 @@ int operatorPrecedence(TokenType opType)
 	{
 		case TokenType::MultiplicationOp:
 		case TokenType::DivisionOp:
-			return 2;
+			return 10;
 		case TokenType::AddOp:
 		case TokenType::SubtractOp:
+			return 9;
+		case TokenType::CompareOp:
 			return 1;
 		default:
 			return 0;
@@ -252,7 +258,6 @@ bool hasHigherOperatorPrecedence(TokenType left, TokenType right)
 
 bool parseExpression(AST::Expression** outExpr)
 {
-
 	// Shunt all the yards!
 	AST::Expression* exprNode = nullptr;
 	if (!parsePrimaryExpression(&exprNode))
@@ -565,9 +570,60 @@ bool parseDeclarationStatement(AST::Declaration** outDeclaration)
 	return false;
 }
 
+bool parseIfStatement(AST::IfStatement** outStatement)
+{
+	if (accept(TokenType::If))
+	{
+		expect(TokenType::OpenParenthesis);	
+		AST::IfStatement* node = createNode<AST::IfStatement>();
+
+		AST::Expression* expr;
+		if (parseExpression(&expr))
+		{
+			node->expr = expr;
+		}
+		else
+		{
+			error("Expected expression");
+		}
+
+		expect(TokenType::CloseParenthesis);	
+
+		AST::Statement* statement;
+		if (parseStatement(&statement))
+		{
+			node->statement = statement;
+		}
+		else
+		{
+			error("Expected statement");
+		}
+
+		if (accept(TokenType::Else))
+		{
+			AST::Statement* statement;
+			if (parseStatement(&statement))
+			{
+				node->elseStatement = statement;
+			}
+			else
+			{
+				error("Expected statement");
+			}
+		}
+
+		*outStatement = node;
+
+		return true;
+	}
+
+	return false;
+}
+
 bool parseStatement(AST::Statement** outStatement)
 {
 	AST::Declaration* declaration;
+	AST::IfStatement* ifStatement;
 	AST::StatementBody* statementBody;
 
 	if (accept(TokenType::Import))
@@ -637,6 +693,10 @@ bool parseStatement(AST::Statement** outStatement)
 		// TODO: Should declarations ending in bodies require semi colon?
 		expect(TokenType::SemiColon, false);
 		*outStatement = declaration;
+	}
+	else if (parseIfStatement(&ifStatement))
+	{
+		*outStatement = ifStatement;
 	}
 	else if (parseStatementBody(&statementBody))
 	{

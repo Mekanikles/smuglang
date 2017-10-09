@@ -9,6 +9,7 @@ namespace AST
 	struct Module;
 	struct Import;
 	struct Call;
+	struct IfStatement;
 	struct SymbolDeclaration;
 	struct FunctionDeclaration;
 	struct SymbolExpression;
@@ -39,6 +40,7 @@ namespace AST
 		virtual void visit(Module* node) { visitChildren(node, this); }
 		virtual void visit(Import* node) { visit((Statement*)node); }
 		virtual void visit(Call* node) { visit((Statement*)node); }
+		virtual void visit(AST::IfStatement* node) { visit((Statement*)node); }
 		virtual void visit(SymbolDeclaration* node) { visit((Statement*)node);}	
 		virtual void visit(FunctionDeclaration* node) { visit((Statement*)node);}	
 		virtual void visit(Expression* node) { visitChildren(node, this); }
@@ -145,6 +147,33 @@ namespace AST
 			vector<Node*> ret;
 			ret.reserve(1);
 			ret.push_back(expr);
+			return ret;
+		}	
+	};
+
+	struct IfStatement : public NodeImpl<IfStatement, Statement>
+	{
+		Expression* expr = nullptr;
+		Statement* statement;
+		Statement* elseStatement;
+
+		string toString() override 
+		{ 
+			string s = "IfStatement";
+			return s; 
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.reserve(3);
+			assert(expr);
+			assert(statement);
+			ret.push_back(expr);
+			ret.push_back(statement);
+			if (elseStatement)
+				ret.push_back(elseStatement);
+
 			return ret;
 		}	
 	};

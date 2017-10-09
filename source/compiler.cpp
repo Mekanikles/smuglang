@@ -232,7 +232,10 @@ int main(int argc, char** argv)
 	AST::AST ast;
 
 	LOG("Parsing...");
-	if (!parse(&scannerFactory, &ast))
+	bool parseSuccess = parse(&scannerFactory, &ast);
+	printLine("Tokens:");
+	printTokens(s_tokens);
+	if (!parseSuccess)
 	{
 		LOG("Parse fail!");
 		auto f = std::ifstream(args[0]);
@@ -242,9 +245,6 @@ int main(int argc, char** argv)
 	else
 	{
 		LOG("Parse success!");
-		printLine("Tokens:");
-		printTokens(s_tokens);
-
 		LOG("Resolving symbols...");
 		resolveSymbols(&ast);
 

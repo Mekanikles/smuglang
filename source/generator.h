@@ -128,10 +128,11 @@ struct BodyGenerator : AST::Visitor
 		out << " ";
 		switch (node->type)
 		{
+			case TokenType::CompareOp: out << "== "; break;
 			case TokenType::AddOp: out << "+ "; break;
 			case TokenType::SubtractOp: out << "- "; break;
 			case TokenType::MultiplicationOp: out << "* "; break;
-			case TokenType::DivisionOp: out << "/ "; break;
+			case TokenType::DivisionOp: out << "/ "; break;		
 			default: assert(false);
 		}
 		node->right->accept(this);
@@ -271,6 +272,41 @@ struct BodyGenerator : AST::Visitor
 	{	
 		// Do nothing, function literal has already been visited by body
 	}
+
+	void visit(AST::IfStatement* node) override
+	{	
+		auto& out = *m_out.body;
+
+		assert(node->expr);
+
+		out << indent(m_indent) << "if ";
+
+		node->expr->accept(this);
+
+		out << "\n";
+
+		std::stringstream imports;
+		std::stringstream data;
+		std::stringstream body;
+		Output output { &imports, &data, m_out.body };
+
+		{
+			bool isBody = dynamic_cast<AST::StatementBody*>(node->statement) != nullptr;
+			BodyGenerator bodyGenerator(output, isBody ? m_indent : m_indent + 1);
+			node->statement->accept(&bodyGenerator);
+		}
+
+		if (node->elseStatement)
+		{	
+			out << indent(m_indent) << "else\n";
+			bool isBody = dynamic_cast<AST::StatementBody*>(node->elseStatement) != nullptr;
+			BodyGenerator bodyGenerator(output, isBody ? m_indent : m_indent + 1);		
+			node->elseStatement->accept(&bodyGenerator);
+		}
+
+		*m_out.imports << imports.str();
+		*m_out.data << data.str();
+	}	
 
 	Output m_out;
 	int m_indent;
