@@ -73,5 +73,25 @@ func doMultiParamFunc(p : int, q : int)
 	printf("Hello integer parameter 1: %i, 2: %i\n", p, q);
 };
 
+crossCallFunc1(1);
+
+func crossCallFunc1(whatCall : int)  
+{
+	printf("cross call func 1 called!\n");
+	if (whatCall == 1)
+		crossCallFunc1(2);
+	else if (whatCall == 2)
+		crossCallFunc2(1);
+};
+
+func crossCallFunc2(shouldCall : int)
+{
+	printf("cross call func 2 called!\n");
+	if (shouldCall == 1)
+		crossCallFunc1(0);
+};
+
+
+
 
 

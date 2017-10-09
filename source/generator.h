@@ -13,8 +13,6 @@ struct SymbolTranslation
 	string translation;
 };
 
-// TODO: This needs to be scoped to the same scope as symbol
-//	Add data* to symbol for this instead?
 vector<SymbolTranslation> s_functionTranslations;
 
 const string& translateFunctionSymbol(const Symbol* symbol)
@@ -41,6 +39,8 @@ struct BodyGenerator : AST::Visitor
 		out << indent(m_indent) << "{\n";
 		m_indent++;
 
+		vector<AST::FunctionDeclaration*> functionDeclarations;
+
 		// Declare all symbols in scope
 		for (Symbol* s : node->scope.symbols)
 		{
@@ -50,13 +50,17 @@ struct BodyGenerator : AST::Visitor
 
 			if (s->isFunction)
 			{
+				// Add forward declarations for all functions in scope
+				// This also triggers adding function translations
 				AST::FunctionDeclaration* declNode = (AST::FunctionDeclaration*)s->declNode;
 
 				if (declNode->funcLiteral)
 				{
 					const string name = string("") + declNode->symbol + "_" + std::to_string(declNode->order);
-					generateFunctionLiteral(declNode->funcLiteral, name);
+					generateFunctionSignature(declNode->funcLiteral, name, m_out.imports);
+					*m_out.imports << ";\n";
 					s_functionTranslations.push_back(SymbolTranslation{declNode->symbolObj, name});
+					functionDeclarations.push_back(declNode);
 				}
 				else
 				{
@@ -79,6 +83,13 @@ struct BodyGenerator : AST::Visitor
 					out << ";\n";
 				}
 			}
+		}
+
+		// Generate all functions in scope
+		for (AST::FunctionDeclaration* declNode : functionDeclarations)
+		{
+			const string name = translateFunctionSymbol(declNode->symbolObj);
+			generateFunctionLiteral(declNode->funcLiteral, name);
 		}
 
 		for (auto s : node->statements)
@@ -219,18 +230,13 @@ struct BodyGenerator : AST::Visitor
 		out << node->value; 
 	}
 
-	string generateFunctionLiteral(AST::FunctionLiteral* node, const string& name)
+	void generateFunctionSignature(AST::FunctionLiteral* node, const string& name, std::ostream* out)
 	{
-		std::stringstream imports;
-		std::stringstream data;
-		std::stringstream body;
-		Output output { &imports, &data, &body };
-		BodyGenerator bodyGenerator(output, 0);
-
-		auto& out = body;
-
 		// TODO: Add support for out params
-		out << "void " << name << "(";
+		*out << "void " << name << "(";
+
+		Output output { out, out, out }; // TODO: bleh
+		BodyGenerator bodyGenerator(output, 0);
 
 		int size = node->signature->params.size();
 		for (int i = 0; i < size; ++i)
@@ -240,32 +246,48 @@ struct BodyGenerator : AST::Visitor
 			//	we should be able to look to symbol/type tables
 			if (decl->typeExpr)
 				decl->typeExpr->accept(&bodyGenerator);
-			out << " " << decl->symbol;
+			*out << " " << decl->symbol;
 			if (decl->initExpr)
 				decl->initExpr->accept(&bodyGenerator);
 
 			if (i < size - 1)
-				out << ", ";
+				*out << ", ";
 		}
 
-		out << ")\n";
+		*out << ")";
+	}
+
+	void generateFunctionBody(AST::FunctionLiteral* node, Output& output)
+	{
+		BodyGenerator bodyGenerator(output, 0);
 
 		// Generate body
 		node->body->accept(&bodyGenerator);
+	}
+
+	void generateFunctionLiteral(AST::FunctionLiteral* node, const string& name)
+	{
+		std::stringstream imports;
+		std::stringstream data;
+		std::stringstream body;
+		Output output { &imports, &data, &body };
+
+		generateFunctionSignature(node, name, &body);
+		body << "\n";
+		generateFunctionBody(node, output);
 
 		*m_out.imports << imports.str();
 		*m_out.data << data.str();
 		*m_out.data << body.str();
-
-		return name;
 	}
 
 	void visit(AST::FunctionLiteral* node) override
 	{	
-		static int count = 0;
+		// TODO: Lambdas
+		/*static int count = 0;
 		auto& out = *m_out.body;
 		const string name = string("__lambda") + std::to_string(count++);
-		out << generateFunctionLiteral(node, name); 
+		out << generateFunctionLiteral(node, name); */
 	}
 
 	void visit(AST::FunctionDeclaration* node) override
@@ -325,8 +347,11 @@ struct CGenerator : AST::Visitor
 
 		auto& out = *m_out;
 	
+		out << "// Declaration section\n";
 		out << m_imports.str();
+		out << "\n// Data section\n";
 		out << m_data.str();
+		out << "\n// Body section\n";
 		out << m_body.str();
 	}
 
