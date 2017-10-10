@@ -9,6 +9,7 @@ namespace AST
 	struct Module;
 	struct Import;
 	struct Call;
+	struct Assignment;
 	struct IfStatement;
 	struct SymbolDeclaration;
 	struct FunctionDeclaration;
@@ -40,7 +41,8 @@ namespace AST
 		virtual void visit(Module* node) { visitChildren(node, this); }
 		virtual void visit(Import* node) { visit((Statement*)node); }
 		virtual void visit(Call* node) { visit((Statement*)node); }
-		virtual void visit(AST::IfStatement* node) { visit((Statement*)node); }
+		virtual void visit(Assignment* node) { visit((Statement*)node); }
+		virtual void visit(IfStatement* node) { visit((Statement*)node); }
 		virtual void visit(SymbolDeclaration* node) { visit((Statement*)node);}	
 		virtual void visit(FunctionDeclaration* node) { visit((Statement*)node);}	
 		virtual void visit(Expression* node) { visitChildren(node, this); }
@@ -129,27 +131,6 @@ namespace AST
 	};
 
 	void visitChildren(Module* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
-
-	struct Assignment : public NodeImpl<Assignment, Statement>
-	{
-		string symbol;
-		Expression* expr = nullptr;
-		Symbol* symbolObj = nullptr;
-
-		string toString() override 
-		{ 
-			string s = "Assigment(" + symbol + ")";
-			return s; 
-		}
-
-		const vector<Node*> getChildren() override
-		{
-			vector<Node*> ret;
-			ret.reserve(1);
-			ret.push_back(expr);
-			return ret;
-		}	
-	};
 
 	struct IfStatement : public NodeImpl<IfStatement, Statement>
 	{
@@ -282,6 +263,28 @@ namespace AST
 			ret.insert(ret.end(), args.begin(), args.end());
 			return ret;
 		}
+	};
+
+	struct Assignment : public NodeImpl<Assignment, Statement>
+	{
+		SymbolExpression* symExpr;
+		Expression* expr = nullptr;
+
+		string toString() override 
+		{ 
+			assert(symExpr);
+			string s = "Assigment";
+			return s; 
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.reserve(2);
+			ret.push_back(symExpr);
+			ret.push_back(expr);
+			return ret;
+		}	
 	};
 
 	struct UnaryOp : public NodeImpl<UnaryOp, Expression>

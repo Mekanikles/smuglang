@@ -33,13 +33,15 @@ if (b == 4)
 else
 	printf("Hello else condition\n");
 
-if (b == 4)
+b = 3 + 1;
+
+if (b == 3)
 	printf("ERROR");
 else if (b == 5)
 	printf("ERROR");
 else 
 {	
-	if (b == 3)
+	if (b == 4)
 		printf("Hello if-else conditional\n");
 }
 

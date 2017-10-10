@@ -660,8 +660,10 @@ bool parseStatement(AST::Statement** outStatement)
 		Token t = lastToken();
 		string symbol = t.symbol;
 
+		// TODO: accept expression instead
+		//	Will allow assigning to function return values
 		// Function call
-		if (expect(TokenType::OpenParenthesis))
+		if (accept(TokenType::OpenParenthesis))
 		{	
 			auto node = createNode<AST::Call>();
 			node->function = symbol;
@@ -686,6 +688,26 @@ bool parseStatement(AST::Statement** outStatement)
 			{
 				skipToNextStatement();
 			}		
+		}
+		else if (accept(TokenType::Equals))
+		{
+			auto* node = createNode<AST::Assignment>();
+			*outStatement = node;
+			
+			auto* symExpr = createNode<AST::SymbolExpression>();
+			symExpr->symbol = symbol;
+
+			// Assignment
+			AST::Expression* expr;
+			if (!parseExpression(&expr))
+			{
+				error("Expected expression");
+			}
+
+			node->symExpr = symExpr;
+			node->expr = expr;
+
+			expect(TokenType::SemiColon, false);
 		}
 	}
 	else if (parseDeclarationStatement(&declaration))

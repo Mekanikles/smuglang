@@ -130,6 +130,19 @@ struct BodyGenerator : AST::Visitor
 		out << ");\n";
 	};
 
+	void visit(AST::Assignment* node) override
+	{
+		auto& out = *m_out.body;
+
+		assert(node->symExpr);
+		out << indent(m_indent) << node->symExpr->symbol << " = ";
+
+		assert(node->expr);
+		node->expr->accept(this);
+
+		out << ";\n";
+	}
+
 	void visit(AST::BinaryOp* node) override
 	{	
 		auto& out = *m_out.body;
