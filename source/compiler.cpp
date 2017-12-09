@@ -17,7 +17,7 @@
 #include "parser.h"
 #include "generator.h"
 #include "output.h"
-
+/*
 struct SymbolDeclarationScanner : AST::Visitor
 {
 	SymbolDeclarationScanner()
@@ -114,28 +114,39 @@ struct SymbolExpressionScanner : AST::Visitor
 
 	void visit(AST::SymbolExpression* node) override
 	{
-		Symbol* symbol;
-		if (!m_currentScope->lookUpSymbolName(node->symbol, &symbol))
+		Symbol* symbol = nullptr;
+		if (node->builtIn)
 		{
-			symbol = findUnresolved(node->symbol);
-			if (!symbol)
+			if (!lookUpBuiltInSymbolName(node->symbol, &symbol))
 			{
-				printLine(string("Module does not define symbol: ") + node->symbol);
-				symbol = createSymbol(node->symbol);
-				m_unresolvedSymbols.push_back(symbol);
+				printLine(string("Could not find built in symbol: ") + node->symbol);
+				assert(false);
 			}
 		}
 		else
 		{
-			if (symbol->declNode->order > node->order)
-			{	
-				// TODO: add line/column
-				// TODO: Replace function check with static, or proper initialization order
-				if (!symbol->isFunction)
-					printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization");
+			if (!m_currentScope->lookUpSymbolName(node->symbol, &symbol))
+			{
+				symbol = findUnresolved(node->symbol);
+				if (!symbol)
+				{
+					printLine(string("Module does not define symbol: ") + node->symbol);
+					symbol = createSymbol(node->symbol);
+					m_unresolvedSymbols.push_back(symbol);
+				}
+			}
+			else
+			{
+				if (symbol->declNode->order > node->order)
+				{	
+					// TODO: add line/column
+					// TODO: Replace function check with static, or proper initialization order
+					if (!symbol->isFunction)
+						printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization");
+				}
 			}
 		}
-		
+
 		node->symbolObj = symbol;
 	}
 
@@ -169,14 +180,18 @@ void resolveTypes()
 		else
 		{		
 			AST::SymbolDeclaration* node = (AST::SymbolDeclaration*)s->declNode;	
+			printLine(string("Resolving type for: ") + node->toString());
 			// TODO: Add type information
 			if (node->typeExpr)
 			{
 				type = node->typeExpr->getType();
+				assert(type.isType);
+				// TODO: Ugh, whats going on here, how to describe the value of a type?
+				type.isType = false;
 				if (node->initExpr)
 				{
 					Type t2 = node->initExpr->getType();
-					assert(type == t2); 
+					assert(isAssignable(type, t2)); 
 				}
 			}
 			else
@@ -190,8 +205,11 @@ void resolveTypes()
 	}
 }
 
+
 void resolveSymbols(AST::AST* ast)
 {
+	createBuiltInSymbols();
+
 	SymbolDeclarationScanner sd;
 	ast->root->accept(&sd);
 
@@ -216,6 +234,94 @@ void resolveSymbols(AST::AST* ast)
 	}
 
 	resolveTypes();
+}
+*/
+
+struct SymbolResolver : AST::Visitor
+{
+	void visit(AST::StatementBody* node) override
+	{
+		auto oldScope = m_currentScope;
+		m_currentScope = &node->scope;
+		AST::Visitor::visit(node);
+		m_currentScope = oldScope;
+	}
+
+	void visit(AST::SymbolDeclaration* node) override
+	{
+		Symbol* symbol;
+		// Make sure symbol is not declared in same scope
+		// 	It is okay to overshadow parent scope declarations.
+		if (m_currentScope->getSymbolInScope(node->symbol, &symbol))
+		{
+			assert(false && "Symbol already declared");
+		}
+
+		// TODO: If this symbol is referenced in the type or init expr
+		//	Can it lead to an infinite recursion when inferring types?
+		symbol = createSymbol(node->symbol, node);
+		symbol->isParam = node->isParam;
+		m_currentScope->addSymbol(symbol);
+		node->symbolObj = symbol;
+
+		// Check explicit type
+		if (node->typeExpr)
+		{
+			node->typeExpr->accept(this);
+			symbol->type = node->typeExpr->getType();
+		}
+
+		// Infer type from init expression
+		if (node->initExpr)
+		{
+			node->initExpr->accept(this);
+			Type exprType = node->initExpr->getType();
+			const auto result = unifyTypes(symbol->type, exprType);
+			if (result == CannotUnify)
+				assert("Cannot unify types" && false);
+
+			// TODO: How to apply unification to expression?
+			assert(result != RightChanged);
+		}
+
+		// TODO: Resolve any type requests within this and underlying scopes
+
+
+		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)m_currentScope));
+	}
+
+	void visit(AST::SymbolExpression* node) override
+	{
+		Symbol* symbol = nullptr;
+		if (m_currentScope->lookUpSymbolName(node->symbol, &symbol))
+		{
+			assert(symbol->declNode);
+			if (symbol->declNode->order > node->order)
+			{	
+				// TODO: add line/column
+				// TODO: Replace function check with static, or proper initialization order
+				if (!symbol->isFunction)
+					printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization");
+			}
+		}
+		else
+		{
+			node->symbolRequest = createSymbolRequest(node->symbol, node);
+			// TODO: When resolving requests, type must be unified again, 
+			//	but from the bottom up in the AST. HOW?
+		}
+
+		node->symbolObj = symbol;
+	}
+
+	SymbolScope* m_currentScope = nullptr;	
+};
+
+void resolveSymbols(AST::AST* ast)
+{
+	SymbolResolver resolver;
+	ast->root->accept(&resolver);
+
 }
 
 int main(int argc, char** argv)

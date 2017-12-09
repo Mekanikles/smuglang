@@ -1,0 +1,9 @@
+
+//extern func printf;
+
+var x : #primitives.s32;
+
+var y = x;
+
+
+//printf(#typeof(x));

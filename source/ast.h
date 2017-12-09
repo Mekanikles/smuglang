@@ -14,9 +14,11 @@ namespace AST
 	struct SymbolDeclaration;
 	struct FunctionDeclaration;
 	struct SymbolExpression;
+	struct PrimitiveTypeExpression;
 	struct StringLiteral;
 	struct IntegerLiteral;
 	struct FloatLiteral;
+	struct TypeLiteral;
 	struct FunctionLiteral;
 	struct UnaryOp;
 	struct UnaryPostfixOp;
@@ -175,6 +177,14 @@ namespace AST
 	struct StringLiteral : public NodeImpl<StringLiteral, Expression>
 	{
 		string value;
+		Type type;
+		
+		StringLiteral(const string& value)
+			: value(value)
+			, type(createStaticArrayType(createPrimitiveType(PrimitiveClass::Char), value.length()))
+		{
+		}
+
 		string toString() override
 		{
 			string s = "StringLiteral(" + value + ")";
@@ -183,15 +193,21 @@ namespace AST
 
 		Type getType() override
 		{
-			Type t;
-			t.isString = true;
-			return t;
+			return type;
 		}
 	};
 
 	struct IntegerLiteral : public NodeImpl<IntegerLiteral, Expression>
 	{
 		string value;
+		Type type;
+
+		IntegerLiteral(const string& value)
+			: value(value)
+			, type(createPrimitiveType(PrimitiveClass::Int))
+		{
+		}
+
 		string toString() override 
 		{ 
 			string s = "IntegerLiteral(" + value + ")";
@@ -200,15 +216,21 @@ namespace AST
 
 		Type getType() override
 		{
-			Type t;
-			t.isInt = true;
-			return t;
+			return type;
 		}
 	};
 
 	struct FloatLiteral : public NodeImpl<FloatLiteral, Expression>
 	{
 		string value;
+		Type type;
+		
+		FloatLiteral(const string& value)
+			: value(value)
+			, type(createPrimitiveType(PrimitiveClass::Float))
+		{
+		}
+
 		string toString() override 
 		{ 
 			string s = "FloatLiteral(" + value + ")";
@@ -217,27 +239,49 @@ namespace AST
 
 		Type getType() override
 		{
-			Type t;
-			t.isFloat = true;
-			return t;
+			return type;
 		}
+	};
+
+	struct TypeLiteral : public NodeImpl<TypeLiteral, Expression>
+	{
+		Type type;
+		TypeLiteral(std::unique_ptr<TypeClass> typeClass)
+			: type(createTypeVariable(std::move(typeClass)))
+		{}
+
+		string toString() override 
+		{ 
+			string s = "TypeLiteral";
+			return s;
+		}
+
+		Type getType() override
+		{
+			return type;
+		}	
 	};
 
 	struct SymbolExpression : public NodeImpl<SymbolExpression, Expression>
 	{
 		string symbol;
 		Symbol* symbolObj = nullptr;
+		SymbolRequest* symbolRequest = nullptr;
+
+		SymbolExpression(string symbol)
+			: symbol(symbol)
+		{}	
 
 		string toString() override 
 		{ 
-			string s = "SymbolExpression(" + symbol + ")";
+			string s;
+			s = "SymbolExpression(" + symbol + ")";
 			return s; 
 		}
 
 		Type getType() override
 		{
 			assert(symbolObj);
-			assert(symbolObj->knowsType());
 			return symbolObj->type;
 		}
 	};
@@ -289,12 +333,12 @@ namespace AST
 
 	struct UnaryOp : public NodeImpl<UnaryOp, Expression>
 	{
-		TokenType type;
+		TokenType opType;
 		Expression* expr = nullptr;
 
 		string toString() override 
 		{ 
-			string s = "UnaryOp(" + ::toString(type) + ")";
+			string s = "UnaryOp(" + ::toString(opType) + ")";
 			return s; 
 		}
 		const vector<Node*> getChildren() override
@@ -314,12 +358,12 @@ namespace AST
 
 	struct UnaryPostfixOp : public NodeImpl<UnaryPostfixOp, Expression>
 	{
-		TokenType type;
+		TokenType opType;
 		Expression* expr = nullptr;
 
 		string toString() override 
 		{ 
-			string s = "UnaryPostfixOp(" + ::toString(type) + ")";
+			string s = "UnaryPostfixOp(" + ::toString(opType) + ")";
 			return s; 
 		}
 		const vector<Node*> getChildren() override
@@ -339,13 +383,13 @@ namespace AST
 
 	struct BinaryOp : public NodeImpl<BinaryOp, Expression>
 	{
-		TokenType type;
+		TokenType opType;
 		Expression* left = nullptr;
 		Expression* right = nullptr;
 
 		string toString() override 
 		{ 
-			string s = "BinaryOp(" + ::toString(type) + ")";
+			string s = "BinaryOp(" + ::toString(opType) + ")";
 			return s; 
 		}
 		const vector<Node*> getChildren() override
@@ -370,7 +414,7 @@ namespace AST
 	{
 		string symbol;
 		bool isParam = false;
-		SymbolExpression* typeExpr = nullptr;
+		Expression* typeExpr = nullptr;
 		Expression* initExpr = nullptr;
 		Symbol* symbolObj = nullptr;
 
@@ -417,8 +461,13 @@ namespace AST
 
 	struct FunctionLiteral : public NodeImpl<FunctionLiteral, Expression>
 	{
+		Type type;
 		FuncLiteralSignature* signature = nullptr;
 		StatementBody* body = nullptr;
+
+		FunctionLiteral()
+			: type(createFunctionType())
+		{}	
 
 		string toString() override 
 		{ 
@@ -428,9 +477,7 @@ namespace AST
 
 		Type getType() override
 		{
-			Type t;
-			t.isFunction = true;
-			return t;
+			return type;
 		}
 
 		const vector<Node*> getChildren() override

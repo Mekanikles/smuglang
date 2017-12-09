@@ -150,7 +150,7 @@ struct BodyGenerator : AST::Visitor
 		out << "(";
 		node->left->accept(this);
 		out << " ";
-		switch (node->type)
+		switch (node->opType)
 		{
 			case TokenType::CompareOp: out << "== "; break;
 			case TokenType::AddOp: out << "+ "; break;
@@ -167,7 +167,7 @@ struct BodyGenerator : AST::Visitor
 	{
 		auto& out = *m_out.body;
 
-		switch (node->type)
+		switch (node->opType)
 		{
 			case TokenType::AddOp: out << "+ "; break;
 			case TokenType::SubtractOp: out << "- "; break;
@@ -184,7 +184,7 @@ struct BodyGenerator : AST::Visitor
 
 		node->expr->accept(this);
 
-		switch (node->type)
+		switch (node->opType)
 		{
 			case TokenType::IncrementOp: out << "++ "; break;
 			case TokenType::DecrementOp: out << "-- "; break;
@@ -205,7 +205,7 @@ struct BodyGenerator : AST::Visitor
 		//	but instead by caller
 		// Static const functions does initialization on load instead
 		//	TODO: Generalize
-		if (!node->isParam && !t.isFunction && node->initExpr)
+		if (!node->isParam && !t.isFunction() && node->initExpr)
 		{
 			out << indent(m_indent);
 			out << node->symbol;

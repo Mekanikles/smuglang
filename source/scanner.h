@@ -103,6 +103,16 @@ protected:
 	BufferedInputStream& m_inStream;
 };
 
+bool isWordInitChar(const char c)
+{
+	return isalpha(c) || c == '_';
+}
+
+bool isWordChar(const char c)
+{
+	return isalnum(c) || c == '_';
+}
+
 class TopLevelScanner : public Scanner
 {
 public:	
@@ -111,12 +121,12 @@ public:
 	string scanWord()
 	{
 		string ret;
-		if (isalpha(m_inStream.peek()))
+		if (isWordInitChar(m_inStream.peek()))
 		{
 			char c;
 			m_inStream.get(c);
 			ret += c;
-			while(isalnum(m_inStream.peek()))
+			while(isWordChar(m_inStream.peek()))
 			{
 				m_inStream.get(c);
 				ret += c;
@@ -280,7 +290,7 @@ public:
 				m_inStream.ignore();
 				*outToken = Token(TokenType::Colon);
 				return true;
-			}	
+			}
 
 			if (n == ',')
 			{
@@ -300,10 +310,14 @@ public:
 					*outToken = Token(TokenType::CompilerDirective, w);
 					return true;
 				}
+				else
+				{
+					return false;
+				}
 			}
 
 			// Symbols and keywords
-			if (isalpha(n))
+			if (isWordInitChar(n))
 			{
 				string w = scanWord();
 				// TODO: Difference between toplevel scan and body scan?
@@ -336,6 +350,14 @@ public:
 				else
 					*outToken = Token(TokenType::IntegerLiteral, literal);
 
+				return true;
+			}
+
+			// Note scan lone dot after numericals to allow decimal point
+			if (n == '.')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::Dot);
 				return true;
 			}
 

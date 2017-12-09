@@ -162,8 +162,36 @@ bool acceptBinaryOperator()
 
 bool parseExpression(AST::Expression** outExpr);
 
+bool parsePrimitiveTypeExpression(AST::Expression** outNode)
+{
+	if (accept(TokenType::CompilerDirective))
+	{
+		if (lastToken().symbol == "primitives")
+		{
+			// TODO: Generalise primitives as list of types
+			expect(TokenType::Dot);
+
+			expect(TokenType::Symbol);
+			assert(lastToken().symbol == "s32");
+
+			auto typeClass = std::make_unique<PrimitiveClass>(PrimitiveClass::Int, 32);
+			auto* node = createNode<AST::TypeLiteral>(std::move(typeClass));		
+			*outNode = node;
+		}
+		else
+		{
+			error("Cannot parse compiler directive as expression");
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
 bool parsePrimaryExpression(AST::Expression** outNode)
 {
+	AST::SymbolExpression* symExpr;
 	if (accept(TokenType::OpenParenthesis))
 	{
 		if (!parseExpression(outNode))
@@ -174,7 +202,7 @@ bool parsePrimaryExpression(AST::Expression** outNode)
 	else if (acceptUnaryOperator())
 	{
 		auto uop = createNode<AST::UnaryOp>();
-		uop->type = lastToken().type;
+		uop->opType = lastToken().type;
 
 		AST::Expression* expr = nullptr;
 		if (parsePrimaryExpression(&expr))
@@ -191,27 +219,26 @@ bool parsePrimaryExpression(AST::Expression** outNode)
 	}
 	else if (accept(TokenType::StringLiteral))
 	{
-		auto* expr = createNode<AST::StringLiteral>();
-		expr->value = lastToken().symbol;
+		auto* expr = createNode<AST::StringLiteral>(lastToken().symbol);
 		*outNode = expr;
 	}
 	else if (accept(TokenType::IntegerLiteral))
 	{
-		auto* expr = createNode<AST::IntegerLiteral>();
-		expr->value = lastToken().symbol;
+		auto* expr = createNode<AST::IntegerLiteral>(lastToken().symbol);
 		*outNode = expr;
 	}
 	else if (accept(TokenType::FloatLiteral))
 	{
-		auto* expr = createNode<AST::FloatLiteral>();
-		expr->value = lastToken().symbol;
+		auto* expr = createNode<AST::FloatLiteral>(lastToken().symbol);
 		*outNode = expr;
 	}
 	else if (accept(TokenType::Symbol))
 	{
-		auto* expr = createNode<AST::SymbolExpression>();
-		expr->symbol = lastToken().symbol;
+		auto* expr = createNode<AST::SymbolExpression>(lastToken().symbol);
 		*outNode = expr;
+	}
+	else if (parsePrimitiveTypeExpression(outNode))
+	{
 	}
 	else
 	{
@@ -221,7 +248,7 @@ bool parsePrimaryExpression(AST::Expression** outNode)
 	if (acceptUnaryPostfixOperator())
 	{
 		auto uop = createNode<AST::UnaryPostfixOp>();
-		uop->type = lastToken().type;
+		uop->opType = lastToken().type;
 		uop->expr = *outNode;
 
 		*outNode = uop;
@@ -277,7 +304,7 @@ bool parseExpression(AST::Expression** outExpr)
 		{
 			assert(exprStack.size() > 1);
 			auto* bop = createNode<AST::BinaryOp>();
-			bop->type = binOpStack.back();
+			bop->opType = binOpStack.back();
 			binOpStack.pop_back();
 			bop->right = exprStack.back();
 			exprStack.pop_back();
@@ -305,7 +332,7 @@ bool parseExpression(AST::Expression** outExpr)
 	while (binOpStack.size() > 0)
 	{
 		auto* bop = createNode<AST::BinaryOp>();
-		bop->type = binOpStack.back();
+		bop->opType = binOpStack.back();
 		binOpStack.pop_back();
 		bop->right = exprStack.back();
 		exprStack.pop_back();
@@ -362,13 +389,16 @@ void skipToNextStatement()
 }
 
 // TODO: Expand this to any expression
-bool parseTypeExpression(AST::SymbolExpression** outExpr)
+bool parseTypeExpression(AST::Expression** outExpr)
 {
 	if (accept(TokenType::Symbol))
 	{
-		auto* node = createNode<AST::SymbolExpression>();
-		node->symbol = lastToken().symbol;
+		auto* node = createNode<AST::SymbolExpression>(lastToken().symbol);
 		*outExpr = node;
+		return true;
+	}
+	else if (parsePrimitiveTypeExpression(outExpr))
+	{
 		return true;
 	}
 
@@ -389,8 +419,11 @@ bool parseSymbolDeclaration(AST::SymbolDeclaration** outDeclaration)
 	if (accept(TokenType::Colon))
 	{
 		// TODO: Should handle generic expressions
-		AST::SymbolExpression* expr;
-		parseTypeExpression(&expr);
+		AST::Expression* expr;
+		if (!parseTypeExpression(&expr))
+		{
+			error("Expected expression");
+		}
 
 		node->typeExpr = expr;
 	}
@@ -668,8 +701,7 @@ bool parseStatement(AST::Statement** outStatement)
 			auto node = createNode<AST::Call>();
 			node->function = symbol;
 
-			auto* expr = createNode<AST::SymbolExpression>();
-			expr->symbol = symbol;
+			auto* expr = createNode<AST::SymbolExpression>(symbol);
 			node->expr = expr;
 
 			if (!parseCallParameters(node))
@@ -694,8 +726,7 @@ bool parseStatement(AST::Statement** outStatement)
 			auto* node = createNode<AST::Assignment>();
 			*outStatement = node;
 			
-			auto* symExpr = createNode<AST::SymbolExpression>();
-			symExpr->symbol = symbol;
+			auto* symExpr = createNode<AST::SymbolExpression>(symbol);
 
 			// Assignment
 			AST::Expression* expr;

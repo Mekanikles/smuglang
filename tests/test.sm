@@ -15,7 +15,7 @@ printf("Hello float expressions %f, %f\n", 5.1 * 4.4 - .33 / 2.22, 1.0 + 2.1 * .
 
 printf("Hello sub expression %i\n", (5 + 4) - (3 + 2) - (((1))));
 
-var i : int = 5;
+var i : #primitives.s32 = 5;
 {
 	var i : int = 10;
 	printf("Hello variable should be 10: %i\n", i);

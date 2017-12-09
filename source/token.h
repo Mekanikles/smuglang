@@ -21,6 +21,7 @@ enum class TokenType
 	SemiColon,
 	Comma,
 	Colon,
+	Dot,
 	CompareOp,
 	AddOp,
 	SubtractOp,
@@ -65,10 +66,11 @@ string toString(TokenType type)
 		case TokenType::Else: return "Else";
 		case TokenType::Equals: return "Equals";
 		// TODO: # should be its own token, compiler directive should be on parser level
-		case TokenType::CompilerDirective: return "Compiler Directive";		
+		case TokenType::CompilerDirective: return "CompilerDirective";		
 		case TokenType::SemiColon: return "Semi Colon";
 		case TokenType::Comma: return "Comma";
 		case TokenType::Colon: return "Colon";
+		case TokenType::Dot: return "Dot";
 		case TokenType::CompareOp: return "Operator compare";
 		case TokenType::AddOp: return "Operator add";
 		case TokenType::SubtractOp: return "Operator subtract";
