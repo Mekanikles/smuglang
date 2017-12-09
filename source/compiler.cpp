@@ -265,10 +265,14 @@ struct SymbolResolver : AST::Visitor
 		node->symbolObj = symbol;
 
 		// Check explicit type
+		// TODO: How to assign "type" if inner type is always transferred?
+		//	i.e var x : type; "type" needs to be a type variable that
+		//	has an inner type of a type variable?
 		if (node->typeExpr)
 		{
 			node->typeExpr->accept(this);
-			symbol->type = node->typeExpr->getType();
+			const Type type = node->typeExpr->getType();
+			symbol->type = type.innerTypeFromTypeVariable();
 		}
 
 		// Infer type from init expression

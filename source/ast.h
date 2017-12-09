@@ -52,6 +52,7 @@ namespace AST
 		virtual void visit(StringLiteral* node) { visit((Expression*)node);}
 		virtual void visit(IntegerLiteral* node) { visit((Expression*)node); }
 		virtual void visit(FloatLiteral* node) { visit((Expression*)node); }
+		virtual void visit(TypeLiteral* node) { visit((Expression*)node); }
 		virtual void visit(FunctionLiteral* node) { visit((Expression*)node); }
 		virtual void visit(UnaryOp* node) { visit((Expression*)node); }
 		virtual void visit(UnaryPostfixOp* node) { visit((Expression*)node); }

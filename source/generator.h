@@ -25,6 +25,24 @@ const string& translateFunctionSymbol(const Symbol* symbol)
 	return symbol->name;
 }
 
+string getTypeClassName(const TypeClass* typeClass)
+{	
+	switch (typeClass->type)
+	{
+		case TypeClass::Primitive:
+		{
+			auto p = typeClass->as<PrimitiveClass>();
+			assert(p.primitiveType == PrimitiveClass::Int);
+			assert(p.knownSize = true);
+			assert(p.size == 32);
+			return "int";
+			break;
+		}
+		default:
+			assert("Generator does not support type" && false);
+	};
+}
+
 struct BodyGenerator : AST::Visitor
 {
 	BodyGenerator(const Output& out, int indent)
@@ -70,18 +88,15 @@ struct BodyGenerator : AST::Visitor
 			}
 			else
 			{
-				// TODO: Unsafe cast
-				AST::SymbolDeclaration* declNode = (AST::SymbolDeclaration*)s->declNode;
-				assert(declNode);
+				const Type& type = s->type;
 
-				// TODO: Store all info in symbol, handle inferred types
-				if (declNode->typeExpr)
-				{
-					out << indent(m_indent);
-					declNode->typeExpr->accept(this);
-					out << " " << declNode->symbol;
-					out << ";\n";
-				}
+				// Type variables are not allowed to exits in generation step
+				assert(!type.isTypeVariable());
+				auto typeClass = type.typeClass.get();
+
+				out << indent(m_indent);
+				out << getTypeClassName(typeClass);
+				out << " " << s->name << ";\n";
 			}
 		}
 
@@ -213,7 +228,7 @@ struct BodyGenerator : AST::Visitor
 			node->initExpr->accept(this);
 			out << ";\n"; 
 		}
-		else
+		else if (node->initExpr)
 		{
 			node->initExpr->accept(this);
 		}

@@ -92,6 +92,12 @@ struct TypeClass
 
 	bool operator==(const TypeClass& o) const;
 	bool isSubClass(const TypeClass& o) const;
+
+	template<typename T>
+	const T& as() const
+	{
+		return *static_cast<const T*>(this);
+	}
 };
 
 struct Type
@@ -110,6 +116,7 @@ struct Type
 	Type(bool isTypeVariable, std::shared_ptr<TypeClass> typeClass)
 		: typeClass(typeClass)
 	{
+		assert(typeClass.get());
 		kind = isTypeVariable ? TypeVariable : Value;
 	}
 
@@ -129,9 +136,20 @@ struct Type
 			this->typeClass->isSubClass(*o.typeClass);
 	}
 
-	bool isFunction()
+	bool isFunction() const
 	{
 		return kind == Value && typeClass->type == TypeClass::Function;
+	}
+
+	bool isTypeVariable() const
+	{
+		return kind == TypeVariable;
+	}
+
+	Type innerTypeFromTypeVariable() const
+	{
+		assert(isTypeVariable());
+		return Type(false, typeClass);
 	}
 };
 
@@ -301,7 +319,6 @@ Type createFunctionType()
 
 Type createTypeVariable(std::unique_ptr<TypeClass> typeClass)
 {
-	typeClass.release();
 	return Type(true, std::move(typeClass));
 }
 
