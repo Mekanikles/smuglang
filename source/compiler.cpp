@@ -247,6 +247,29 @@ struct SymbolResolver : AST::Visitor
 		m_currentScope = oldScope;
 	}
 
+	// TODO: Copy paste code, generalize declarations somehow
+	void visit(AST::FunctionDeclaration* node) override
+	{
+		//assert(node->typeExpr);
+		
+		Symbol* symbol;
+		if (m_currentScope->getSymbolInScope(node->symbol, &symbol))
+		{
+			assert(false);
+		}
+
+		symbol = createSymbol(node->symbol, node);
+		symbol->type = createFunctionType();
+		// TODO: Order of external function decls is probably -1
+		symbol->firstInitOrder = node->order;
+		m_currentScope->addSymbol(symbol);
+		node->symbolObj = symbol;
+
+		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)m_currentScope));
+
+		AST::Visitor::visit(node);
+	}
+
 	void visit(AST::SymbolDeclaration* node) override
 	{
 		Symbol* symbol;
@@ -278,14 +301,16 @@ struct SymbolResolver : AST::Visitor
 		// Infer type from init expression
 		if (node->initExpr)
 		{
+			symbol->firstInitOrder = node->order;
 			node->initExpr->accept(this);
-			Type exprType = node->initExpr->getType();
+			Type& exprType = node->initExpr->getType();
 			const auto result = unifyTypes(symbol->type, exprType);
+
+			// TODO: Handle implicit casts?
 			if (result == CannotUnify)
 				assert("Cannot unify types" && false);
 
 			// TODO: How to apply unification to expression?
-			assert(result != RightChanged);
 		}
 
 		// TODO: Resolve any type requests within this and underlying scopes
@@ -300,7 +325,7 @@ struct SymbolResolver : AST::Visitor
 		if (m_currentScope->lookUpSymbolName(node->symbol, &symbol))
 		{
 			assert(symbol->declNode);
-			if (symbol->declNode->order > node->order)
+			if (symbol->firstInitOrder > node->order)
 			{	
 				// TODO: add line/column
 				// TODO: Replace function check with static, or proper initialization order
@@ -317,6 +342,7 @@ struct SymbolResolver : AST::Visitor
 
 		node->symbolObj = symbol;
 	}
+
 
 	SymbolScope* m_currentScope = nullptr;	
 };

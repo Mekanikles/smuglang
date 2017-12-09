@@ -25,17 +25,34 @@ const string& translateFunctionSymbol(const Symbol* symbol)
 	return symbol->name;
 }
 
+string getIntegerTypeName(const PrimitiveClass& p)
+{
+	assert(p.isInteger());
+	assert(p.knownSize);
+	assert(p.knowsSign());
+
+	if (p.size == 32)
+		return p.isSigned() ? "int32_t" : "uint32_t";
+	else if (p.size == 64)
+		return p.isSigned() ? "int64_t" : "uint64_t";
+	else if (p.size == 16)
+		return p.isSigned() ? "int16_t" : "uint16_t";
+	else if (p.size == 8)
+		return p.isSigned() ? "int8_t" : "uint8_t";
+	else
+		assert("Unsupported integer size" && false);
+
+	return "";
+};
+
 string getTypeClassName(const TypeClass* typeClass)
 {	
 	switch (typeClass->type)
 	{
 		case TypeClass::Primitive:
 		{
-			auto p = typeClass->as<PrimitiveClass>();
-			assert(p.primitiveType == PrimitiveClass::Int);
-			assert(p.knownSize = true);
-			assert(p.size == 32);
-			return "int";
+			auto& p = typeClass->as<PrimitiveClass>();
+			return getIntegerTypeName(p);
 			break;
 		}
 		default:
@@ -66,7 +83,9 @@ struct BodyGenerator : AST::Visitor
 			if (s->isParam)
 				continue;
 
-			if (s->isFunction)
+			const Type& type = s->type;
+
+			if (type.isFunction())
 			{
 				// Add forward declarations for all functions in scope
 				// This also triggers adding function translations
@@ -88,8 +107,6 @@ struct BodyGenerator : AST::Visitor
 			}
 			else
 			{
-				const Type& type = s->type;
-
 				// Type variables are not allowed to exits in generation step
 				assert(!type.isTypeVariable());
 				auto typeClass = type.typeClass.get();
@@ -249,7 +266,11 @@ struct BodyGenerator : AST::Visitor
 	void visit(AST::IntegerLiteral* node) override
 	{
 		auto& out = *m_out.body;
-		out << node->value; 
+		const Type& t = node->getType();
+		assert(t.isPrimitive());
+		auto& p = t.typeClass->as<PrimitiveClass>();
+
+		out <<  node->value; 
 	}
 
 	void visit(AST::FloatLiteral* node) override
@@ -375,6 +396,7 @@ struct CGenerator : AST::Visitor
 
 		auto& out = *m_out;
 	
+		out << "#include <stdint.h>\n";
 		out << "// Declaration section\n";
 		out << m_imports.str();
 		out << "\n// Data section\n";

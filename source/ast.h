@@ -62,7 +62,7 @@ namespace AST
 		virtual void visit(FuncLiteralSignature* node) { visitChildren(node, this); }
 	};
 
-	static int s_nodeCount = 0;
+	static uint s_nodeCount = 0;
 
 	struct Node
 	{
@@ -72,7 +72,7 @@ namespace AST
 		virtual void accept(Visitor* v) = 0;
 		virtual string toString() = 0;
 
-		int order = s_nodeCount++;
+		uint order = s_nodeCount++;
 	};
 
 	void visitChildren(Node* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
@@ -89,7 +89,7 @@ namespace AST
 
 	struct Expression : Node
 	{
-		virtual Type getType() { return Type(); };
+		virtual Type& getType() = 0;
 	};
 
 	void visitChildren(Expression* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
@@ -192,7 +192,7 @@ namespace AST
 			return s;
 		}
 
-		Type getType() override
+		Type& getType() override
 		{
 			return type;
 		}
@@ -215,7 +215,7 @@ namespace AST
 			return s;
 		}
 
-		Type getType() override
+		Type& getType() override
 		{
 			return type;
 		}
@@ -238,7 +238,7 @@ namespace AST
 			return s;
 		}
 
-		Type getType() override
+		Type& getType() override
 		{
 			return type;
 		}
@@ -257,7 +257,7 @@ namespace AST
 			return s;
 		}
 
-		Type getType() override
+		Type& getType() override
 		{
 			return type;
 		}	
@@ -280,7 +280,7 @@ namespace AST
 			return s; 
 		}
 
-		Type getType() override
+		Type& getType() override
 		{
 			assert(symbolObj);
 			return symbolObj->type;
@@ -350,7 +350,7 @@ namespace AST
 			return ret;
 		}
 
-		Type getType() override
+		Type& getType() override
 		{
 			// TODO: Bubble up types through ops for now
 			return expr->getType();
@@ -375,7 +375,7 @@ namespace AST
 			return ret;
 		}
 
-		Type getType() override
+		Type& getType() override
 		{
 			// TODO: Bubble up types through ops for now
 			return expr->getType();
@@ -402,10 +402,10 @@ namespace AST
 			return ret;
 		}
 
-		Type getType() override
+		Type& getType() override
 		{
 			// TODO: Bubble up types through ops for now
-			Type t = left->getType();
+			Type& t = left->getType();
 			assert(t == right->getType());
 			return t;
 		}
@@ -476,7 +476,7 @@ namespace AST
 			return s;
 		}
 
-		Type getType() override
+		Type& getType() override
 		{
 			return type;
 		}

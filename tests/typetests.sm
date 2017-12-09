@@ -1,9 +1,7 @@
+extern func printf;
 
-//extern func printf;
-
-var x : #primitives.s32;
+var x : #primitives.u8 = 555334234323;
 
 var y = x;
 
-
-//printf(#typeof(x));
+printf("Value %i\n", y);

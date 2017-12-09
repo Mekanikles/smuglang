@@ -67,6 +67,8 @@ struct TypeClass
 		Function
 	};
 
+	TypeClass(const TypeClass& o) = delete;
+
 	TypeClass(ClassType type) : type(type)
 	{}
 
@@ -141,6 +143,11 @@ struct Type
 		return kind == Value && typeClass->type == TypeClass::Function;
 	}
 
+	bool isPrimitive() const 
+	{
+		return kind == Value && typeClass->type == TypeClass::Primitive;
+	}
+
 	bool isTypeVariable() const
 	{
 		return kind == TypeVariable;
@@ -162,24 +169,39 @@ struct PrimitiveClass : TypeClass
 		Char,
 	};
 
-	PrimitiveType primitiveType;
-	bool knownSize = false;
-	uint size = 32;
+	enum SignedType
+	{
+		UnknownSign,
+		Signed, 
+		Unsigned
+	};
 
-	PrimitiveClass(PrimitiveType primitiveType, bool knownSize, uint size) 
+	PrimitiveType primitiveType;
+	bool knownSize;
+	uint size;
+	SignedType signedType;
+
+	PrimitiveClass(PrimitiveType primitiveType, bool knownSize, uint size, SignedType signedType) 
 		: TypeClass(TypeClass::Primitive)
 		, primitiveType(primitiveType)
 		, knownSize(knownSize)
 		, size(size)
+		, signedType(signedType)
+	{
+		assert(signedType != Unsigned || primitiveType != Float);
+	}
+
+	PrimitiveClass(PrimitiveType primitiveType, uint size, SignedType signedType = UnknownSign)
+		: PrimitiveClass(primitiveType, true, size, signedType)
 	{}
 
-	PrimitiveClass(PrimitiveType primitiveType, uint size)
-		: PrimitiveClass(primitiveType, true, size)
+	PrimitiveClass(PrimitiveType primitiveType, SignedType signedType = UnknownSign)
+		: PrimitiveClass(primitiveType, false, 0, signedType)
 	{}
 
-	PrimitiveClass(PrimitiveType primitiveType)
-		: PrimitiveClass(primitiveType, true, 0)
-	{}
+	bool isInteger() const { return primitiveType == Int; }
+	bool isSigned() const { return signedType == Signed; }
+	bool knowsSign() const { return signedType != UnknownSign; }
 
 	bool operator==(const PrimitiveClass& o) const
 	{

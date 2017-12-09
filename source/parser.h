@@ -172,9 +172,55 @@ bool parsePrimitiveTypeExpression(AST::Expression** outNode)
 			expect(TokenType::Dot);
 
 			expect(TokenType::Symbol);
-			assert(lastToken().symbol == "s32");
+			PrimitiveClass::SignedType sign = PrimitiveClass::UnknownSign;
+			uint size;
 
-			auto typeClass = std::make_unique<PrimitiveClass>(PrimitiveClass::Int, 32);
+			if (lastToken().symbol == "s64")
+			{
+				sign = PrimitiveClass::Signed;
+				size = 64;
+			}
+			else if (lastToken().symbol == "u64")
+			{
+				sign = PrimitiveClass::Unsigned;
+				size = 64;
+			}
+			if (lastToken().symbol == "s32")
+			{
+				sign = PrimitiveClass::Signed;
+				size = 32;
+			}
+			else if (lastToken().symbol == "u32")
+			{
+				sign = PrimitiveClass::Unsigned;
+				size = 32;
+			}
+			else if (lastToken().symbol == "s16")
+			{
+				sign = PrimitiveClass::Signed;
+				size = 16;
+			}
+			else if (lastToken().symbol == "u16")
+			{
+				sign = PrimitiveClass::Unsigned;
+				size = 16;
+			}
+			else if (lastToken().symbol == "s8")
+			{
+				sign = PrimitiveClass::Signed;
+				size = 8;
+			}
+			else if (lastToken().symbol == "u8")
+			{
+				sign = PrimitiveClass::Unsigned;
+				size = 8;
+			}
+			else
+			{
+				error("Unknown primitive type");
+			}
+
+			auto typeClass = std::make_unique<PrimitiveClass>(PrimitiveClass::Int, size, sign);
 			auto* node = createNode<AST::TypeLiteral>(std::move(typeClass));		
 			*outNode = node;
 		}

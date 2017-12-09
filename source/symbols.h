@@ -19,6 +19,7 @@ struct Symbol
 	bool isFunction = false;
 
 	AST::Declaration* declNode = nullptr;
+	uint firstInitOrder = ~0U;
 
 	bool isdeclared()
 	{
