@@ -23,6 +23,7 @@ namespace AST
 	struct UnaryOp;
 	struct UnaryPostfixOp;
 	struct BinaryOp;
+	struct EvalStatement;
 
 	struct FuncLiteralSignature;
 	struct StatementBody;
@@ -57,6 +58,7 @@ namespace AST
 		virtual void visit(UnaryOp* node) { visit((Expression*)node); }
 		virtual void visit(UnaryPostfixOp* node) { visit((Expression*)node); }
 		virtual void visit(BinaryOp* node) { visit((Expression*)node); }
+		virtual void visit(EvalStatement* node) { visit((Statement*)node); }
 
 		virtual void visit(StatementBody* node) { visitChildren(node, this); }
 		virtual void visit(FuncLiteralSignature* node) { visitChildren(node, this); }
@@ -173,6 +175,17 @@ namespace AST
 
 		string file;
 		string toString() override { return string("Import(file:") + file + ")"; }	
+	};
+
+	struct EvalStatement : public NodeImpl<EvalStatement, Statement>
+	{
+		Expression* expr = nullptr;
+
+		string toString() override
+		{
+			string s = "EvalStatement";
+			return s;
+		}
 	};
 
 	struct StringLiteral : public NodeImpl<StringLiteral, Expression>

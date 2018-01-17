@@ -14,6 +14,7 @@ enum class TokenType
 	Symbol,
 	Var,
 	Func,
+	Eval,
 	If,
 	Else,
 	Equals,
@@ -62,6 +63,7 @@ string toString(TokenType type)
 		case TokenType::Symbol: return "Symbol";
 		case TokenType::Var: return "Var";
 		case TokenType::Func: return "Func";
+		case TokenType::Eval: return "Eval";
 		case TokenType::If: return "If";
 		case TokenType::Else: return "Else";
 		case TokenType::Equals: return "Equals";

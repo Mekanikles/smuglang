@@ -699,10 +699,38 @@ bool parseIfStatement(AST::IfStatement** outStatement)
 	return false;
 }
 
+bool parseEvalStatement(AST::EvalStatement** outStatement)
+{
+	if (accept(TokenType::Eval))
+	{
+		expect(TokenType::OpenParenthesis);	
+		AST::EvalStatement* node = createNode<AST::EvalStatement>();
+		
+		AST::Expression* expr;
+		if (parseExpression(&expr))
+		{
+			node->expr = expr;
+		}
+		else
+		{
+			error("Expected expression");
+		}
+
+		expect(TokenType::CloseParenthesis);
+
+		*outStatement = node;
+
+		return true;
+	}
+
+	return false;
+}
+
 bool parseStatement(AST::Statement** outStatement)
 {
 	AST::Declaration* declaration;
 	AST::IfStatement* ifStatement;
+	AST::EvalStatement* evalStatement;
 	AST::StatementBody* statementBody;
 
 	if (accept(TokenType::Import))
@@ -796,6 +824,11 @@ bool parseStatement(AST::Statement** outStatement)
 	else if (parseIfStatement(&ifStatement))
 	{
 		*outStatement = ifStatement;
+	}
+	else if (parseEvalStatement(&evalStatement))
+	{
+		expect(TokenType::SemiColon, false);
+		*outStatement = evalStatement;
 	}
 	else if (parseStatementBody(&statementBody))
 	{

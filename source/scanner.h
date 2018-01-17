@@ -218,6 +218,21 @@ public:
 		return TokenType::IntegerLiteral;
 	}
 
+	char getEscapeCharacter(char c)
+	{
+		if (c == 'n')
+			return '\n';
+		else if (c == 'r')
+			return '\r';
+		else if (c == 't')
+			return '\t';
+		else if (c == '0')
+			return '\0';
+		else if (c == 'b')
+			return '\b';
+		return c;
+	}
+
 	string scanStringLiteral()
 	{
 		char c;
@@ -230,6 +245,14 @@ public:
 			while(m_inStream.peek() != '"')
 			{
 				m_inStream.get(c);
+				if (c == '\\')
+				{
+					assert(m_inStream.peek() != EOF);
+					assert(m_inStream.peek() != '\n');
+					m_inStream.get(c);
+					c = getEscapeCharacter(c);
+				}
+
 				ret += c;
 				assert(m_inStream.peek() != EOF);
 				assert(m_inStream.peek() != '\n');
@@ -333,6 +356,8 @@ public:
 					*outToken = Token(TokenType::Var);
 				else if (w == "func")
 					*outToken = Token(TokenType::Func);
+				else if (w == "eval")
+					*outToken = Token(TokenType::Eval);
 				else
 					*outToken = Token(TokenType::Symbol, w);
 				return true;
