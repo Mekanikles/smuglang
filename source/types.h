@@ -148,6 +148,11 @@ struct Type
 		return kind == Value && typeClass->type == TypeClass::Primitive;
 	}
 
+	bool isArray() const 
+	{
+		return kind == Value && typeClass->type == TypeClass::Array;
+	}
+
 	bool isTypeVariable() const
 	{
 		return kind == TypeVariable;
@@ -200,6 +205,7 @@ struct PrimitiveClass : TypeClass
 	{}
 
 	bool isInteger() const { return primitiveType == Int; }
+	bool isChar() const { return primitiveType == Char; }
 	bool isSigned() const { return signedType == Signed; }
 	bool knowsSign() const { return signedType != UnknownSign; }
 

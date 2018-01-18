@@ -8,15 +8,18 @@
 #include <cctype>
 
 #include "core.h"
+#include "utils.h"
 #include "input.h"
 #include "token.h"
 #include "scanner.h"
 #include "types.h"
 #include "symbols.h"
 #include "ast.h"
+#include "evaluation.h"
 #include "parser.h"
-#include "generator.h"
 #include "output.h"
+#include "generator.h"
+
 /*
 struct SymbolDeclarationScanner : AST::Visitor
 {
@@ -347,11 +350,69 @@ struct SymbolResolver : AST::Visitor
 	SymbolScope* m_currentScope = nullptr;	
 };
 
+
 void resolveSymbols(AST::AST* ast)
 {
 	SymbolResolver resolver;
 	ast->root->accept(&resolver);
+}
 
+struct EvalProcessor : AST::Visitor
+{
+	void visit(AST::EvalStatement* node) override
+	{
+		assert(node->expr);
+		assert(!node->statement);
+
+		Value nodeVal;
+		if (!evaluateExpression(node->expr, &nodeVal))
+		{
+			assert("Cannot evaluate expression" && false);
+		}
+
+		auto& type = nodeVal.type;
+		const ArrayClass* ac = type.isArray() ? &type.typeClass->as<ArrayClass>() : nullptr;
+		if (!ac || !ac->type.isPrimitive() || !ac->type.typeClass->as<PrimitiveClass>().isChar())
+		{
+			assert("Expression is not of string type" && false);
+		}
+
+		const char* text = nodeVal.data.data();
+		const uint length = nodeVal.data.size();
+
+		MemoryInputStream file(text, length);
+		Parser parser(file);
+
+		AST::Statement* statement;
+		if (!parser.parseStatement(&statement))
+		{
+			// TODO: Print errors etc
+			assert("Could not parse eval statement" && false);
+		}
+
+		if (parser.getParserErrors().size() != 0 && parser.getScannerErrors().size() != 0)
+		{
+			assert("Eval statement contained errors" && false);
+		}
+
+		node->statement = statement;
+	}
+};
+
+void processEvals(AST::AST* ast)
+{
+	EvalProcessor ep;
+	ast->root->accept(&ep);
+}
+
+void processAST(AST::AST* ast)
+{
+	LOG("Processing evals...");	
+	processEvals(ast);
+
+
+	LOG("Resolving symbols...");
+	resolveSymbols(ast);
 }
 
 int main(int argc, char** argv)
@@ -362,15 +423,13 @@ int main(int argc, char** argv)
 		ERROR("No input files specified");
 
 	std::ifstream inFile(args[0]);
-
-	BufferedInputStream inStream(inFile);
-	ScannerFactory scannerFactory(inStream);
 	AST::AST ast;
 
 	LOG("Parsing...");
-	bool parseSuccess = parse(&scannerFactory, &ast);
+	Parser parser(inFile);
+	bool parseSuccess = parser.parse(&ast);
 	printLine("Tokens:");
-	printTokens(s_tokens);
+	printTokens(parser.getTokens());
 	if (!parseSuccess)
 	{
 		LOG("Parse fail!");
@@ -381,8 +440,7 @@ int main(int argc, char** argv)
 	else
 	{
 		LOG("Parse success!");
-		LOG("Resolving symbols...");
-		resolveSymbols(&ast);
+		processAST(&ast);
 
 		printLine("AST:");
 		printAST(&ast, 1);

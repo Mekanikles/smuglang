@@ -1,5 +1,25 @@
 #pragma once
 
+class MemoryBuffer : public std::streambuf 
+{
+public:
+	MemoryBuffer(const char* base, size_t size) 
+	{
+		char* p = const_cast<char*>(base);
+		this->setg(p, p, p + size);
+	}
+};
+
+class MemoryInputStream : virtual MemoryBuffer, public std::istream 
+{
+public:
+	MemoryInputStream(const char* base, size_t size)
+		: MemoryBuffer(base, size)
+		, std::istream(static_cast<std::streambuf*>(this)) 
+	{
+	}
+};
+
 class BufferedInputStream
 {
 public:

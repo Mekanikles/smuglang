@@ -180,11 +180,23 @@ namespace AST
 	struct EvalStatement : public NodeImpl<EvalStatement, Statement>
 	{
 		Expression* expr = nullptr;
+		Statement* statement = nullptr;
 
 		string toString() override
 		{
 			string s = "EvalStatement";
 			return s;
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			if (statement)
+				ret.push_back(statement);
+			else
+				ret.push_back(expr);
+
+			return ret;
 		}
 	};
 
@@ -201,7 +213,9 @@ namespace AST
 
 		string toString() override
 		{
-			string s = "StringLiteral(" + value + ")";
+			string val = processQuotedInputString(value);
+			string str = processStringForOutput(val);
+			string s = "StringLiteral(\"" + str + "\")";
 			return s;
 		}
 

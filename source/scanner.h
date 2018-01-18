@@ -7,14 +7,15 @@ struct ScannerError
 	uint row;
 };
 
-vector<ScannerError> s_scannerErrors;
-int s_newScannerErrors = 0;
-
 class Scanner
 {
 public:	
-	Scanner(BufferedInputStream& inStream) 
+	Scanner(BufferedInputStream& inStream, 
+			vector<ScannerError>& scannerErrors,
+			int& newScannerErrors)
 		: m_inStream(inStream)
+		, scannerErrors(scannerErrors)
+		, newScannerErrors(newScannerErrors)
 	{
 	}
 
@@ -37,8 +38,8 @@ protected:
 		const uint column = currentColumn();
 		const uint row = currentRow();
 
-		s_scannerErrors.push_back(ScannerError { msg, column, row });
-		s_newScannerErrors++;
+		this->scannerErrors.push_back(ScannerError { msg, column, row });
+		this->newScannerErrors++;
 	}
 
 	ScanResult scanComments()
@@ -101,6 +102,8 @@ protected:
 
 protected:
 	BufferedInputStream& m_inStream;
+	vector<ScannerError>& scannerErrors;
+	int& newScannerErrors;	
 };
 
 bool isWordInitChar(const char c)
@@ -218,21 +221,6 @@ public:
 		return TokenType::IntegerLiteral;
 	}
 
-	char getEscapeCharacter(char c)
-	{
-		if (c == 'n')
-			return '\n';
-		else if (c == 'r')
-			return '\r';
-		else if (c == 't')
-			return '\t';
-		else if (c == '0')
-			return '\0';
-		else if (c == 'b')
-			return '\b';
-		return c;
-	}
-
 	string scanStringLiteral()
 	{
 		char c;
@@ -245,17 +233,14 @@ public:
 			while(m_inStream.peek() != '"')
 			{
 				m_inStream.get(c);
-				if (c == '\\')
+				if (c == '\\' && m_inStream.peek() != EOF)
 				{
-					assert(m_inStream.peek() != EOF);
-					assert(m_inStream.peek() != '\n');
+					ret += c;
 					m_inStream.get(c);
-					c = getEscapeCharacter(c);
 				}
 
 				ret += c;
 				assert(m_inStream.peek() != EOF);
-				assert(m_inStream.peek() != '\n');
 			}
 		}
 		else if (c == '\'')
@@ -265,9 +250,14 @@ public:
 			while(m_inStream.peek() != '\'')
 			{
 				m_inStream.get(c);
+				if (c == '\\' && m_inStream.peek() != EOF)
+				{
+					ret += c;
+					m_inStream.get(c);
+				}
+
 				ret += c;
 				assert(m_inStream.peek() != EOF);
-				assert(m_inStream.peek() != '\n');
 			}
 		}
 		else
@@ -488,13 +478,17 @@ public:
 class ScannerFactory
 {
 public:
-	ScannerFactory(BufferedInputStream& inStream) 
+	ScannerFactory(BufferedInputStream inStream) 
 		: m_inStream(inStream)
 	{
 	}
 
-	TopLevelScanner scanTopLevel() { return TopLevelScanner(m_inStream); }
+	TopLevelScanner scanTopLevel() { return TopLevelScanner(m_inStream, scannerErrors, newScannerErrors); }
+
+	const vector<ScannerError>& getScannerErrors() const { return this->scannerErrors; }
 
 private:
-	BufferedInputStream& m_inStream;
+	BufferedInputStream m_inStream;
+	vector<ScannerError> scannerErrors;
+	int newScannerErrors = 0;	
 };

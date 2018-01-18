@@ -260,7 +260,10 @@ struct BodyGenerator : AST::Visitor
 	void visit(AST::StringLiteral* node) override
 	{	
 		auto& out = *m_out.body;
-		out << node->value; 
+		// TODO: Store processed value in ast
+		string val = processQuotedInputString(node->value);
+		string str = processStringForOutput(val);
+		out << '\"' << str << '\"'; 
 	}
 
 	void visit(AST::IntegerLiteral* node) override

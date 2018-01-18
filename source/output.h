@@ -60,7 +60,7 @@ void printTokens(const vector<Token>& tokens)
 	}
 }
 
-std::ifstream& gotoLine(std::ifstream& file, unsigned int num){
+std::istream& gotoLine(std::istream& file, unsigned int num){
     file.seekg(std::ios::beg);
     for(int i=0; i < num - 1; ++i){
         file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
@@ -78,9 +78,10 @@ void printPointAtColumn(int column, int indent = 0)
 	printLine("\033[1;31m^\033[0m");
 }
 
-void printScannerErrors(std::ifstream& file)
+void printScannerErrors(const Parser& parser)
 {
-	for (auto e : s_scannerErrors)
+	auto& file = parser.getInStream();
+	for (auto e : parser.getScannerErrors())
 	{
 		printLine(string("\033[1m") + std::to_string(e.row) + 
 				":" + std::to_string(e.column) + ": \033[31mError: \033[39m" + e.msg + "\033[0m");
@@ -94,9 +95,10 @@ void printScannerErrors(std::ifstream& file)
 	}
 }
 
-void printParserErrors(std::ifstream& file)
+void printParserErrors(const Parser& parser)
 {
-	for (auto e : s_parserErrors)
+	auto& file = parser.getInStream();
+	for (auto e : parser.getParserErrors())
 	{
 		printLine(string("\033[1m") + std::to_string(e.row) + 
 				":" + std::to_string(e.column) + ": \033[31mError: \033[39m" + e.msg + "\033[0m");
@@ -109,3 +111,6 @@ void printParserErrors(std::ifstream& file)
 		printPointAtColumn(e.column, 1);
 	}
 }
+
+
+
