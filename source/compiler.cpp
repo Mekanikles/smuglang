@@ -362,7 +362,9 @@ struct EvalProcessor : AST::Visitor
 	void visit(AST::EvalStatement* node) override
 	{
 		assert(node->expr);
-		assert(!node->statement);
+		assert(!node->isGenerated);
+
+		node->isGenerated = true;
 
 		Value nodeVal;
 		if (!evaluateExpression(node->expr, &nodeVal))
@@ -384,18 +386,16 @@ struct EvalProcessor : AST::Visitor
 		Parser parser(file);
 
 		AST::Statement* statement;
-		if (!parser.parseStatement(&statement))
+		while (parser.parseStatement(&statement))
 		{
-			// TODO: Print errors etc
-			assert("Could not parse eval statement" && false);
+			node->statements.push_back(statement);
 		}
 
 		if (parser.getParserErrors().size() != 0 && parser.getScannerErrors().size() != 0)
 		{
+			// TODO: Print errors etc
 			assert("Eval statement contained errors" && false);
 		}
-
-		node->statement = statement;
 	}
 };
 

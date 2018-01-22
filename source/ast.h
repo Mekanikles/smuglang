@@ -177,10 +177,10 @@ namespace AST
 		string toString() override { return string("Import(file:") + file + ")"; }	
 	};
 
-	struct EvalStatement : public NodeImpl<EvalStatement, Statement>
+	struct EvalStatement : public NodeImpl<EvalStatement, StatementBody>
 	{
 		Expression* expr = nullptr;
-		Statement* statement = nullptr;
+		bool isGenerated = false;
 
 		string toString() override
 		{
@@ -190,13 +190,14 @@ namespace AST
 
 		const vector<Node*> getChildren() override
 		{
-			vector<Node*> ret;
-			if (statement)
-				ret.push_back(statement);
-			else
+			if (!this->isGenerated)
+			{
+				vector<Node*> ret;
 				ret.push_back(expr);
+				return ret;
+			}
 
-			return ret;
+			return StatementBody::getChildren();
 		}
 	};
 
