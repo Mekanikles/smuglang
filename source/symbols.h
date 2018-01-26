@@ -73,19 +73,21 @@ vector<Symbol*>& getSymbols()
 	return s_symbols;
 }
 
+struct SymbolScope;
 
 struct SymbolRequest
 {
 	string name;
 	Type type;
 	AST::SymbolExpression* exprNode = nullptr;
+	SymbolScope* scope = nullptr;
 };
 
 vector<SymbolRequest*> s_symbolRequests;
 
-SymbolRequest* createSymbolRequest(string name, AST::SymbolExpression* exprNode)
+SymbolRequest* createSymbolRequest(string name, AST::SymbolExpression* exprNode, SymbolScope* scope)
 {
-	auto s = new SymbolRequest { name , Type(), exprNode };
+	auto s = new SymbolRequest { name , Type(), exprNode, scope };
 	s_symbolRequests.push_back(s);
 	s->exprNode = exprNode;
 	return s;

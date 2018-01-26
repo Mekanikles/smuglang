@@ -1,0 +1,9 @@
+extern func printf;
+
+eval("
+	var x = 64;
+	var y : #primitives.u8 = x;
+	printf(\"Value \\\"%i\\\"\n\", y)
+	");
+
+//printf("Value \"%i\"", y);

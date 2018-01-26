@@ -17,13 +17,13 @@ printf("Hello sub expression %i\n", (5 + 4) - (3 + 2) - (((1))));
 
 var i : #primitives.s32 = 5;
 {
-	var i : int = 10;
+	var i : #primitives.u8 = 10;
 	printf("Hello variable should be 10: %i\n", i);
 }
 printf("Hello variable should be 5: %i\n", i);
 
 printf("Hello garbage forward ref: %i\n", b);
-var b : int = 3;
+var b : #primitives.u8 = 3;
 
 if (b == 3)
 	printf("Hello if-conditional\n");
@@ -70,14 +70,14 @@ func doNoParamFunc()
 	printf("Hello outer function!\n");
 };
 
-func doMultiParamFunc(p : int, q : int)
+func doMultiParamFunc(p : #primitives.u8, q : #primitives.u8)
 {
 	printf("Hello integer parameter 1: %i, 2: %i\n", p, q);
 };
 
 crossCallFunc1(1);
 
-func crossCallFunc1(whatCall : int)  
+func crossCallFunc1(whatCall : #primitives.u8)  
 {
 	printf("cross call func 1 called!\n");
 	if (whatCall == 1)
@@ -86,7 +86,7 @@ func crossCallFunc1(whatCall : int)
 		crossCallFunc2(1);
 };
 
-func crossCallFunc2(shouldCall : int)
+func crossCallFunc2(shouldCall : #primitives.u8)
 {
 	printf("cross call func 2 called!\n");
 	if (shouldCall == 1)

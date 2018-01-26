@@ -263,8 +263,8 @@ struct SymbolResolver : AST::Visitor
 
 		symbol = createSymbol(node->symbol, node);
 		symbol->type = createFunctionType();
-		// TODO: Order of external function decls is probably -1
-		symbol->firstInitOrder = node->order;
+		// InitOrder of functions is 0 since they are initialized at compile time
+		symbol->firstInitOrder = 0;
 		m_currentScope->addSymbol(symbol);
 		node->symbolObj = symbol;
 
@@ -302,18 +302,21 @@ struct SymbolResolver : AST::Visitor
 		}
 
 		// Infer type from init expression
-		if (node->initExpr)
+		if (node->initExpr || node->isParam)
 		{
 			symbol->firstInitOrder = node->order;
-			node->initExpr->accept(this);
-			Type& exprType = node->initExpr->getType();
-			const auto result = unifyTypes(symbol->type, exprType);
+			if (node->initExpr)
+			{
+				node->initExpr->accept(this);
+				Type& exprType = node->initExpr->getType();
+				const auto result = unifyTypes(symbol->type, exprType);
 
-			// TODO: Handle implicit casts?
-			if (result == CannotUnify)
-				assert("Cannot unify types" && false);
+				// TODO: Handle implicit casts?
+				if (result == CannotUnify)
+					assert("Cannot unify types" && false);
 
-			// TODO: How to apply unification to expression?
+				// TODO: How to apply unification to expression?
+			}
 		}
 
 		// TODO: Resolve any type requests within this and underlying scopes
@@ -333,12 +336,13 @@ struct SymbolResolver : AST::Visitor
 				// TODO: add line/column
 				// TODO: Replace function check with static, or proper initialization order
 				if (!symbol->isFunction)
-					printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization");
+					printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization" + 
+							"(InitOrder: " + std::to_string(symbol->firstInitOrder) + ", RefOrder: " + std::to_string(node->order) + ")");
 			}
-		}
+		} 
 		else
 		{
-			node->symbolRequest = createSymbolRequest(node->symbol, node);
+			node->symbolRequest = createSymbolRequest(node->symbol, node, m_currentScope);
 			// TODO: When resolving requests, type must be unified again, 
 			//	but from the bottom up in the AST. HOW?
 		}
@@ -355,6 +359,24 @@ void resolveSymbols(AST::AST* ast)
 {
 	SymbolResolver resolver;
 	ast->root->accept(&resolver);
+
+	for (SymbolRequest* s : getSymbolRequests())
+	{
+		assert(s->scope);
+		assert(s->exprNode);
+		Symbol* symbol = nullptr;
+		s->scope->lookUpSymbolName(s->name, &symbol);
+		assert(symbol && "Could not find symbol");
+		if (symbol->firstInitOrder > s->exprNode->order)
+		{	
+			// TODO: add line/column
+			// TODO: Replace function check with static, or proper initialization order
+			if (!symbol->isFunction)
+				printLine(string("Warning: Symbol '") + s->name + "' is used before initialization" + 
+						"(InitOrder: " + std::to_string(symbol->firstInitOrder) + ", RefOrder: " + std::to_string(s->exprNode->order) + ")");
+		}
+		s->exprNode->symbolObj = symbol;		
+	}
 }
 
 struct EvalProcessor : AST::Visitor

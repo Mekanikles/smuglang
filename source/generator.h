@@ -107,13 +107,17 @@ struct BodyGenerator : AST::Visitor
 			}
 			else
 			{
-				// Type variables are not allowed to exits in generation step
+				// Type variables are not allowed to exist in generation step
 				assert(!type.isTypeVariable());
 				auto typeClass = type.typeClass.get();
 
+				const string& name = s->name;
+				assert(s->declNode);
+				const uint declOrder = s->declNode->order;
+
 				out << indent(m_indent);
 				out << getTypeClassName(typeClass);
-				out << " " << s->name << ";\n";
+				out << " " << s->name << "_" << declOrder << ";\n";
 			}
 		}
 
@@ -146,6 +150,7 @@ struct BodyGenerator : AST::Visitor
 		auto& out = *m_out.body;
 
 		assert(node->expr);
+		assert(node->expr->symbolObj);
 		const string& name = translateFunctionSymbol(node->expr->symbolObj);
 
 		out << indent(m_indent) << name << "(";
@@ -165,9 +170,15 @@ struct BodyGenerator : AST::Visitor
 	void visit(AST::Assignment* node) override
 	{
 		auto& out = *m_out.body;
-
+		
 		assert(node->symExpr);
-		out << indent(m_indent) << node->symExpr->symbol << " = ";
+		Symbol* s = node->symExpr->symbolObj;
+		assert(s);
+		const string& name = s->name;
+		assert(s->declNode);
+		const uint declOrder = s->declNode->order;
+
+		out << indent(m_indent) << name << "_" << std::to_string(declOrder) << " = ";
 
 		assert(node->expr);
 		node->expr->accept(this);
@@ -229,7 +240,10 @@ struct BodyGenerator : AST::Visitor
 		auto& out = *m_out.body;
 
 		assert(node->symbolObj);
-		Type& t = node->symbolObj->type;
+		const Type& t = node->symbolObj->type;
+		const string& name = node->symbolObj->name;
+		assert(node->symbolObj->declNode == node);
+		const uint declOrder = node->order;
 
 		// Declaration has already been done in body
 		//	only initialization has to be generated
@@ -240,7 +254,7 @@ struct BodyGenerator : AST::Visitor
 		if (!node->isParam && !t.isFunction() && node->initExpr)
 		{
 			out << indent(m_indent);
-			out << node->symbol;
+			out << name << "_" << declOrder;
 			out << " = ";
 			node->initExpr->accept(this);
 			out << ";\n"; 
@@ -254,7 +268,11 @@ struct BodyGenerator : AST::Visitor
 	void visit(AST::SymbolExpression* node) override
 	{
 		auto& out = *m_out.body;
-		out << node->symbol; 
+		assert(node->symbolObj);
+		const string& name = node->symbolObj->name;
+		assert(node->symbolObj->declNode);
+		const uint declOrder = node->symbolObj->declNode->order;
+		out << name << "_" << declOrder; 
 	}
 
 	void visit(AST::StringLiteral* node) override
@@ -294,11 +312,18 @@ struct BodyGenerator : AST::Visitor
 		for (int i = 0; i < size; ++i)
 		{
 			AST::SymbolDeclaration* decl = node->signature->params[i];
-			// TODO: By this point, we should not need to evaluate exprs for types/symbols
-			//	we should be able to look to symbol/type tables
-			if (decl->typeExpr)
-				decl->typeExpr->accept(&bodyGenerator);
-			*out << " " << decl->symbol;
+
+			assert(decl->symbolObj);
+			Type& type = decl->symbolObj->type;
+			assert(!type.isTypeVariable());
+			auto typeClass = type.typeClass.get();
+
+			const string& name = decl->symbolObj->name;
+			assert(decl->symbolObj->declNode == decl);
+			const uint declOrder = decl->order;
+
+			*out << getTypeClassName(typeClass);
+			*out << " " << name << "_" << declOrder;
 			if (decl->initExpr)
 				decl->initExpr->accept(&bodyGenerator);
 
