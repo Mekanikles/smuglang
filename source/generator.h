@@ -77,26 +77,29 @@ struct BodyGenerator : AST::Visitor
 		vector<AST::FunctionDeclaration*> functionDeclarations;
 
 		// Declare all symbols in scope
-		for (Symbol* s : node->scope.symbols)
+		assert(!node->scope.hasCatchAlls());
+		for (auto* ss : node->scope.getDeclarations())
 		{
+			Symbol* symbol = ss->getSymbol();
+
 			// params are already declared in the signature
-			if (s->isParam)
+			if (symbol->isParam)
 				continue;
 
-			const Type& type = s->type;
+			const Type& type = symbol->type;
 
 			if (type.isFunction())
 			{
 				// Add forward declarations for all functions in scope
 				// This also triggers adding function translations
-				AST::FunctionDeclaration* declNode = (AST::FunctionDeclaration*)s->declNode;
+				AST::FunctionDeclaration* declNode = (AST::FunctionDeclaration*)symbol->declNode;
 
 				if (declNode->funcLiteral)
 				{
 					const string name = string("") + declNode->symbol + "_" + std::to_string(declNode->order);
 					generateFunctionSignature(declNode->funcLiteral, name, m_out.imports);
 					*m_out.imports << ";\n";
-					s_functionTranslations.push_back(SymbolTranslation{declNode->symbolObj, name});
+					s_functionTranslations.push_back(SymbolTranslation{declNode->getSymbol(), name});
 					functionDeclarations.push_back(declNode);
 				}
 				else
@@ -111,20 +114,20 @@ struct BodyGenerator : AST::Visitor
 				assert(!type.isTypeVariable());
 				auto typeClass = type.typeClass.get();
 
-				const string& name = s->name;
-				assert(s->declNode);
-				const uint declOrder = s->declNode->order;
+				const string& name = symbol->name;
+				assert(symbol->declNode);
+				const uint declOrder = symbol->declNode->order;
 
 				out << indent(m_indent);
 				out << getTypeClassName(typeClass);
-				out << " " << s->name << "_" << declOrder << ";\n";
+				out << " " << symbol->name << "_" << declOrder << ";\n";
 			}
 		}
 
 		// Generate all functions in scope
 		for (AST::FunctionDeclaration* declNode : functionDeclarations)
 		{
-			const string name = translateFunctionSymbol(declNode->symbolObj);
+			const string name = translateFunctionSymbol(declNode->getSymbol());
 			generateFunctionLiteral(declNode->funcLiteral, name);
 		}
 
@@ -150,8 +153,9 @@ struct BodyGenerator : AST::Visitor
 		auto& out = *m_out.body;
 
 		assert(node->expr);
-		assert(node->expr->symbolObj);
-		const string& name = translateFunctionSymbol(node->expr->symbolObj);
+		assert(node->expr->dependency);
+		Symbol* s = node->expr->dependency->getSymbol();
+		const string& name = translateFunctionSymbol(s);
 
 		out << indent(m_indent) << name << "(";
 		int argCount = node->args.size();
@@ -172,8 +176,8 @@ struct BodyGenerator : AST::Visitor
 		auto& out = *m_out.body;
 		
 		assert(node->symExpr);
-		Symbol* s = node->symExpr->symbolObj;
-		assert(s);
+		assert(node->symExpr->dependency);
+		Symbol* s = node->symExpr->dependency->getSymbol();
 		const string& name = s->name;
 		assert(s->declNode);
 		const uint declOrder = s->declNode->order;
@@ -268,10 +272,9 @@ struct BodyGenerator : AST::Visitor
 	void visit(AST::SymbolExpression* node) override
 	{
 		auto& out = *m_out.body;
-		assert(node->symbolObj);
-		const string& name = node->symbolObj->name;
-		assert(node->symbolObj->declNode);
-		const uint declOrder = node->symbolObj->declNode->order;
+		const string& name = node->getSymbol()->name;
+		assert(node->getSymbol()->declNode);
+		const uint declOrder = node->getSymbol()->declNode->order;
 		out << name << "_" << declOrder; 
 	}
 

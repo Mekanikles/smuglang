@@ -1,9 +1,28 @@
 extern func printf;
 
-eval("
-	var x = 64;
-	var y : #primitives.u8 = x;
-	printf(\"Value \\\"%i\\\"\n\", y)
-	");
+eval("printf(\"Hello evaled statement!\n\")");
 
-//printf("Value \"%i\"", y);
+{
+	var x = 32;
+
+	{
+		eval("
+				var x = 64;
+				var y : #primitives.u8 = x;
+				helloFunc();
+				");
+
+		printf("Value should be 64: \"%i\"\n", y);
+	}
+
+	var y : #primitives.u8 = x;
+	printf("Value should be 32: \"%i\"\n", y);
+
+	eval("eval(\"printf(\\\"Hello nested eval!\n\\\");\");");
+}
+
+eval("
+		func helloFunc()
+		{
+			printf(\"Hello late evaled function!\n\");
+		};");

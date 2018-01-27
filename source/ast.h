@@ -29,6 +29,7 @@ namespace AST
 	struct StatementBody;
 
 	struct Visitor;
+	void visitChildren(Node* node, Visitor* v);
 	void visitChildren(Declaration* node, Visitor* v);
 	void visitChildren(Statement* node, Visitor* v);
 	void visitChildren(Module* node, Visitor* v);
@@ -39,16 +40,19 @@ namespace AST
 
 	struct Visitor
 	{
-		virtual void visit(Declaration* node) { visitChildren(node, this); }
-		virtual void visit(Statement* node) { visitChildren(node, this); }
-		virtual void visit(Module* node) { visitChildren(node, this); }
+		// TODO: This sucks, every visit has an overahead of 3 stack frames going through
+		//	the abstractions
+		virtual void visit(Node* node) { visitChildren(node, this); }
+		virtual void visit(Declaration* node) { visit((Node*)node); }
+		virtual void visit(Statement* node) { visit((Node*)node); }
+		virtual void visit(Module* node) { visit((Node*)node); }
 		virtual void visit(Import* node) { visit((Statement*)node); }
 		virtual void visit(Call* node) { visit((Statement*)node); }
 		virtual void visit(Assignment* node) { visit((Statement*)node); }
 		virtual void visit(IfStatement* node) { visit((Statement*)node); }
 		virtual void visit(SymbolDeclaration* node) { visit((Statement*)node);}	
 		virtual void visit(FunctionDeclaration* node) { visit((Statement*)node);}	
-		virtual void visit(Expression* node) { visitChildren(node, this); }
+		virtual void visit(Expression* node) { visit((Node*)node); }
 		virtual void visit(SymbolExpression* node) { visit((Expression*)node);}
 		virtual void visit(StringLiteral* node) { visit((Expression*)node);}
 		virtual void visit(IntegerLiteral* node) { visit((Expression*)node); }
@@ -60,8 +64,8 @@ namespace AST
 		virtual void visit(BinaryOp* node) { visit((Expression*)node); }
 		virtual void visit(EvalStatement* node) { visit((Statement*)node); }
 
-		virtual void visit(StatementBody* node) { visitChildren(node, this); }
-		virtual void visit(FuncLiteralSignature* node) { visitChildren(node, this); }
+		virtual void visit(StatementBody* node) { visit((Statement*)node); }
+		virtual void visit(FuncLiteralSignature* node) { visit((Node*)node); }
 	};
 
 	static uint s_nodeCount = 0;
@@ -74,7 +78,12 @@ namespace AST
 		virtual void accept(Visitor* v) = 0;
 		virtual string toString() = 0;
 
+		SymbolScope* scopeRef = nullptr;
 		uint order = s_nodeCount++;
+
+		// This is used to prevent infinite recursion when processing the AST tree
+		// TODO: Build a processing graph instead of testing for this bool
+		bool processed = false;
 	};
 
 	void visitChildren(Node* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
@@ -180,6 +189,8 @@ namespace AST
 	struct EvalStatement : public NodeImpl<EvalStatement, StatementBody>
 	{
 		Expression* expr = nullptr;
+		// TODO: Try to remove this, as it is only used during processing
+		CatchAllSymbolSource* catchAllSource = nullptr;
 		bool isGenerated = false;
 
 		string toString() override
@@ -294,12 +305,17 @@ namespace AST
 	struct SymbolExpression : public NodeImpl<SymbolExpression, Expression>
 	{
 		string symbol;
-		Symbol* symbolObj = nullptr;
-		SymbolRequest* symbolRequest = nullptr;
+		SymbolDependency* dependency = nullptr;
 
 		SymbolExpression(string symbol)
 			: symbol(symbol)
 		{}	
+
+		Symbol* getSymbol()
+		{
+			assert(dependency);
+			return dependency->getSymbol();
+		}
 
 		string toString() override 
 		{ 
@@ -310,8 +326,7 @@ namespace AST
 
 		Type& getType() override
 		{
-			assert(symbolObj);
-			return symbolObj->type;
+			return getSymbol()->type;
 		}
 	};
 
@@ -453,6 +468,11 @@ namespace AST
 			return s; 
 		}
 
+		Symbol* getSymbol()
+		{
+			return symbolObj;
+		}
+
 		const vector<Node*> getChildren() override
 		{
 			vector<Node*> ret;
@@ -524,7 +544,7 @@ namespace AST
 	{
 		string symbol;
 		FunctionLiteral* funcLiteral = nullptr;
-		Symbol* symbolObj = nullptr;
+		SymbolSource* symbolSource = nullptr;
 
 		string toString() override 
 		{ 
@@ -533,6 +553,12 @@ namespace AST
 				s = "External ";
 			s += "FunctionDeclaration(" + symbol + ")";
 			return s;
+		}
+
+		Symbol* getSymbol()
+		{
+			assert(symbolSource);
+			return symbolSource->getSymbol();
 		}
 
 		const vector<Node*> getChildren() override

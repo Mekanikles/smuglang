@@ -1,9 +1,11 @@
 #pragma once
 
 #include <vector>
+#include <algorithm>
 
 namespace AST
 {
+	struct Node;
 	struct SymbolDeclaration;
 	struct Declaration;
 	struct SymbolExpression;
@@ -18,6 +20,7 @@ struct Symbol
 	bool isParam = false;
 	bool isFunction = false;
 
+	// TODO: Remove node, SymbolSource should contain extra data instead
 	AST::Declaration* declNode = nullptr;
 	uint firstInitOrder = ~0U;
 
@@ -26,37 +29,6 @@ struct Symbol
 		return declNode != nullptr;
 	}
 };
-
-/*
-vector<Symbol*> s_builtinSymbols;
-
-Symbol* createBuiltInSymbol(string name)
-{
-	Symbol* s = new Symbol { name };
-	s_builtinSymbols.push_back(s);
-	return s;
-}
-
-void createBuiltInSymbols()
-{
-	auto s = createBuiltInSymbol("s32");
-	s->type.type = PrimitiveType::s32;
-}
-
-bool lookUpBuiltInSymbolName(const string& name, Symbol** outSymbol)
-{
-	for (auto* s : s_builtinSymbols)
-	{
-		if (s->name == name)
-		{
-			*outSymbol = s;
-			return true;
-		}
-	}
-
-	return false;
-}
-*/
 
 vector<Symbol*> s_symbols;
 
@@ -75,76 +47,165 @@ vector<Symbol*>& getSymbols()
 
 struct SymbolScope;
 
-struct SymbolRequest
+struct SymbolDependency;
+
+struct SymbolSource
 {
-	string name;
-	Type type;
-	AST::SymbolExpression* exprNode = nullptr;
-	SymbolScope* scope = nullptr;
+	// TODO: This should not be necessary, SymbolScope knows what to do and
+	//	should store sources by name
+	virtual bool providesSymbolName(const string& s) = 0;
+	virtual void hookDependency(SymbolDependency* dependency) = 0;
+	virtual bool isSingleSymbolSource() = 0;
+	virtual Symbol* getSymbol() = 0;
+	virtual AST::Node* getNode() = 0;
 };
 
-vector<SymbolRequest*> s_symbolRequests;
-
-SymbolRequest* createSymbolRequest(string name, AST::SymbolExpression* exprNode, SymbolScope* scope)
+struct DeclarationSymbolSource : SymbolSource
 {
-	auto s = new SymbolRequest { name , Type(), exprNode, scope };
-	s_symbolRequests.push_back(s);
-	s->exprNode = exprNode;
+	AST::Node* node;
+	Symbol* symbol = nullptr;
+
+	bool providesSymbolName(const string& s) override { return s == symbol->name; }
+	void hookDependency(SymbolDependency* dependency) override;
+	bool isSingleSymbolSource() override { return true; }
+	Symbol* getSymbol() override { assert(symbol); return symbol; }
+	AST::Node* getNode() override { assert(node); return node; }
+};
+
+struct CatchAllSymbolSource : SymbolSource
+{
+	AST::Node* node;	
+	vector<SymbolDependency*> dependencies;
+
+	// Catch all symbol requgests
+	bool providesSymbolName(const string& s) override { return true; }
+	void hookDependency(SymbolDependency* dependency) override;
+	bool isSingleSymbolSource() override { return false; }
+	Symbol* getSymbol() override { assert(false && "Cannot resolve a single symbol from catch-all source"); return nullptr; }
+	AST::Node* getNode() override { assert(node); return node; }
+};
+
+struct SymbolDependency
+{
+	SymbolSource* source = nullptr;
+	string symbolName;
+
+	SymbolSource* getSymbolSource()
+	{
+		assert(source);
+		return source;
+	}
+
+	Symbol* getSymbol()
+	{
+		assert(source);
+		return source->getSymbol();
+	}
+};
+
+void DeclarationSymbolSource::hookDependency(SymbolDependency* dependency)
+{
+	dependency->source = this;
+}
+
+void CatchAllSymbolSource::hookDependency(SymbolDependency* dependency)
+{
+	// Store all symbol requests for later
+	dependency->source = this;
+	this->dependencies.push_back(dependency);
+};
+
+vector<SymbolSource*> s_symbolSources;
+
+
+
+DeclarationSymbolSource* createDeclarationSymbolSource(Symbol* symbol, AST::Node* node)
+{
+	auto s = new DeclarationSymbolSource();
+	s->node = node;
+	s->symbol = symbol;
+	s_symbolSources.push_back(s);
 	return s;
 }
 
-vector<SymbolRequest*>& getSymbolRequests()
+CatchAllSymbolSource* createCatchAllSymbolSource(AST::Node* node)
 {
-	return s_symbolRequests;
+	auto s = new CatchAllSymbolSource();
+	s->node = node;
+	s_symbolSources.push_back(s);
+	return s;
 }
+
+SymbolDependency* createSymbolDepedency(string name)
+{
+	auto s = new SymbolDependency { nullptr, name };
+	return s;
+}
+
+static uint s_scopeCount = 0;
 
 struct SymbolScope
 {
+	uint id = s_scopeCount++;
 	SymbolScope* parentScope = nullptr;
+	vector<DeclarationSymbolSource*> declarationSymbolSources;
+	vector<CatchAllSymbolSource*> catchAllSymbolSources;
 
-	vector<Symbol*> symbols;
-	vector<SymbolRequest*> symbolRequests;
-
-	void addSymbol(Symbol* symbol)
+	void addSymbolSource(DeclarationSymbolSource* symbolSource)
 	{
-		symbols.push_back(symbol);
+		this->declarationSymbolSources.push_back(symbolSource);
 	}
 
-	void addSymbolRequest(SymbolRequest* symbolRequest)
+	void addSymbolSource(CatchAllSymbolSource* symbolSource)
 	{
-		symbolRequests.push_back(symbolRequest);
+		this->catchAllSymbolSources.push_back(symbolSource);
 	}
 
-	bool getSymbolInScope(const string& name, Symbol** outSymbol)
+	bool removeSymbolSource(CatchAllSymbolSource* symbolSource)
 	{
-		for (auto* s : symbols)
+		auto it = std::find(this->catchAllSymbolSources.begin(), this->catchAllSymbolSources.end(), symbolSource);
+		if (it != this->catchAllSymbolSources.end())
 		{
-			if (s->name == name)
-			{
-				*outSymbol = s;
-				return true;
-			}
+			this->catchAllSymbolSources.erase(it);
+			return true;
 		}
-
 		return false;
 	}
 
-	bool lookUpSymbolName(const string& name, Symbol** outSymbol)
+	vector<DeclarationSymbolSource*>& getDeclarations() 
+	{
+		return declarationSymbolSources;
+	}
+
+	bool hasCatchAlls() const { return catchAllSymbolSources.size() > 0; }
+
+	DeclarationSymbolSource* lookUpDeclarationInScope(const string& symbolName)
+	{
+		for (auto* s : this->declarationSymbolSources)
+		{
+			if (s->providesSymbolName(symbolName))
+				return s;
+		}
+
+		return nullptr;
+	}
+
+	SymbolSource* lookUpSymbolSource(const string& symbolName)
 	{
 		//printLine(string("Looking for symbol: ") + name + " in scope: " + std::to_string((long)this));
 
-		if (getSymbolInScope(name, outSymbol))
-			return true;
+		// Look for declarations first
+		if (SymbolSource* s = lookUpDeclarationInScope(symbolName))
+			return s;
 
-		//printLine(string("Symbol not found, looking at parent: ") + std::to_string((long)parentScope), 1);
+		// Return any catch-all is there are available
+		if (this->catchAllSymbolSources.size() > 0)
+			return catchAllSymbolSources[0];
 
 		if (parentScope)
-		{
-			if (parentScope->lookUpSymbolName(name, outSymbol))
-				return true;
-		}
+			return this->parentScope->lookUpSymbolSource(symbolName);
 
-		return false;
+		return nullptr;
 	}
 };
 

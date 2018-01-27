@@ -876,10 +876,11 @@ struct Parser
 	const vector<Token> getTokens() const { return this->tokens; }
 	std::istream& getInStream() const { return this->inStream; }
 
-	Parser(std::istream& inStream)
+	Parser(std::istream& inStream, SymbolScope* initialScope = nullptr)
 		: scannerFactory(BufferedInputStream(inStream))
 		, inStream(inStream)
 		, baseScanner(scannerFactory.scanTopLevel())
+		, currentScope(initialScope)
 	{
 		pushScanner(this->baseScanner);
 		advanceToken();
@@ -895,7 +896,7 @@ struct Parser
 	vector<ParserError> parserErrors;
 	int newErrors = 0;
 
-	SymbolScope* currentScope = nullptr;	
+	SymbolScope* currentScope;	
 };
 
 

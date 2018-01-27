@@ -20,253 +20,63 @@
 #include "output.h"
 #include "generator.h"
 
-/*
-struct SymbolDeclarationScanner : AST::Visitor
+string debugName(SymbolSource* o) 
 {
-	SymbolDeclarationScanner()
-	{}
+	return string("Symbol Source, node: " +
+		o->getNode()->toString() + ", order: " + std::to_string(o->getNode()->order));
+	return "Unknown"; 
+}
+
+struct ScopeTrackingVisitor : AST::Visitor
+{
+	ScopeTrackingVisitor(SymbolScope* initalScope)
+		: currentScope(initalScope)
+	{}	
 
 	void visit(AST::StatementBody* node) override
 	{
-		auto oldScope = m_currentScope;
-		m_currentScope = &node->scope;
+		auto oldScope = this->currentScope;
+		this->currentScope = &node->scope;
 		AST::Visitor::visit(node);
-		m_currentScope = oldScope;
+		this->currentScope = oldScope;
+	}
+
+	SymbolScope* currentScope;	
+};
+
+struct DeclarationProcessor : ScopeTrackingVisitor
+{
+	using ScopeTrackingVisitor::ScopeTrackingVisitor;
+
+	// Hack? Store scope on each ast node, so we can jump between
+	//	dependencies when processing
+	// TODO: Do this when parsing?
+	void visit(AST::Node* node) override
+	{
+		//printLine(string("Declaration Processor visited node: ") + node->toString());
+		node->scopeRef = currentScope;
+		AST::Visitor::visit(node);
 	}
 
 	// TODO: Copy paste code, generalize declarations somehow
 	void visit(AST::FunctionDeclaration* node) override
 	{
-		//assert(node->typeExpr);
-		
-		Symbol* symbol;
-		if (m_currentScope->getSymbolInScope(node->symbol, &symbol))
-		{
-			assert(false);
-		}
-
-		symbol = createSymbol(node->symbol);
-		symbol->declNode = node;
-		symbol->isFunction = true;
-		m_currentScope->addSymbol(symbol);
-		node->symbolObj = symbol;
-
-		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)m_currentScope));
-
-		AST::Visitor::visit(node);
-	}
-
-	void visit(AST::SymbolDeclaration* node) override
-	{
-		Symbol* symbol;
 		// Make sure symbol is not declared in same scope
-		// 	It is okay to overshadow parent scope declarations.
-		if (m_currentScope->getSymbolInScope(node->symbol, &symbol))
+		// 	It is okay to overshadow parent scope declarations.		
+		auto exitingDeclaration = this->currentScope->lookUpDeclarationInScope(node->symbol);
+		if (exitingDeclaration)
 		{
-			assert(false);
+			assert(false && "Symbol already declared");
 		}
 
-		symbol = createSymbol(node->symbol);
-		symbol->declNode = node;
-		symbol->isParam = node->isParam;
-		m_currentScope->addSymbol(symbol);
-		node->symbolObj = symbol;
-
-		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)m_currentScope));
-
-		AST::Visitor::visit(node);
-	}
-
-	void visit(AST::FunctionLiteral* node) override
-	{
-		assert(node->body);
-		auto oldScope = m_currentScope;
-		m_currentScope = &node->body->scope;
-		AST::Visitor::visit(node);
-		m_currentScope = oldScope;
-	}
-
-	SymbolScope* m_currentScope = nullptr;	
-};
-
-struct SymbolExpressionScanner : AST::Visitor
-{
-	SymbolExpressionScanner()
-	{}
-
-	void visit(AST::StatementBody* node) override
-	{
-		auto oldScope = m_currentScope;
-		m_currentScope = &node->scope;
-		AST::Visitor::visit(node);
-		m_currentScope = oldScope;
-	}
-
-	Symbol* findUnresolved(const string& symbol)
-	{
-		for (Symbol* s : m_unresolvedSymbols)
-		{
-			if (symbol == s->name)
-			{
-				return s;
-			}
-		}
-
-		return nullptr;
-	}
-
-	void visit(AST::SymbolExpression* node) override
-	{
-		Symbol* symbol = nullptr;
-		if (node->builtIn)
-		{
-			if (!lookUpBuiltInSymbolName(node->symbol, &symbol))
-			{
-				printLine(string("Could not find built in symbol: ") + node->symbol);
-				assert(false);
-			}
-		}
-		else
-		{
-			if (!m_currentScope->lookUpSymbolName(node->symbol, &symbol))
-			{
-				symbol = findUnresolved(node->symbol);
-				if (!symbol)
-				{
-					printLine(string("Module does not define symbol: ") + node->symbol);
-					symbol = createSymbol(node->symbol);
-					m_unresolvedSymbols.push_back(symbol);
-				}
-			}
-			else
-			{
-				if (symbol->declNode->order > node->order)
-				{	
-					// TODO: add line/column
-					// TODO: Replace function check with static, or proper initialization order
-					if (!symbol->isFunction)
-						printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization");
-				}
-			}
-		}
-
-		node->symbolObj = symbol;
-	}
-
-	SymbolScope* m_currentScope = nullptr;
-	vector<Symbol*> m_unresolvedSymbols;
-};
-
-vector<Symbol*> m_externalSymbols;
-
-
-void resolveTypes()
-{
-	auto symbols = getSymbols(); // TODO: Store symbols per module
-	for (Symbol* s : symbols)
-	{
-		if (s->knowsType())
-			continue;
-
-		assert(s->isdeclared());
-
-		Type type;
-		if (s->isFunction)
-		{
-			// TODO: Fix this for external declarations
-			AST::FunctionDeclaration* node = (AST::FunctionDeclaration*)s->declNode;
-			if (node->funcLiteral)
-				type = node->funcLiteral->getType();
-			else
-				type.isFunction = true;
-		}
-		else
-		{		
-			AST::SymbolDeclaration* node = (AST::SymbolDeclaration*)s->declNode;	
-			printLine(string("Resolving type for: ") + node->toString());
-			// TODO: Add type information
-			if (node->typeExpr)
-			{
-				type = node->typeExpr->getType();
-				assert(type.isType);
-				// TODO: Ugh, whats going on here, how to describe the value of a type?
-				type.isType = false;
-				if (node->initExpr)
-				{
-					Type t2 = node->initExpr->getType();
-					assert(isAssignable(type, t2)); 
-				}
-			}
-			else
-			{
-				assert(node->initExpr);
-				type = node->initExpr->getType();
-			}
-		}
-
-		s->type = type;
-	}
-}
-
-
-void resolveSymbols(AST::AST* ast)
-{
-	createBuiltInSymbols();
-
-	SymbolDeclarationScanner sd;
-	ast->root->accept(&sd);
-
-	SymbolExpressionScanner se;
-	ast->root->accept(&se);
-
-	// TODO: Make this generic external module lookup
-	//	Should external symbol information be "copied" into the module
-	//	so that it does not need to redo type resolving on next compile?
-	for (auto* s : se.m_unresolvedSymbols)
-	{
-		if (s->name == "int")
-		{
-			s->type.isInt = true;
-			m_externalSymbols.push_back(s);
-		}
-		else
-		{
-			printLine(string("Could not resolve symbol: ") + s->name);
-			assert(false);
-		}
-	}
-
-	resolveTypes();
-}
-*/
-
-struct SymbolResolver : AST::Visitor
-{
-	void visit(AST::StatementBody* node) override
-	{
-		auto oldScope = m_currentScope;
-		m_currentScope = &node->scope;
-		AST::Visitor::visit(node);
-		m_currentScope = oldScope;
-	}
-
-	// TODO: Copy paste code, generalize declarations somehow
-	void visit(AST::FunctionDeclaration* node) override
-	{
-		//assert(node->typeExpr);
-		
-		Symbol* symbol;
-		if (m_currentScope->getSymbolInScope(node->symbol, &symbol))
-		{
-			assert(false);
-		}
-
-		symbol = createSymbol(node->symbol, node);
+		Symbol* symbol = createSymbol(node->symbol, node);
 		symbol->type = createFunctionType();
 		// InitOrder of functions is 0 since they are initialized at compile time
 		symbol->firstInitOrder = 0;
-		m_currentScope->addSymbol(symbol);
-		node->symbolObj = symbol;
+
+		auto symbolSource = createDeclarationSymbolSource(symbol, node);
+		this->currentScope->addSymbolSource(symbolSource);
+		node->symbolSource = symbolSource;
 
 		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)m_currentScope));
 
@@ -275,20 +85,105 @@ struct SymbolResolver : AST::Visitor
 
 	void visit(AST::SymbolDeclaration* node) override
 	{
-		Symbol* symbol;
 		// Make sure symbol is not declared in same scope
 		// 	It is okay to overshadow parent scope declarations.
-		if (m_currentScope->getSymbolInScope(node->symbol, &symbol))
+		auto exitingDeclaration = this->currentScope->lookUpDeclarationInScope(node->symbol);
+		if (exitingDeclaration)
 		{
 			assert(false && "Symbol already declared");
 		}
 
 		// TODO: If this symbol is referenced in the type or init expr
 		//	Can it lead to an infinite recursion when inferring types?
-		symbol = createSymbol(node->symbol, node);
+		Symbol* symbol = createSymbol(node->symbol, node);
 		symbol->isParam = node->isParam;
-		m_currentScope->addSymbol(symbol);
+
+		auto symbolSource = createDeclarationSymbolSource(symbol, node);
+		this->currentScope->addSymbolSource(symbolSource);
 		node->symbolObj = symbol;
+
+		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)m_currentScope));
+		AST::Visitor::visit(node);
+	}
+
+	void visit(AST::EvalStatement* node) override
+	{
+		// Eval statments can potentially provide any symbol declaration
+		//	so we add a catch-all symbol source and deal with them later
+		// 	when we are able to eval the expression
+		auto* catchAllSource = createCatchAllSymbolSource(node);
+		this->currentScope->addSymbolSource(catchAllSource);
+		assert(!node->catchAllSource);
+		node->catchAllSource = catchAllSource;
+
+		AST::Visitor::visit(node);
+	}
+};
+
+vector<SymbolDependency*> s_unresolvedDependencies;
+
+SymbolSource* resolveDepdendency(SymbolDependency* dependency, SymbolScope* scope)
+{
+	SymbolSource* symbolSource = nullptr;
+	if ((symbolSource = scope->lookUpSymbolSource(dependency->symbolName)))
+	{
+		//printLine(string("Hooked dependency: ") + dependency->symbolName + 
+		//		" in scope: " + std::to_string(scope->id) + " onto: " + debugName(symbolSource));
+		symbolSource->hookDependency(dependency);
+	} 
+	else
+	{
+		printLine(string("Could not resolve dependency: ") + dependency->symbolName +
+				" in scope: " + std::to_string(scope->id) );
+
+		// If we did not find a symbol source, we are either depending on an external
+		//	symbol, or a symbol that does not exist
+		// Save it for later
+		// TODO: Can we leave dependency unhooked? Maybe hook on a root source?
+		s_unresolvedDependencies.push_back(dependency);
+	}
+
+	return symbolSource;
+}
+
+struct DependencyResolver : AST::Visitor
+{
+	void visit(AST::SymbolExpression* node) override
+	{
+		SymbolDependency* dependency = createSymbolDepedency(node->symbol);
+		node->dependency = dependency;
+
+		assert(node->scopeRef);
+		resolveDepdendency(dependency, node->scopeRef);
+	}
+};
+
+void processAST(AST::Node* root);
+
+void processDeclarations(AST::Node* root, SymbolScope* initalScope = nullptr)
+{
+	//LOG("Processing declarations...");
+	DeclarationProcessor dp(initalScope);
+	root->accept(&dp);
+}
+
+void resolveDependencies(AST::Node* root)
+{
+	//LOG("Resolving dependencies...");
+
+	DependencyResolver dr;
+	root->accept(&dr);
+}
+
+struct ASTProcessor : AST::Visitor
+{
+	void visit(AST::SymbolDeclaration* node) override
+	{
+		if (node->processed)
+			return;
+		node->processed = true;
+
+		Symbol* symbol = node->getSymbol();
 
 		// Check explicit type
 		// TODO: How to assign "type" if inner type is always transferred?
@@ -320,71 +215,48 @@ struct SymbolResolver : AST::Visitor
 		}
 
 		// TODO: Resolve any type requests within this and underlying scopes
-
-
-		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)m_currentScope));
 	}
 
 	void visit(AST::SymbolExpression* node) override
 	{
-		Symbol* symbol = nullptr;
-		if (m_currentScope->lookUpSymbolName(node->symbol, &symbol))
+		if (node->processed)
+			return;
+		node->processed = true;
+
+		assert(node->dependency);
+		assert(node->dependency->getSymbolSource());
+
+		// Process dependency until we are dependent on a single symbol
+		//	since we are possibly dependent on a placeholder source
+		while(!node->dependency->getSymbolSource()->isSingleSymbolSource())
 		{
-			assert(symbol->declNode);
-			if (symbol->firstInitOrder > node->order)
-			{	
-				// TODO: add line/column
-				// TODO: Replace function check with static, or proper initialization order
-				if (!symbol->isFunction)
-					printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization" + 
-							"(InitOrder: " + std::to_string(symbol->firstInitOrder) + ", RefOrder: " + std::to_string(node->order) + ")");
-			}
-		} 
-		else
-		{
-			node->symbolRequest = createSymbolRequest(node->symbol, node, m_currentScope);
-			// TODO: When resolving requests, type must be unified again, 
-			//	but from the bottom up in the AST. HOW?
+			node->dependency->getSymbolSource()->getNode()->accept(this);
 		}
 
-		node->symbolObj = symbol;
-	}
+		// Make sure that symbol source is processed
+		node->dependency->getSymbolSource()->getNode()->accept(this);
 
-
-	SymbolScope* m_currentScope = nullptr;	
-};
-
-
-void resolveSymbols(AST::AST* ast)
-{
-	SymbolResolver resolver;
-	ast->root->accept(&resolver);
-
-	for (SymbolRequest* s : getSymbolRequests())
-	{
-		assert(s->scope);
-		assert(s->exprNode);
-		Symbol* symbol = nullptr;
-		s->scope->lookUpSymbolName(s->name, &symbol);
-		assert(symbol && "Could not find symbol");
-		if (symbol->firstInitOrder > s->exprNode->order)
+		// At this point, all depepdencies
+		Symbol* symbol = node->getSymbol();
+		if (symbol->firstInitOrder > node->order)
 		{	
 			// TODO: add line/column
-			// TODO: Replace function check with static, or proper initialization order
-			if (!symbol->isFunction)
-				printLine(string("Warning: Symbol '") + s->name + "' is used before initialization" + 
-						"(InitOrder: " + std::to_string(symbol->firstInitOrder) + ", RefOrder: " + std::to_string(s->exprNode->order) + ")");
+			printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization" + 
+					"(InitOrder: " + std::to_string(symbol->firstInitOrder) + ", RefOrder: " + std::to_string(node->order) + ")");
 		}
-		s->exprNode->symbolObj = symbol;		
 	}
-}
 
-struct EvalProcessor : AST::Visitor
-{
 	void visit(AST::EvalStatement* node) override
 	{
+		if (node->processed)
+			return;
+		node->processed = true;	
+
+		//printLine(string("Processing eval: ") + std::to_string(node->order));
+
 		assert(node->expr);
 		assert(!node->isGenerated);
+		assert(node->catchAllSource);
 
 		node->isGenerated = true;
 
@@ -401,11 +273,14 @@ struct EvalProcessor : AST::Visitor
 			assert("Expression is not of string type" && false);
 		}
 
+		assert(node->scopeRef);
+		auto* currentScope = node->scopeRef;
+
 		const char* text = nodeVal.data.data();
 		const uint length = nodeVal.data.size();
 
 		MemoryInputStream file(text, length);
-		Parser parser(file);
+		Parser parser(file, currentScope);
 
 		AST::Statement* statement;
 		while (parser.parseStatement(&statement))
@@ -418,23 +293,74 @@ struct EvalProcessor : AST::Visitor
 			// TODO: Print errors etc
 			assert("Eval statement contained errors" && false);
 		}
+
+		// TODO: Introduce a single node for statement lists
+		// First, add all new declarations to the current scope
+		for (AST::Statement* s : node->statements)
+		{
+			processDeclarations(s, currentScope);
+		}
+
+		//printLine("Eval statement had these dependencies:", 1);
+		//for (auto d : node->catchAllSource->dependencies)
+		//	printLine(d->symbolName, 2);
+
+		// Now we can remove the catch-all source that we added earlier
+		//	and hook up all the previously caught dependencies
+		const bool wasRemoved = currentScope->removeSymbolSource(node->catchAllSource);
+		assert(wasRemoved);
+		for (auto d : node->catchAllSource->dependencies)
+		{
+			resolveDepdendency(d, currentScope);
+		}
+
+		//printLine(string("Resolving dependencies for ") + std::to_string(node->statements.size()) +
+		//	" evaled statements..." , 1);
+
+		// Resolve dependencies in newly created asts
+		for (AST::Statement* s : node->statements)
+		{
+			resolveDependencies(s);
+		}
+
+		//printLine(string("Processing ") + std::to_string(node->statements.size()) +
+		//	" evaled statements..." , 1);
+
+		// Continue traversal
+		for (AST::Statement* s : node->statements)
+		{
+			s->accept(this);
+		}
+
+		//printLine(string("Eval: ") + std::to_string(node->order) + " finished processing");
 	}
+
 };
 
-void processEvals(AST::AST* ast)
+void processAST(AST::Node* root)
 {
-	EvalProcessor ep;
-	ast->root->accept(&ep);
+	processDeclarations(root);
+	resolveDependencies(root);
+
+	LOG("Processing ast...");
+	{
+		ASTProcessor ap;
+		root->accept(&ap);
+	}
+
+	bool unresolved = false;
+	for (SymbolDependency* dep : s_unresolvedDependencies)
+	{
+		printLine(string("Could not resolve symbol ") + dep->symbolName);
+		unresolved = true;
+	}
+	if (unresolved)
+		assert(false && "Had unresolved symbols");
 }
 
 void processAST(AST::AST* ast)
 {
-	LOG("Processing evals...");	
-	processEvals(ast);
-
-
-	LOG("Resolving symbols...");
-	resolveSymbols(ast);
+	processAST(ast->root);
 }
 
 int main(int argc, char** argv)
