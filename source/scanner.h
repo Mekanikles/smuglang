@@ -479,7 +479,7 @@ class ScannerFactory
 {
 public:
 	ScannerFactory(BufferedInputStream inStream) 
-		: m_inStream(inStream)
+		: m_inStream(std::move(inStream))
 	{
 	}
 

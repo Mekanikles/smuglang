@@ -80,7 +80,8 @@ void printPointAtColumn(int column, int indent = 0)
 
 void printScannerErrors(const Parser& parser)
 {
-	auto& file = parser.getInStream();
+	auto filePtr = parser.getSourceInput()->createStream();
+	auto& file = *filePtr;
 	for (auto e : parser.getScannerErrors())
 	{
 		printLine(string("\033[1m") + std::to_string(e.row) + 
@@ -97,7 +98,8 @@ void printScannerErrors(const Parser& parser)
 
 void printParserErrors(const Parser& parser)
 {
-	auto& file = parser.getInStream();
+	auto filePtr = parser.getSourceInput()->createStream();
+	auto& file = *filePtr;
 	for (auto e : parser.getParserErrors())
 	{
 		printLine(string("\033[1m") + std::to_string(e.row) + 

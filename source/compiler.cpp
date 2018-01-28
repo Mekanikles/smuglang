@@ -236,7 +236,10 @@ struct ASTProcessor : AST::Visitor
 		// Make sure that symbol source is processed
 		node->dependency->getSymbolSource()->getNode()->accept(this);
 
-		// At this point, all depepdencies
+		// TODO: It does not work to use firstInitOrder with evals
+		// 	since they inject code, currently getting wrongly ordered
+		//	Consider doing this at a later pass, in some execution-order
+		//	based traversal.
 		Symbol* symbol = node->getSymbol();
 		if (symbol->firstInitOrder > node->order)
 		{	
@@ -279,8 +282,8 @@ struct ASTProcessor : AST::Visitor
 		const char* text = nodeVal.data.data();
 		const uint length = nodeVal.data.size();
 
-		MemoryInputStream file(text, length);
-		Parser parser(file, currentScope);
+		BufferSourceInput bufferInput(text, length);
+		Parser parser(&bufferInput, currentScope);
 
 		AST::Statement* statement;
 		while (parser.parseStatement(&statement))
@@ -370,20 +373,19 @@ int main(int argc, char** argv)
 	if (args.size() < 1)
 		ERROR("No input files specified");
 
-	std::ifstream inFile(args[0]);
+	FileSourceInput fileInput(args[0]);
 	AST::AST ast;
 
 	LOG("Parsing...");
-	Parser parser(inFile);
+	Parser parser(&fileInput);
 	bool parseSuccess = parser.parse(&ast);
 	printLine("Tokens:");
 	printTokens(parser.getTokens());
 	if (!parseSuccess)
 	{
 		LOG("Parse fail!");
-		auto f = std::ifstream(args[0]);
-		printScannerErrors(f);
-		printParserErrors(f);
+		printScannerErrors(parser);
+		printParserErrors(parser);
 	}
 	else
 	{

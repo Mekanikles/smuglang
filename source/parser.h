@@ -1,5 +1,41 @@
 #pragma once
 
+struct SourceInput
+{
+	virtual std::unique_ptr<std::istream> createStream() const = 0;
+};
+
+struct FileSourceInput : SourceInput
+{
+	FileSourceInput(const string& filePath)
+		: filePath(filePath)
+	{
+	}
+
+	std::unique_ptr<std::istream> createStream() const override
+	{
+		return std::make_unique<std::ifstream>(filePath);
+	}
+
+	const string filePath;
+};
+
+struct BufferSourceInput : SourceInput
+{
+	BufferSourceInput(const char* data, size_t size)
+		: data(data), size(size)
+	{
+	}
+
+	std::unique_ptr<std::istream> createStream() const override
+	{
+		return std::make_unique<MemoryInputStream>(data, size);
+	}
+
+	const char* data;
+	size_t size;
+};	
+
 struct Parser
 {
 	struct ParserError
@@ -861,7 +897,7 @@ struct Parser
 
 	bool parse(AST::AST* ast)
 	{
-		assert(!ast->root);	
+		assert(!ast->root);		
 		auto* node = createNode<AST::Module>();
 	
 		parseTopLevel(node);
@@ -874,12 +910,12 @@ struct Parser
 	const vector<ParserError>& getParserErrors() const { return this->parserErrors; }
 	const vector<ScannerError>& getScannerErrors() const { return this->scannerFactory.getScannerErrors(); }
 	const vector<Token> getTokens() const { return this->tokens; }
-	std::istream& getInStream() const { return this->inStream; }
+	const SourceInput* getSourceInput() const { return this->sourceInput; }
 
-	Parser(std::istream& inStream, SymbolScope* initialScope = nullptr)
-		: scannerFactory(BufferedInputStream(inStream))
-		, inStream(inStream)
+	Parser(const SourceInput* sourceInput, SymbolScope* initialScope = nullptr)
+		: scannerFactory(std::move(BufferedInputStream(sourceInput->createStream())))
 		, baseScanner(scannerFactory.scanTopLevel())
+		, sourceInput(sourceInput)
 		, currentScope(initialScope)
 	{
 		pushScanner(this->baseScanner);
@@ -888,7 +924,7 @@ struct Parser
 
 	ScannerFactory scannerFactory;
 	TopLevelScanner baseScanner;
-	std::istream& inStream;
+	const SourceInput* sourceInput;
 
 	vector<Token> tokens;
 	Token currentToken = Token(TokenType::StartOfScan);
