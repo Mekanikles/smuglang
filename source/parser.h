@@ -696,6 +696,7 @@ struct Parser
 
 			expect(TokenType::CloseParenthesis);	
 
+			// Body
 			AST::Statement* statement;
 			if (parseStatement(&statement))
 			{
@@ -841,6 +842,11 @@ struct Parser
 				node->expr = expr;
 
 				expect(TokenType::SemiColon, false);
+			}
+			else
+			{
+				error("Cannot parse lone symbol");
+				return false;
 			}
 		}
 		else if (parseDeclarationStatement(&declaration))

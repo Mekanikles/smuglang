@@ -381,11 +381,11 @@ struct BodyGenerator : AST::Visitor
 
 		assert(node->expr);
 
-		out << indent(m_indent) << "if ";
+		out << indent(m_indent) << "if (";
 
 		node->expr->accept(this);
 
-		out << "\n";
+		out << ")\n";
 
 		std::stringstream imports;
 		std::stringstream data;
