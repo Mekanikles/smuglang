@@ -80,8 +80,8 @@ string toString(TokenType type)
 		case TokenType::DivisionOp: return "Operator division";
 		case TokenType::IncrementOp: return "Operator increment";
 		case TokenType::DecrementOp: return "Operator decrement";
-		case TokenType::StartOfScan: return "Start Of File";
-		case TokenType::EndOfScan: return "End Of File";	
+		case TokenType::StartOfScan: return "Start Of Scan";
+		case TokenType::EndOfScan: return "End Of Scan";	
 		default: return "UknownToken";
 	};
 }

@@ -97,7 +97,8 @@ struct Parser
 	void advanceToken()
 	{
 		this->tokens.push_back(this->currentToken);
-		getScanner()->getToken(&this->currentToken);
+		// Make sure to retrieve a valid token
+		while(!getScanner()->getToken(&this->currentToken)) {};
 		//printLine(string("Found token: ") + toString(this->currentToken));
 	}
 

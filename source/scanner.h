@@ -272,8 +272,6 @@ public:
 
 	bool getToken(Token* outToken) override
 	{
-		outToken->type = TokenType::EndOfScan;
-
 		while (m_inStream)
 		{
 			auto scanRes = Scanner::scanComments();
@@ -469,8 +467,10 @@ public:
 			// Don't let anything unparsed through
 			m_inStream.ignore();			
 			error("Unrecognized character");
+			return false;
 		}
 
+		*outToken =Token(TokenType::EndOfScan);
 		return true;
 	}
 };
