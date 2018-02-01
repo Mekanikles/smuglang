@@ -62,20 +62,33 @@ void printTokens(const vector<Token>& tokens)
 
 std::istream& gotoLine(std::istream& file, unsigned int num){
     file.seekg(std::ios::beg);
-    for(int i=0; i < num - 1; ++i){
+    for(int i=0; i < num; ++i){
         file.ignore(std::numeric_limits<std::streamsize>::max(),'\n');
     }
     return file;
 }
 
-void printPointAtColumn(int column, int indent = 0)
+void printPointAtColumn(int column, char line[256], int indent)
 {
-	indent = ((column - 1) / 4) + 1;
-	printIndent(indent);
-	int rest = std::max((column - 1) % 4, 0);
-	for (int i = 0; i < rest; ++i)
-		print(" ");
+	for (uint c = 0; c < column; ++c)
+	{
+		if (line[c] == '\t')
+			print("\t");
+		else
+			print(" ");
+	}
 	printLine("\033[1;31m^\033[0m");
+}
+
+int tabcorrectColumn(int column, char line[256])
+{
+	int outColumn = column;
+	for (uint c = 0; c < column; ++c)
+	{
+		if (line[c] == '\t')
+			outColumn += 3; // Tab width - 1 TODO: Have it configurable
+	}
+	return outColumn;
 }
 
 void printScannerErrors(const Parser& parser)
@@ -84,15 +97,17 @@ void printScannerErrors(const Parser& parser)
 	auto& file = *filePtr;
 	for (auto e : parser.getScannerErrors())
 	{
-		printLine(string("\033[1m") + std::to_string(e.row) + 
-				":" + std::to_string(e.column) + ": \033[31mError: \033[39m" + e.msg + "\033[0m");
-
 		// TODO: Make into segment surrounding error instead, to support really long lines
 		char line[256];
 		auto& fileAtLine = gotoLine(file, e.row);
 		fileAtLine.getline(line, 256);
-		printLine(string(line), 1);
-		printPointAtColumn(e.column, 1);
+
+		int correctedColumn = tabcorrectColumn(e.column, line);
+		printLine(string("\033[1m") + std::to_string(e.row + 1) + 
+				":" + std::to_string(e.column + 1) + ": \033[31mError: \033[39m" + e.msg + "\033[0m");
+
+		printLine(string(line), 0);
+		printPointAtColumn(e.column, line, 1);
 	}
 }
 
@@ -102,15 +117,17 @@ void printParserErrors(const Parser& parser)
 	auto& file = *filePtr;
 	for (auto e : parser.getParserErrors())
 	{
-		printLine(string("\033[1m") + std::to_string(e.row) + 
-				":" + std::to_string(e.column) + ": \033[31mError: \033[39m" + e.msg + "\033[0m");
-
 		// TODO: Make into segment surrounding error instead, to support really long lines
 		char line[256];
 		auto& fileAtLine = gotoLine(file, e.row);
 		fileAtLine.getline(line, 256);
-		printLine(string(line), 1);
-		printPointAtColumn(e.column, 1);
+
+		int correctedColumn = tabcorrectColumn(e.column, line);
+		printLine(string("\033[1m") + std::to_string(e.row + 1) + 
+				":" + std::to_string(correctedColumn + 1) + ": \033[31mError: \033[39m" + e.msg + "\033[0m");
+
+		printLine(string(line), 0);
+		printPointAtColumn(e.column, line, 1);
 	}
 }
 

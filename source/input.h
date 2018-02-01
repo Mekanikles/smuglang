@@ -34,6 +34,8 @@ public:
 		return (m_end != m_begin) || (bool)*m_inStream;
 	}
 
+	uint lastColumn() { return m_lastColumn; }
+	uint lastRow() { return m_lastRow; }
 	uint currentColumn() { return m_column; }
 	uint currentRow() { return m_row; }
 
@@ -46,6 +48,8 @@ public:
 
 	bool get(char& c)
 	{
+		m_lastRow = m_row;
+		m_lastColumn = m_column;
 		bool empty = false;
 		if (m_end == m_begin)
 			empty = fillBuffer() == 0;
@@ -144,7 +148,9 @@ private:
 	uint m_begin = 0;
 	uint m_end = 0;
 	std::unique_ptr<std::istream> m_inStream;
-	uint m_row = 1;
-	uint m_column = 1;
+	uint m_row = 0;
+	uint m_column = 0;
+	uint m_lastRow = 0;
+	uint m_lastColumn = 0;	
 };
 

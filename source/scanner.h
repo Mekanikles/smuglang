@@ -21,8 +21,8 @@ public:
 
 	virtual bool getToken(Token* outToken) = 0;
 
-	uint currentColumn() { return m_inStream.currentColumn(); }
-	uint currentRow() { return m_inStream.currentRow(); }
+	uint lastTokenColumn() { return m_lastTokenColumn; }
+	uint lastTokenRow() { return m_lastTokenRow; }
 
 protected:
 	enum class ScanResult
@@ -35,8 +35,8 @@ protected:
 
 	void error(string msg)
 	{
-		const uint column = currentColumn();
-		const uint row = currentRow();
+		const uint column = m_inStream.lastColumn();
+		const uint row = m_inStream.lastRow();
 
 		this->scannerErrors.push_back(ScannerError { msg, column, row });
 		this->newScannerErrors++;
@@ -104,6 +104,9 @@ protected:
 	BufferedInputStream& m_inStream;
 	vector<ScannerError>& scannerErrors;
 	int& newScannerErrors;	
+
+	uint m_lastTokenColumn = 0;
+	uint m_lastTokenRow = 0;		
 };
 
 bool isWordInitChar(const char c)
@@ -288,6 +291,12 @@ public:
 				m_inStream.ignore();
 				continue;
 			}
+
+			// At this point, we "know" that the following chars will lead
+			//	to either a token or a scanner error, save the positions
+			//	for token error messaging.
+			m_lastTokenColumn = m_inStream.currentColumn();;
+			m_lastTokenRow = m_inStream.currentRow();;
 
 			if (n == ';')
 			{
@@ -490,5 +499,5 @@ public:
 private:
 	BufferedInputStream m_inStream;
 	vector<ScannerError> scannerErrors;
-	int newScannerErrors = 0;	
+	int newScannerErrors = 0;
 };

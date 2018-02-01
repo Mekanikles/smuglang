@@ -76,29 +76,34 @@ struct Parser
 		return this->tokens.back();
 	}
 
-	void error(const Token& token, string msg)
+	void error(const Token& token, uint column, uint row, string msg)
 	{
-		auto* s = getScanner();
-		const uint column = s->currentColumn();
-		const uint row = s->currentRow();
-		const int tokenLength = std::max((int)token.symbol.length() - 1, 0);
-
-		this->parserErrors.push_back(ParserError { msg, token, column - tokenLength, row });
+		this->parserErrors.push_back(ParserError { msg, token, column, row });
 		this->newErrors++;
 	}
 
-	void error(string msg)
+	void errorOnAccept(string msg)
 	{
-		error(lastToken(), msg);
+		error(lastToken(), this->lastTokenColumn, this->lastTokenRow, msg);
+	}
+
+	void errorOnExpect(string msg)
+	{
+		auto scanner = getScanner();
+		error(this->currentToken, scanner->lastTokenColumn(), scanner->lastTokenRow(), msg);
 	}
 
 	int getNewErrors() { const int ret = this->newErrors; this->newErrors = 0; return ret; }
 
 	void advanceToken()
 	{
+		auto scanner = getScanner();
+		this->lastTokenColumn = scanner->lastTokenColumn();
+		this->lastTokenRow = scanner->lastTokenRow();
 		this->tokens.push_back(this->currentToken);
+
 		// Make sure to retrieve a valid token
-		while(!getScanner()->getToken(&this->currentToken)) {};
+		while(!scanner->getToken(&this->currentToken)) {};
 		//printLine(string("Found token: ") + toString(this->currentToken));
 	}
 
@@ -127,7 +132,8 @@ struct Parser
 		string errMsg = 
 				string("Expected ") + toString(type) + " but got " + 
 				toString(this->currentToken.type);
-		error(this->currentToken, errMsg);
+		auto scanner = getScanner();		
+		errorOnExpect(errMsg);
 		if (skipOnError)
 			advanceToken();	
 		return false;
@@ -249,7 +255,7 @@ struct Parser
 				}
 				else
 				{
-					error("Unknown primitive type");
+					errorOnAccept("Unknown primitive type");
 				}
 
 				auto typeClass = std::make_unique<PrimitiveClass>(PrimitiveClass::Int, size, sign);
@@ -258,7 +264,7 @@ struct Parser
 			}
 			else
 			{
-				error("Cannot parse compiler directive as expression");
+				errorOnAccept("Unknown compiler directive");
 			}
 
 			return true;
@@ -273,7 +279,7 @@ struct Parser
 		if (accept(TokenType::OpenParenthesis))
 		{
 			if (!parseExpression(outNode))
-				error("Expected expression");
+				errorOnExpect("Expected expression");
 
 			expect(TokenType::CloseParenthesis);
 		}
@@ -290,7 +296,7 @@ struct Parser
 			}
 			else
 			{
-				error("Expected primary expression");
+				errorOnExpect("Expected primary expression");
 				*outNode = nullptr;
 				return true;
 			}
@@ -400,7 +406,7 @@ struct Parser
 			}
 			else
 			{
-				error("Expected primary expression");
+				errorOnExpect("Expected primary expression");
 				*outExpr = nullptr;
 				return true;
 			}
@@ -500,7 +506,7 @@ struct Parser
 			AST::Expression* expr;
 			if (!parseTypeExpression(&expr))
 			{
-				error("Expected expression");
+				errorOnExpect("Expected expression");
 			}
 
 			node->typeExpr = expr;
@@ -516,7 +522,7 @@ struct Parser
 			}
 			else
 			{
-				error("Expected expression");
+				errorOnExpect("Expected expression");
 			}
 		}
 
@@ -608,7 +614,7 @@ struct Parser
 			if (!external && !parseFuncLiteralSignature(&signature))
 			{
 				// TODO: Require parameter list?
-				error("Expected function parameter list");
+				errorOnExpect("Expected function parameter list");
 				*outDeclaration = nullptr;
 				return true;
 			}
@@ -616,7 +622,7 @@ struct Parser
 			AST::StatementBody* statementBody = nullptr;
 			if (!external && !parseStatementBody(&statementBody))
 			{
-				error("Expected statement body");
+				errorOnExpect("Expected statement body");
 			}
 
 			if (!external)
@@ -650,7 +656,7 @@ struct Parser
 		{
 			// TODO: use-case?
 			if (isExternalDecl)
-				error("External non-function declarations not yet supported");
+				errorOnAccept("External non-function declarations not yet supported");
 
 			AST::SymbolDeclaration* symbolDecl;
 			if (!parseSymbolDeclaration(&symbolDecl))
@@ -671,7 +677,7 @@ struct Parser
 		}
 		else if (isExternalDecl)
 		{
-			error("Expected declaration statement");
+			errorOnExpect("Expected declaration statement");
 			return true;
 		}
 
@@ -692,7 +698,7 @@ struct Parser
 			}
 			else
 			{
-				error("Expected expression");
+				errorOnExpect("Expected expression");
 			}
 
 			expect(TokenType::CloseParenthesis);	
@@ -705,7 +711,7 @@ struct Parser
 			}
 			else
 			{
-				error("Expected statement");
+				errorOnExpect("Expected statement");
 			}
 
 			if (accept(TokenType::Else))
@@ -717,7 +723,7 @@ struct Parser
 				}
 				else
 				{
-					error("Expected statement");
+					errorOnExpect("Expected statement");
 				}
 			}
 
@@ -743,7 +749,7 @@ struct Parser
 			}
 			else
 			{
-				error("Expected expression");
+				errorOnExpect("Expected expression");
 			}
 
 			expect(TokenType::CloseParenthesis);
@@ -773,7 +779,7 @@ struct Parser
 			{
 				expect(TokenType::StringLiteral);	
 				if (stringSymbolValue(lastToken().symbol) != "c")
-					error(lastToken(), "Only 'c' imports type specifier is supported");
+					errorOnAccept("Only 'c' imports type specifier is supported");
 
 				importType = AST::Import::Type_C;
 
@@ -788,7 +794,7 @@ struct Parser
 			auto node = createNode<AST::Import>();
 			node->file = file;
 			if(importType != AST::Import::Type_C)
-				error(lastToken(), "Only 'c' type imports are supported");
+				errorOnAccept("Only 'c' type imports are supported");
 			node->type = importType;
 			*outStatement = node;
 		}
@@ -810,7 +816,7 @@ struct Parser
 
 				if (!parseCallParameters(node))
 				{
-					error(lastToken(), "Call parameter list expected");
+					errorOnExpect("Call parameter list expected");
 				}
 
 				if (!getNewErrors())
@@ -836,7 +842,7 @@ struct Parser
 				AST::Expression* expr;
 				if (!parseExpression(&expr))
 				{
-					error("Expected expression");
+					errorOnExpect("Expected expression");
 				}
 
 				node->symExpr = symExpr;
@@ -846,8 +852,7 @@ struct Parser
 			}
 			else
 			{
-				error("Cannot parse lone symbol");
-				return false;
+				errorOnAccept("Cannot parse lone symbol");
 			}
 		}
 		else if (parseDeclarationStatement(&declaration))
@@ -894,7 +899,7 @@ struct Parser
 			}
 			else
 			{
-				error("Expected statement");
+				errorOnExpect("Expected statement");
 				skipToNextStatement();
 			}
 		}
@@ -938,6 +943,8 @@ struct Parser
 	vector<Scanner*> scanners;
 	vector<ParserError> parserErrors;
 	int newErrors = 0;
+	uint lastTokenColumn = 0;
+	uint lastTokenRow = 0;
 
 	SymbolScope* currentScope;	
 };
