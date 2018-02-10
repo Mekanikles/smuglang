@@ -131,8 +131,7 @@ struct Parser
 		
 		string errMsg = 
 				string("Expected ") + toString(type) + " but got " + 
-				toString(this->currentToken.type);
-		auto scanner = getScanner();		
+				toString(this->currentToken.type);	
 		errorOnExpect(errMsg);
 		if (skipOnError)
 			advanceToken();	
@@ -275,7 +274,6 @@ struct Parser
 
 	bool parsePrimaryExpression(AST::Expression** outNode)
 	{
-		AST::SymbolExpression* symExpr;
 		if (accept(TokenType::OpenParenthesis))
 		{
 			if (!parseExpression(outNode))
@@ -925,7 +923,7 @@ struct Parser
 	const SourceInput* getSourceInput() const { return this->sourceInput; }
 
 	Parser(const SourceInput* sourceInput, SymbolScope* initialScope = nullptr)
-		: scannerFactory(std::move(BufferedInputStream(sourceInput->createStream())))
+		: scannerFactory(BufferedInputStream(sourceInput->createStream()))
 		, baseScanner(scannerFactory.scanTopLevel())
 		, sourceInput(sourceInput)
 		, currentScope(initialScope)

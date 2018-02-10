@@ -114,7 +114,6 @@ struct BodyGenerator : AST::Visitor
 				assert(!type.isTypeVariable());
 				auto typeClass = type.typeClass.get();
 
-				const string& name = symbol->name;
 				assert(symbol->declNode);
 				const uint declOrder = symbol->declNode->order;
 
@@ -292,8 +291,7 @@ struct BodyGenerator : AST::Visitor
 		auto& out = *m_out.body;
 		const Type& t = node->getType();
 		assert(t.isPrimitive());
-		auto& p = t.typeClass->as<PrimitiveClass>();
-
+		
 		out <<  node->value; 
 	}
 

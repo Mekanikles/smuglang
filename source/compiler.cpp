@@ -33,7 +33,7 @@ struct ScopeTrackingVisitor : AST::Visitor
 		: currentScope(initalScope)
 	{}	
 
-	void visit(AST::StatementBody* node) override
+	virtual void visit(AST::StatementBody* node) override
 	{
 		auto oldScope = this->currentScope;
 		this->currentScope = &node->scope;
@@ -47,6 +47,7 @@ struct ScopeTrackingVisitor : AST::Visitor
 struct DeclarationProcessor : ScopeTrackingVisitor
 {
 	using ScopeTrackingVisitor::ScopeTrackingVisitor;
+	using ScopeTrackingVisitor::visit;
 
 	// Hack? Store scope on each ast node, so we can jump between
 	//	dependencies when processing
@@ -188,7 +189,7 @@ struct ASTProcessor : AST::Visitor
 		// Check explicit type
 		// TODO: How to assign "type" if inner type is always transferred?
 		//	i.e var x : type; "type" needs to be a type variable that
-		//	has an inner type of a type variable?
+		//	has an i¸5nner type of a type variable?
 		if (node->typeExpr)
 		{
 			node->typeExpr->accept(this);

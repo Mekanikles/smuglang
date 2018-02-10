@@ -102,7 +102,6 @@ void printScannerErrors(const Parser& parser)
 		auto& fileAtLine = gotoLine(file, e.row);
 		fileAtLine.getline(line, 256);
 
-		int correctedColumn = tabcorrectColumn(e.column, line);
 		printLine(string("\033[1m") + std::to_string(e.row + 1) + 
 				":" + std::to_string(e.column + 1) + ": \033[31mError: \033[39m" + e.msg + "\033[0m");
 
