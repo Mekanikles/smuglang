@@ -448,9 +448,14 @@ namespace AST
 		Type& getType() override
 		{
 			// TODO: Bubble up types through ops for now
-			Type& t = left->getType();
-			assert(t == right->getType());
-			return t;
+			Type& t1 = left->getType();
+			Type& t2 = right->getType();
+
+			const auto result = unifyTypes(t1, t2);
+			if (result == CannotUnify)
+				assert("Cannot unify types" && false);
+
+			return t1;
 		}
 	};
 
