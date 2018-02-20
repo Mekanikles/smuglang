@@ -150,9 +150,10 @@ public:
 	TokenType scanNumericLiteral(string& out)
 	{
 		char n = m_inStream.peek();
+
 		if (n == '0')
 		{
-			// hexadecimal
+			// hexadecimal integer
 			if (m_inStream.lookAhead() == 'x')
 			{
 				out += m_inStream.get();
@@ -166,7 +167,7 @@ public:
 				return TokenType::IntegerLiteral;
 			}
 
-			// binary
+			// binary integer
 			if (m_inStream.lookAhead() == 'b')
 			{
 				out += m_inStream.get();
@@ -361,7 +362,8 @@ public:
 			}
 
 			// Numericals
-			if (isdigit(n) || (n == '.' && isdigit(m_inStream.lookAhead())))
+			if (isdigit(n) || 
+				(n == '.' && isdigit(m_inStream.lookAhead())))
 			{
 				string literal;
 				TokenType type = scanNumericLiteral(literal);

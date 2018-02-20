@@ -28,17 +28,17 @@ const string& translateFunctionSymbol(const Symbol* symbol)
 string getIntegerTypeName(const PrimitiveClass& p)
 {
 	assert(p.isInteger());
-	assert(p.knownSize);
-	assert(p.knowsSign());
+	uint size = p.knownSize ? p.size : DEFAULT_INT_SIZE;
+	bool isSigned = p.knowsSign() ? p.isSigned() : DEFAULT_INT_ISSIGNED;
 
-	if (p.size == 32)
-		return p.isSigned() ? "int32_t" : "uint32_t";
-	else if (p.size == 64)
-		return p.isSigned() ? "int64_t" : "uint64_t";
-	else if (p.size == 16)
-		return p.isSigned() ? "int16_t" : "uint16_t";
-	else if (p.size == 8)
-		return p.isSigned() ? "int8_t" : "uint8_t";
+	if (size == 32)
+		return isSigned ? "int32_t" : "uint32_t";
+	else if (size == 64)
+		return isSigned ? "int64_t" : "uint64_t";
+	else if (size == 16)
+		return isSigned ? "int16_t" : "uint16_t";
+	else if (size == 8)
+		return isSigned ? "int8_t" : "uint8_t";
 	else
 		assert("Unsupported integer size" && false);
 
@@ -128,15 +128,21 @@ struct BodyGenerator : AST::Visitor
 		{
 			const string name = translateFunctionSymbol(declNode->getSymbol());
 			generateFunctionLiteral(declNode->funcLiteral, name);
+			*m_out.data << "\n";
 		}
 
 		for (auto s : node->statements)
 		{
+			const bool isBody = dynamic_cast<AST::StatementBody*>(s) != nullptr;
+			if (!isBody)
+				out << indent(m_indent);	
+
 			s->accept(this);
+			out << ";\n";
 		}
 
 		m_indent--;
-		out << indent(m_indent) << "}\n";
+		out << indent(m_indent) << "}";
 	}
 
 	void visit(AST::Import* node) override
@@ -156,7 +162,7 @@ struct BodyGenerator : AST::Visitor
 		Symbol* s = node->expr->dependency->getSymbol();
 		const string& name = translateFunctionSymbol(s);
 
-		out << indent(m_indent) << name << "(";
+		out << name << "(";
 		int argCount = node->args.size();
 		if (argCount > 0)
 		{
@@ -167,7 +173,7 @@ struct BodyGenerator : AST::Visitor
 				node->args[i]->accept(this);
 			}
 		}
-		out << ");\n";
+		out << ")";
 	};
 
 	void visit(AST::Assignment* node) override
@@ -181,12 +187,10 @@ struct BodyGenerator : AST::Visitor
 		assert(s->declNode);
 		const uint declOrder = s->declNode->order;
 
-		out << indent(m_indent) << name << "_" << std::to_string(declOrder) << " = ";
+		out << name << "_" << std::to_string(declOrder) << " = ";
 
 		assert(node->expr);
 		node->expr->accept(this);
-
-		out << ";\n";
 	}
 
 	void visit(AST::BinaryOp* node) override
@@ -255,12 +259,10 @@ struct BodyGenerator : AST::Visitor
 		// Static const functions does initialization on load instead
 		//	TODO: Generalize
 		if (!node->isParam && !t.isFunction() && node->initExpr)
-		{
-			out << indent(m_indent);
+		{		
 			out << name << "_" << declOrder;
 			out << " = ";
 			node->initExpr->accept(this);
-			out << ";\n"; 
 		}
 		else if (node->initExpr)
 		{
@@ -379,7 +381,7 @@ struct BodyGenerator : AST::Visitor
 
 		assert(node->expr);
 
-		out << indent(m_indent) << "if (";
+		out << "if (";
 
 		node->expr->accept(this);
 
@@ -391,16 +393,33 @@ struct BodyGenerator : AST::Visitor
 		Output output { &imports, &data, m_out.body };
 
 		{
-			bool isBody = dynamic_cast<AST::StatementBody*>(node->statement) != nullptr;
+			const bool isBody = dynamic_cast<AST::StatementBody*>(node->statement) != nullptr;
+			if (!isBody)
+				out << indent(m_indent + 1);
 			BodyGenerator bodyGenerator(output, isBody ? m_indent : m_indent + 1);
 			node->statement->accept(&bodyGenerator);
+			if (!isBody)
+				out << ";";
 		}
 
 		if (node->elseStatement)
 		{	
-			out << indent(m_indent) << "else\n";
-			bool isBody = dynamic_cast<AST::StatementBody*>(node->elseStatement) != nullptr;
-			BodyGenerator bodyGenerator(output, isBody ? m_indent : m_indent + 1);		
+			out << "\n" << indent(m_indent) << "else";
+			const bool isElseIf = dynamic_cast<AST::IfStatement*>(node->elseStatement) != nullptr;
+			if (isElseIf)
+			{
+				out << " ";
+			}
+			else
+			{
+				out << "\n";
+
+				const bool isBody = dynamic_cast<AST::StatementBody*>(node->elseStatement) != nullptr;
+				if (!isBody)
+					out << indent(m_indent + 1);			
+			}
+
+			BodyGenerator bodyGenerator(output, m_indent);		
 			node->elseStatement->accept(&bodyGenerator);
 		}
 

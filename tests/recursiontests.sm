@@ -1,0 +1,22 @@
+extern func printf;
+
+printf("Recursion tests\n");
+recurse(8);
+
+func recurse(x : #primitives.u8)
+{
+	printf("Recursions left: %i\n", x);
+
+	if (x == 0)
+	{
+	}
+	else
+	{
+		var i : #primitives.u8 = 1;
+		var y = x - i;
+		recurse(y);
+	}
+};
+
+
+

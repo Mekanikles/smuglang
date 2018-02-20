@@ -1,61 +1,7 @@
 
 #include <memory>
 
-/*enum class PrimitiveType
-{
-	None,
-	s32,
-};
-
-string toString(PrimitiveType type)
-{
-	switch (type)
-	{
-		case PrimitiveType::s32: return "signed 32bit int";
-		default: return "Uknown Primitive";
-	};
-}
-
-struct Type
-{
-	bool isFunction = false;
-	bool isInt = false;
-	bool isFloat = false;
-	bool isString = false;
-	bool isType = false;
-	PrimitiveType type;
-
-	bool operator ==(const Type &b) const
-	{
-		return isFunction == b.isFunction &&
-			isInt == b.isInt &&
-			isFloat == b.isFloat &&
-			isString == b.isString && 
-			isType == b.isType && 
-			type == b.type;
-	}
-
-	string toString()
-	{
-		return string("Type(Func: ") + std::to_string(isFunction) +
-			", Int: " + std::to_string(isInt) +
-			", Float: " + std::to_string(isFloat) +
-			", Str: " + std::to_string(isString) + 
-			", Type: " + std::to_string(isType) + ")";
-	}
-};
-
-bool isAssignable(const Type& type1, const Type& type2)
-{
-	if (type2.isInt)
-	{
-		if (type1.type == PrimitiveType::s32)
-			return true;
-	}
-
-	return false;
-}
-*/
+struct PrimitiveClass;
 
 struct TypeClass
 {
@@ -67,10 +13,11 @@ struct TypeClass
 		Function
 	};
 
-	TypeClass(const TypeClass& o) = delete;
-
 	TypeClass(ClassType type) : type(type)
 	{}
+
+	TypeClass(const TypeClass& o) = delete;
+	TypeClass& operator=(const TypeClass& o) = delete;
 
 	ClassType type = Any;
 	// TODO: symbol might not be known at time of unification
@@ -148,6 +95,12 @@ struct Type
 		return kind == Value && typeClass->type == TypeClass::Primitive;
 	}
 
+	const PrimitiveClass& getPrimitive() const
+	{
+		assert(isPrimitive());
+		return typeClass->as<PrimitiveClass>();
+	}
+
 	bool isArray() const 
 	{
 		return kind == Value && typeClass->type == TypeClass::Array;
@@ -208,6 +161,7 @@ struct PrimitiveClass : TypeClass
 	bool isChar() const { return primitiveType == Char; }
 	bool isSigned() const { return signedType == Signed; }
 	bool knowsSign() const { return signedType != UnknownSign; }
+	bool knowsSize() const { return knownSize; }
 
 	bool operator==(const PrimitiveClass& o) const
 	{

@@ -1,0 +1,13 @@
+extern func printf;
+
+var y : #primitives.u8 = 1;
+
+{
+	{
+		printf("Weirdly scoped y: %i\n", y);
+	}
+
+	var y : #primitives.u8 = 2;
+}
+
+//printf("Value \"%i\"", y);

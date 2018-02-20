@@ -1,4 +1,5 @@
 bin
+external
 .smug
 .DS_Store
 .vscode

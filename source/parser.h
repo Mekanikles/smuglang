@@ -766,6 +766,7 @@ struct Parser
 		AST::IfStatement* ifStatement;
 		AST::EvalStatement* evalStatement;
 		AST::StatementBody* statementBody;
+		AST::Expression* expression;
 
 		if (accept(TokenType::Import))
 		{
@@ -796,6 +797,7 @@ struct Parser
 			node->type = importType;
 			*outStatement = node;
 		}
+		// TODO: Parse expression properly
 		else if (accept(TokenType::Symbol))
 		{
 			Token t = lastToken();
@@ -853,6 +855,11 @@ struct Parser
 				errorOnAccept("Cannot parse lone symbol");
 			}
 		}
+		else if (parseExpression(&expression))
+		{
+			expect(TokenType::SemiColon, false);
+			*outStatement = expression;
+		}	
 		else if (parseDeclarationStatement(&declaration))
 		{
 			// TODO: Should declarations ending in bodies require semi colon?

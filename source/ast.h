@@ -98,7 +98,7 @@ namespace AST
 
 	void visitChildren(Declaration* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
 
-	struct Expression : Node
+	struct Expression : Statement
 	{
 		virtual Type& getType() = 0;
 	};

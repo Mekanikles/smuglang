@@ -1,13 +1,9 @@
 extern func printf;
 
-var y : #primitives.u8 = 1;
+var x : #primitives.s8 = 1;
 
-{
-	{
-		printf("Weirdly scoped y: %i\n", y);
-	}
+var y = x - 1;
+var z = -x;
 
-	var y : #primitives.u8 = 2;
-}
-
-//printf("Value \"%i\"", y);
+printf("y: %i (Should be 0)\n", y);
+printf("z: %i (Should be -1)\n", z);

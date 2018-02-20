@@ -1,1 +1,1 @@
-./buildsmugc.sh && ./smugc.sh tests/evaltests.sm && ./a.out
+./buildsmugc.sh && ./smugc.sh tests/numericliteraltests.sm && ./a.out

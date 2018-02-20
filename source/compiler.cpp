@@ -12,6 +12,10 @@
 #include "input.h"
 #include "token.h"
 #include "scanner.h"
+
+const uint DEFAULT_INT_SIZE = 32;
+const bool DEFAULT_INT_ISSIGNED = true;
+
 #include "types.h"
 #include "symbols.h"
 #include "ast.h"
@@ -19,6 +23,7 @@
 #include "parser.h"
 #include "output.h"
 #include "generator.h"
+#include "llvmgenerator.h"
 
 string debugName(SymbolSource* o) 
 {
@@ -400,6 +405,7 @@ int main(int argc, char** argv)
 		CGenerator generator(&output);
 		generator.run(&ast);
 
+		// Extract filename without path
 		std::regex filenameRegex(R"((.*[\\\/])?(.+)$))");
 		std::smatch matches;
 
@@ -417,6 +423,14 @@ int main(int argc, char** argv)
 			}
 			std::cout << outFileName;
 		}
+
+		printLine("LLVM IR generation:");
+
+		std::stringstream llvmOutput;
+		LLVMIRGenerator llvmgenerator(&llvmOutput);
+		llvmgenerator.run(&ast);
+
+
 	}
 }
 
