@@ -13,11 +13,13 @@
 #include "llvm/IR/LLVMContext.h"
 #include "llvm/IR/LegacyPassManager.h"
 #include "llvm/IR/Module.h"
+#include "llvm/IR/NoFolder.h"
 #include "llvm/IR/Type.h"
 #include "llvm/IR/Verifier.h"
 #include "llvm/Support/FileSystem.h"
 #include "llvm/Support/Host.h"
 #include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/raw_os_ostream.h"
 #include "llvm/Support/TargetRegistry.h"
 #include "llvm/Support/TargetSelect.h"
 #include "llvm/Target/TargetMachine.h"
@@ -26,7 +28,7 @@
 #include "llvm/Support/raw_ostream.h"
 
 static llvm::LLVMContext s_theContext;
-static llvm::IRBuilder<> s_builder(s_theContext);
+static llvm::IRBuilder<llvm::NoFolder> s_builder(s_theContext);
 static std::unique_ptr<llvm::Module> s_theModule = llvm::make_unique<llvm::Module>("SmugModule", s_theContext);;
 static std::map<string, llvm::Value*> s_namedValues;
 
@@ -134,7 +136,7 @@ struct LLVMIRGenerator : AST::Visitor
 	}
 
 	LLVMIRGenerator(std::ostream* out)
-		: m_out(out)
+		: m_out(*out)
 		, m_module(*s_theModule)
 		, m_context(s_theContext)
 		, m_builder(s_builder)		
@@ -223,13 +225,13 @@ struct LLVMIRGenerator : AST::Visitor
 
 		verifyModule(m_module);
 		llvm::legacy::PassManager passManager;
-		passManager.add(llvm::createPrintModulePass(llvm::errs()));
+		passManager.add(llvm::createPrintModulePass(m_out));
 		passManager.run(m_module);
 	}
 
-	std::ostream* m_out;
+	llvm::raw_os_ostream m_out;
 	llvm::Module& m_module;
 	llvm::LLVMContext& m_context;
-	llvm::IRBuilder<> m_builder;
+	llvm::IRBuilder<llvm::NoFolder> m_builder;
 	std::vector<llvm::Value*> m_valueStack;	
 };

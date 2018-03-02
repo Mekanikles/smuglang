@@ -401,18 +401,21 @@ int main(int argc, char** argv)
 		printLine("AST:");
 		printAST(&ast, 1);
 
-		std::stringstream output;
-		CGenerator generator(&output);
-		generator.run(&ast);
+
 
 		// Extract filename without path
 		std::regex filenameRegex(R"((.*[\\\/])?(.+)$))");
 		std::smatch matches;
-
 		assert(std::regex_search(args[0], matches, filenameRegex));
+
+		string outFileName = string(".smug/") + matches[2].str();
+
+		std::stringstream output;
+		CGenerator generator(&output);
+		generator.run(&ast);
 		{
-			string outFileName = string(".smug/") + matches[2].str() + ".c";
-			std::ofstream outFile(outFileName);
+			string outCFileName = outFileName + ".c";
+			std::ofstream outFile(outCFileName);
 
 			printLine("Generated C:");
 			string l;
@@ -421,16 +424,26 @@ int main(int argc, char** argv)
 				printLine(l, 1);
 				outFile << l << std::endl;
 			}
-			std::cout << outFileName;
 		}
-
-		printLine("LLVM IR generation:");
 
 		std::stringstream llvmOutput;
 		LLVMIRGenerator llvmgenerator(&llvmOutput);
 		llvmgenerator.run(&ast);
+		{
+			string outLLVMFileName = outFileName + ".ll";
+			std::ofstream outFile(outLLVMFileName);
 
+			printLine("Generated LLVM IR:");
+			string l;
+			while (getline(llvmOutput, l))
+			{
+				printLine(l, 1);
+				outFile << l << std::endl;
+			}
+		}
 
+		// output generic filename without ext
+		std::cout << outFileName;
 	}
 }
 

@@ -9,9 +9,12 @@ fi
 OUTPUT=$2
 if [ -z "$OUTPUT" ] 
 	then 
-		OUTPUT="a.out" 
+		OUTPUT=".out" 
 fi
 
 
 mkdir -p .smug
-gcc -xc $(./bin/smugc $1) -o $OUTPUT -Wno-implicit-function-declaration  -Wno-parentheses-equality -Wno-unused-value
+# Compile c output
+gcc -xc $(./bin/smugc $1).c -o c$OUTPUT -Wno-implicit-function-declaration  -Wno-parentheses-equality -Wno-unused-value
+# Compile llvm ir output
+clang -x ir -Wno-override-module $(./bin/smugc $1).ll -o llvm$OUTPUT
