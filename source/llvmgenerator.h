@@ -1,14 +1,27 @@
 #pragma once
 
-#include "llvm/IR/IRBuilder.h"
-#include "llvm/IR/LLVMContext.h"
-#include "llvm/IR/Module.h"
+#include "llvm/ADT/APFloat.h"
+#include "llvm/ADT/Optional.h"
+#include "llvm/ADT/STLExtras.h"
+#include "llvm/IR/BasicBlock.h"
+#include "llvm/IR/Constants.h"
+#include "llvm/IR/DerivedTypes.h"
 #include "llvm/IR/Function.h"
-#include "llvm/IR/CallingConv.h"
-#include "llvm/IR/Verifier.h"
-//#include "llvm/IR/PassManager.h"
-#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Instructions.h"
+#include "llvm/IR/IRBuilder.h"
 #include "llvm/IR/IRPrintingPasses.h"
+#include "llvm/IR/LLVMContext.h"
+#include "llvm/IR/LegacyPassManager.h"
+#include "llvm/IR/Module.h"
+#include "llvm/IR/Type.h"
+#include "llvm/IR/Verifier.h"
+#include "llvm/Support/FileSystem.h"
+#include "llvm/Support/Host.h"
+#include "llvm/Support/raw_ostream.h"
+#include "llvm/Support/TargetRegistry.h"
+#include "llvm/Support/TargetSelect.h"
+#include "llvm/Target/TargetMachine.h"
+#include "llvm/Target/TargetOptions.h"
 
 #include "llvm/Support/raw_ostream.h"
 
@@ -37,8 +50,9 @@ struct LLVMIRGenerator : AST::Visitor
 		//auto isSigned = primitive.knowsSign() ? primitive.isSigned() : DEFAULT_INT_ISSIGNED;
 
 		auto iType = llvm::IntegerType::get(m_context, size);
-		// TODO: Radix 0 parses hex and binary, but allows stupid octal syntax, which we dont want
-		m_valueStack.push_back(llvm::ConstantInt::get(iType, s, 0));
+		// TODO: Make sure we don't allow stupid octal syntax
+		auto val = llvm::ConstantInt::get(iType, s, 10);
+		m_valueStack.push_back(val);
 	}
 	void visit(AST::FloatLiteral* node) override
 	{
@@ -129,17 +143,83 @@ struct LLVMIRGenerator : AST::Visitor
 
 	void run(AST::AST* ast)
 	{
+		// Init llvm stuff
+		{
+			llvm::InitializeAllTargetInfos();
+			llvm::InitializeAllTargets();
+			llvm::InitializeAllTargetMCs();
+			llvm::InitializeAllAsmParsers();
+			llvm::InitializeAllAsmPrinters();
+		}
+
+		// Set up target machine and configure module 
+		{
+			auto targetTriple = llvm::sys::getDefaultTargetTriple();
+			m_module.setTargetTriple(targetTriple);
+
+			std::string errorString;
+			auto target = llvm::TargetRegistry::lookupTarget(targetTriple, errorString);
+
+			// Print an error and exit if we couldn't find the requested target.
+			// This generally occurs if we've forgotten to initialise the
+			// TargetRegistry or we have a bogus target triple.
+			if (!target) 
+			{
+				llvm::errs() << "Target not found";
+				return;
+			}
+
+			auto targetCPU = "generic";
+			auto targetFeatures = "";
+
+			llvm::TargetOptions targetOptions;
+			auto targetModel = llvm::Reloc::Model();
+			auto targetMachine = target->createTargetMachine(targetTriple, 
+					targetCPU, targetFeatures, targetOptions, targetModel);
+
+			m_module.setDataLayout(targetMachine->createDataLayout());
+		}
+
 		/* TODO: Add main function
 		; Function Attrs: norecurse nounwind readnone ssp uwtable
 		define i32 @main(i32, i8** nocapture readnone) local_unnamed_addr #0 {
 		  ret i32 42
 		}*/
 
+		// Construct args (int argc, char**)
+		std::vector<llvm::Type*> mainArgs;
+		mainArgs.push_back(llvm::Type::getInt32Ty(m_context));
+		mainArgs.push_back(llvm::Type::getInt8PtrTy(m_context)->getPointerTo());
+
+		// Construct main function type
+		auto mainType = llvm::FunctionType::get(
+				llvm::Type::getInt32Ty(m_context), mainArgs, false);
+
+		auto mainFunc = llvm::Function::Create(mainType, llvm::Function::ExternalLinkage, "main", &m_module);
+
+		// Name args for easier debugging
+		const char* argNames[2] = { "argc", "argv" };
+		uint i = 0;
+		for (auto& a : mainFunc->args())
+			a.setName(argNames[i++]);
+
+		auto basicBlock = llvm::BasicBlock::Create(m_context, "entry", mainFunc);
+		m_builder.SetInsertPoint(basicBlock);
 
 		ast->root->accept(this);
 
-		print("Number of values in stack: ");
-		printLine(std::to_string(m_valueStack.size()));
+		if (m_valueStack.size() > 0)
+		{
+			print("Warning: found unused values: ");
+			printLine(std::to_string(m_valueStack.size()));
+			// Temp
+			m_builder.CreateRet(m_valueStack.back());
+		}
+
+		verifyFunction(*mainFunc);
+
+		// On error
+		//TheFunction->eraseFromParent();
 
 		verifyModule(m_module);
 		llvm::legacy::PassManager passManager;
