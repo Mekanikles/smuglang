@@ -384,14 +384,6 @@ public:
 				return true;
 			}
 
-			// Note scan lone dot after numericals to allow decimal point
-			if (n == '.')
-			{
-				m_inStream.ignore();
-				*outToken = Token(TokenType::Dot);
-				return true;
-			}
-
 			// Strings
 			if (n == '"' || n == '\'')
 			{
@@ -419,6 +411,23 @@ public:
 			{
 				m_inStream.ignore(2);
 				*outToken = Token(TokenType::CompareOp);
+				return true;
+			}
+
+			// Note: scan lone dot after numericals to allow decimal point
+			if (n == '.')
+			{
+				if (n2 == '.' && m_inStream.lookAhead(2) == '.')
+				{
+					m_inStream.ignore(3);
+					*outToken = Token(TokenType::Ellipsis);
+				}
+				else
+				{
+					m_inStream.ignore();
+					*outToken = Token(TokenType::Dot);
+				}	
+
 				return true;
 			}
 
