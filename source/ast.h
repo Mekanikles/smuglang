@@ -14,7 +14,6 @@ namespace AST
 	struct SymbolDeclaration;
 	struct FunctionDeclaration;
 	struct SymbolExpression;
-	struct PrimitiveTypeExpression;
 	struct StringLiteral;
 	struct IntegerLiteral;
 	struct FloatLiteral;

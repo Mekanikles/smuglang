@@ -87,19 +87,19 @@ struct LLVMIRGenerator : AST::Visitor
 		{
 			switch (node->opType)
 			{
-				case TokenType::CompareOp: 
+				case TokenType::CompareOp:
 					m_valueStack.push_back(m_builder.CreateICmpEQ(leftVal, rightVal, "icmp")); 
 					break;
-				case TokenType::AddOp:					
+				case TokenType::Plus:
 					m_valueStack.push_back(m_builder.CreateAdd(leftVal, rightVal, "iadd")); 
 					break;
-				case TokenType::SubtractOp:					
+				case TokenType::Minus:
 					m_valueStack.push_back(m_builder.CreateSub(leftVal, rightVal, "isub")); 
 					break;
-				case TokenType::MultiplicationOp:					
+				case TokenType::Asterisk:
 					m_valueStack.push_back(m_builder.CreateMul(leftVal, rightVal, "imul")); 
 					break;
-				case TokenType::DivisionOp:					
+				case TokenType::Slash:
 					m_valueStack.push_back(m_builder.CreateSDiv(leftVal, rightVal, "idiv")); 
 					break;
 				default: assert(false);
@@ -109,19 +109,19 @@ struct LLVMIRGenerator : AST::Visitor
 		{
 			switch (node->opType)
 			{
-				case TokenType::CompareOp: 
+				case TokenType::CompareOp:
 					m_valueStack.push_back(m_builder.CreateFCmpOEQ(leftVal, rightVal, "fcmp")); 
 					break;
-				case TokenType::AddOp:					
+				case TokenType::Plus:
 					m_valueStack.push_back(m_builder.CreateFAdd(leftVal, rightVal, "fadd")); 
 					break;
-				case TokenType::SubtractOp:					
+				case TokenType::Minus:
 					m_valueStack.push_back(m_builder.CreateFSub(leftVal, rightVal, "fsub")); 
 					break;
-				case TokenType::MultiplicationOp:					
+				case TokenType::Asterisk:
 					m_valueStack.push_back(m_builder.CreateFMul(leftVal, rightVal, "fmul")); 
 					break;
-				case TokenType::DivisionOp:					
+				case TokenType::Slash:
 					m_valueStack.push_back(m_builder.CreateFDiv(leftVal, rightVal, "fdiv")); 
 					break;
 				default: assert(false);

@@ -320,6 +320,13 @@ public:
 				return true;
 			}
 
+			if (n == '@')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::At);
+				return true;
+			}
+
 			// Compiler directive
 			if (n == '#')
 			{
@@ -425,25 +432,31 @@ public:
 			else if (n == '+')
 			{
 				m_inStream.ignore();
-				*outToken = Token(TokenType::AddOp);
+				*outToken = Token(TokenType::Plus);
 				return true;
 			}
 			else if (n == '-')
 			{
 				m_inStream.ignore();
-				*outToken = Token(TokenType::SubtractOp);
+				*outToken = Token(TokenType::Minus);
 				return true;
 			}
 			else if (n == '*')
 			{
 				m_inStream.ignore();
-				*outToken = Token(TokenType::MultiplicationOp);
+				*outToken = Token(TokenType::Asterisk);
 				return true;
 			}
 			else if (n == '/')
 			{
 				m_inStream.ignore();
-				*outToken = Token(TokenType::DivisionOp);
+				*outToken = Token(TokenType::Slash);
+				return true;
+			}
+			else if (n == '&')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::Ampersand);
 				return true;
 			}
 

@@ -140,14 +140,22 @@ struct Parser
 
 	bool acceptUnaryOperator()
 	{
-		if (accept(TokenType::AddOp))
+		if (accept(TokenType::Plus))
 		{
-			 return true;
+ 			return true;
 		}
-		else if (accept(TokenType::SubtractOp))
+		else if (accept(TokenType::Minus))
 		{
-			 return true;
-		}	
+	 		return true;
+		}
+		else if (accept(TokenType::Asterisk))
+		{
+		 	return true;
+		}
+		else if (accept(TokenType::Ampersand))
+		{
+		 	return true;
+		}					
 		else if (accept(TokenType::IncrementOp))
 		{
 			return true;
@@ -180,19 +188,19 @@ struct Parser
 		{
 			return true;
 		}
-		else if (accept(TokenType::AddOp))
+		else if (accept(TokenType::Plus))
 		{
 			 return true;
 		}
-		else if (accept(TokenType::SubtractOp))
+		else if (accept(TokenType::Minus))
 		{
 			 return true;
 		}
-		else if (accept(TokenType::MultiplicationOp))
+		else if (accept(TokenType::Asterisk))
 		{
 			 return true;
 		}
-		else if (accept(TokenType::DivisionOp))
+		else if (accept(TokenType::Slash))
 		{
 			 return true;
 		}		
@@ -343,11 +351,11 @@ struct Parser
 	{
 		switch (opType)
 		{
-			case TokenType::MultiplicationOp:
-			case TokenType::DivisionOp:
+			case TokenType::Asterisk:
+			case TokenType::Slash:
 				return 10;
-			case TokenType::AddOp:
-			case TokenType::SubtractOp:
+			case TokenType::Plus:
+			case TokenType::Minus:
 				return 9;
 			case TokenType::CompareOp:
 				return 1;
@@ -392,15 +400,29 @@ struct Parser
 				exprStack.pop_back();
 				bop->left = exprStack.back();
 
-				exprStack.back() = bop;	
+				exprStack.back() = bop;
 			}
 
 			binOpStack.push_back(op);
 
+			// To allow some operators to both work as binary and unary postfix
+			//	we try to bind to a primary expression first
 			if (parsePrimaryExpression(&exprNode))
 			{
 				exprStack.push_back(exprNode);
-				continue;
+			}
+			else if (binOpStack.back() == TokenType::Asterisk || 
+					binOpStack.back() == TokenType::Ampersand)
+			{
+				// If we cannot find an right hand expression, we interpret
+				//	 the operator as unary postfix
+				assert(!exprStack.empty());
+				auto uop = createNode<AST::UnaryPostfixOp>();
+				uop->opType = binOpStack.back();
+				binOpStack.pop_back();
+				uop->expr = exprStack.back();
+
+				exprStack.back() = uop;
 			}
 			else
 			{
@@ -470,24 +492,7 @@ struct Parser
 		}
 	}
 
-	// TODO: Expand this to any expression
-	bool parseTypeExpression(AST::Expression** outExpr)
-	{
-		if (accept(TokenType::Symbol))
-		{
-			auto* node = createNode<AST::SymbolExpression>(lastToken().symbol);
-			*outExpr = node;
-			return true;
-		}
-		else if (parsePrimitiveTypeExpression(outExpr))
-		{
-			return true;
-		}
-
-		return false;
-	}
-
-	bool parseSymbolDeclaration(AST::SymbolDeclaration** outDeclaration)
+	bool parseSymbolDeclaration(AST::SymbolDeclaration** outDeclaration, bool isExternal = false)
 	{
 		if (!accept(TokenType::Symbol))
 			return false;
@@ -502,7 +507,7 @@ struct Parser
 		{
 			// TODO: Should handle generic expressions
 			AST::Expression* expr;
-			if (!parseTypeExpression(&expr))
+			if (!parseExpression(&expr))
 			{
 				errorOnExpect("Expected expression");
 			}
@@ -511,7 +516,8 @@ struct Parser
 		}
 
 		// Optional initialization
-		if (accept(TokenType::Equals))
+		// TODO: Not allowed for externals, add custom error
+		if (!isExternal && accept(TokenType::Equals))
 		{
 			AST::Expression* expr;
 			if (parseExpression(&expr))
@@ -596,7 +602,7 @@ struct Parser
 		return false;
 	}
 
-	bool parseFunctionDeclaration(bool external, AST::FunctionDeclaration** outDeclaration)
+	bool parseFunctionDeclaration(AST::FunctionDeclaration** outDeclaration)
 	{
 		if (accept(TokenType::Func))
 		{
@@ -609,7 +615,7 @@ struct Parser
 			node->symbol = lastToken().symbol;
 
 			AST::FuncLiteralSignature* signature;
-			if (!external && !parseFuncLiteralSignature(&signature))
+			if (!parseFuncLiteralSignature(&signature))
 			{
 				// TODO: Require parameter list?
 				errorOnExpect("Expected function parameter list");
@@ -618,19 +624,16 @@ struct Parser
 			}
 
 			AST::StatementBody* statementBody = nullptr;
-			if (!external && !parseStatementBody(&statementBody))
+			if (!parseStatementBody(&statementBody))
 			{
 				errorOnExpect("Expected statement body");
 			}
 
-			if (!external)
-			{
-				auto* func = createNode<AST::FunctionLiteral>();
-				func->signature = signature;
-				func->body = statementBody;
+			auto* func = createNode<AST::FunctionLiteral>();
+			func->signature = signature;
+			func->body = statementBody;
 
-				node->funcLiteral = func;
-			}
+			node->funcLiteral = func;
 
 			*outDeclaration = node;
 			return true;
@@ -642,23 +645,15 @@ struct Parser
 	// TODO: Should output statement?
 	bool parseDeclarationStatement(AST::Declaration** outDeclaration)
 	{
-		bool isExternalDecl = false;
-		// Optional external declaration qualifier
-		if (accept(TokenType::Extern))
-		{
-			isExternalDecl = true;
-		}
-
 		AST::FunctionDeclaration* funcDecl;
-		if (accept(TokenType::Var))
+		if (accept(TokenType::Var) || accept(TokenType::Extern))
 		{
-			// TODO: use-case?
-			if (isExternalDecl)
-				errorOnAccept("External non-function declarations not yet supported");
+			const bool isExternalDecl = lastToken().type == TokenType::Extern;
 
 			AST::SymbolDeclaration* symbolDecl;
-			if (!parseSymbolDeclaration(&symbolDecl))
+			if (!parseSymbolDeclaration(&symbolDecl, isExternalDecl))
 			{
+				errorOnExpect("Expected symbol declaration");
 				*outDeclaration = nullptr;
 				return true;
 			}
@@ -667,15 +662,10 @@ struct Parser
 			*outDeclaration = symbolDecl;
 			return true;
 		}
-		else if (parseFunctionDeclaration(isExternalDecl, &funcDecl))
+		else if (parseFunctionDeclaration(&funcDecl))
 		{
 
 			*outDeclaration = funcDecl;
-			return true;
-		}
-		else if (isExternalDecl)
-		{
-			errorOnExpect("Expected declaration statement");
 			return true;
 		}
 

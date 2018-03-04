@@ -12,6 +12,7 @@ enum class TokenType
 	IntegerLiteral,
 	FloatLiteral,
 	Symbol,
+	At,
 	Var,
 	Func,
 	Eval,
@@ -23,11 +24,12 @@ enum class TokenType
 	Comma,
 	Colon,
 	Dot,
+	Ampersand,
 	CompareOp,
-	AddOp,
-	SubtractOp,
-	MultiplicationOp,
-	DivisionOp,
+	Plus,
+	Minus,
+	Asterisk,
+	Slash,
 	IncrementOp,
 	DecrementOp,
 	StartOfScan,
@@ -61,6 +63,7 @@ string toString(TokenType type)
 		case TokenType::IntegerLiteral: return "Integer Literal";
 		case TokenType::FloatLiteral: return "Float Literal";
 		case TokenType::Symbol: return "Symbol";
+		case TokenType::At: return "At";
 		case TokenType::Var: return "Var";
 		case TokenType::Func: return "Func";
 		case TokenType::Eval: return "Eval";
@@ -73,11 +76,12 @@ string toString(TokenType type)
 		case TokenType::Comma: return "Comma";
 		case TokenType::Colon: return "Colon";
 		case TokenType::Dot: return "Dot";
-		case TokenType::CompareOp: return "Operator compare";
-		case TokenType::AddOp: return "Operator add";
-		case TokenType::SubtractOp: return "Operator subtract";
-		case TokenType::MultiplicationOp: return "Operator multiplication";
-		case TokenType::DivisionOp: return "Operator division";
+		case TokenType::Ampersand: return "Ampersand";
+		case TokenType::CompareOp: return "Compare op";
+		case TokenType::Plus: return "Plus";
+		case TokenType::Minus: return "Minus";
+		case TokenType::Asterisk: return "Asterisk";
+		case TokenType::Slash: return "Slash";
 		case TokenType::IncrementOp: return "Operator increment";
 		case TokenType::DecrementOp: return "Operator decrement";
 		case TokenType::StartOfScan: return "Start Of Scan";

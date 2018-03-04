@@ -203,10 +203,10 @@ struct BodyGenerator : AST::Visitor
 		switch (node->opType)
 		{
 			case TokenType::CompareOp: out << "== "; break;
-			case TokenType::AddOp: out << "+ "; break;
-			case TokenType::SubtractOp: out << "- "; break;
-			case TokenType::MultiplicationOp: out << "* "; break;
-			case TokenType::DivisionOp: out << "/ "; break;		
+			case TokenType::Plus: out << "+ "; break;
+			case TokenType::Minus: out << "- "; break;
+			case TokenType::Asterisk: out << "* "; break;
+			case TokenType::Slash: out << "/ "; break;		
 			default: assert(false);
 		}
 		node->right->accept(this);
@@ -217,29 +217,35 @@ struct BodyGenerator : AST::Visitor
 	{
 		auto& out = *m_out.body;
 
+		out << "(";
 		switch (node->opType)
 		{
-			case TokenType::AddOp: out << "+ "; break;
-			case TokenType::SubtractOp: out << "- "; break;
-			case TokenType::IncrementOp: out << "++ "; break;
-			case TokenType::DecrementOp: out << "-- "; break;
+			case TokenType::Plus: out << "+"; break;
+			case TokenType::Minus: out << "-"; break;
+			case TokenType::IncrementOp: out << "++"; break;
+			case TokenType::DecrementOp: out << "--"; break;
 			default: assert(false);
 		}
 		node->expr->accept(this);
+		out << ")";
 	}
 
 	void visit(AST::UnaryPostfixOp* node) override
 	{
 		auto& out = *m_out.body;
 
+		out << "(";
 		node->expr->accept(this);
 
 		switch (node->opType)
 		{
-			case TokenType::IncrementOp: out << "++ "; break;
-			case TokenType::DecrementOp: out << "-- "; break;
+			case TokenType::IncrementOp: out << "++"; break;
+			case TokenType::DecrementOp: out << "--"; break;
+			case TokenType::Asterisk: out << "*"; break;
+			case TokenType::Ampersand: out << "&"; break;
 			default: assert(false);
 		}
+		out << ")";
 	}
 
 	void visit(AST::SymbolDeclaration* node) override

@@ -1,2 +1,7 @@
 
- 5 * 4 - 3 / 2 * 1 + 2 * 3;
+//extern printf : func(#primitives.u8*, ...);
+
+//printf("The number: %i", 5 * 4 - 3 / 2 * 1 + 2 * 3);
+
+5;
+
