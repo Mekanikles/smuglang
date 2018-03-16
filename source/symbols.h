@@ -58,18 +58,21 @@ struct SymbolSource
 	virtual bool isSingleSymbolSource() = 0;
 	virtual Symbol* getSymbol() = 0;
 	virtual AST::Node* getNode() = 0;
+	virtual bool isExternal() { return false; }
 };
 
 struct DeclarationSymbolSource : SymbolSource
 {
 	AST::Node* node;
 	Symbol* symbol = nullptr;
+	bool external = false;
 
 	bool providesSymbolName(const string& s) override { return s == symbol->name; }
 	void hookDependency(SymbolDependency* dependency) override;
 	bool isSingleSymbolSource() override { return true; }
 	Symbol* getSymbol() override { assert(symbol); return symbol; }
 	AST::Node* getNode() override { assert(node); return node; }
+	bool isExternal() override { return external; }
 };
 
 struct CatchAllSymbolSource : SymbolSource
@@ -119,11 +122,12 @@ vector<SymbolSource*> s_symbolSources;
 
 
 
-DeclarationSymbolSource* createDeclarationSymbolSource(Symbol* symbol, AST::Node* node)
+DeclarationSymbolSource* createDeclarationSymbolSource(Symbol* symbol, AST::Node* node, bool isExternal = false)
 {
 	auto s = new DeclarationSymbolSource();
 	s->node = node;
 	s->symbol = symbol;
+	s->external = isExternal;
 	s_symbolSources.push_back(s);
 	return s;
 }

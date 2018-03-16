@@ -207,7 +207,74 @@ struct Parser
 		return false;
 	}
 
-	bool parsePrimitiveTypeExpression(AST::Expression** outNode)
+	bool parseFunctionTypeLiteral(AST::FunctionTypeLiteral** outNode)
+	{
+		if (accept(TokenType::Func))
+		{
+			auto* node = createNode<AST::FunctionTypeLiteral>();		
+			*outNode = node;
+
+			if (accept(TokenType::OpenParenthesis))
+			{
+				AST::Expression* expr;
+				// In params
+				while (parseExpression(&expr))
+				{
+					node->addInParameter(expr);
+
+					if (accept(TokenType::Comma))
+					{
+						if (accept(TokenType::Ellipsis))
+						{
+							// Must be last in expression list
+							node->isVariadic = true;
+							break;
+						}
+					}
+					else
+					{
+						break;
+					}
+				}
+
+				// Output params
+				if (accept(TokenType::Arrow))
+				{
+					while (parseExpression(&expr))
+					{
+						node->addOutParameter(expr);
+
+						if (accept(TokenType::Comma))
+						{
+							if (accept(TokenType::Ellipsis))
+							{
+								// Must be last in expression list
+								node->isVariadic = true;
+								break;
+							}
+						}
+						else
+						{
+							break;
+						}
+					}
+				}
+
+				expect(TokenType::CloseParenthesis);
+
+				return true;
+			}
+			else
+			{
+				// TODO: Is there a usecase for this? A lone 'func' would cover all possible functions
+				node->isAnyFunc = true;
+			}
+		}
+		
+		return false;
+	}
+
+	bool parseTypeLiteral(AST::TypeLiteral** outNode)
 	{
 		if (accept(TokenType::CompilerDirective))
 		{
@@ -220,7 +287,22 @@ struct Parser
 				PrimitiveClass::SignedType sign = PrimitiveClass::UnknownSign;
 				uint size;
 
-				if (lastToken().symbol == "s64")
+				if (lastToken().symbol == "c")
+				{
+					expect(TokenType::Dot);
+					expect(TokenType::Symbol);
+					if (lastToken().symbol == "int")
+					{
+						sign = PrimitiveClass::Signed;
+						size = 32;
+					}
+					else if (lastToken().symbol == "char")
+					{
+						sign = PrimitiveClass::Signed;
+						size = 8;
+					}
+				}
+				else if (lastToken().symbol == "s64")
 				{
 					sign = PrimitiveClass::Signed;
 					size = 64;
@@ -230,7 +312,7 @@ struct Parser
 					sign = PrimitiveClass::Unsigned;
 					size = 64;
 				}
-				if (lastToken().symbol == "s32")
+				else if (lastToken().symbol == "s32")
 				{
 					sign = PrimitiveClass::Signed;
 					size = 32;
@@ -282,6 +364,8 @@ struct Parser
 
 	bool parsePrimaryExpression(AST::Expression** outNode)
 	{
+		AST::TypeLiteral* typeLiteral;
+		AST::FunctionTypeLiteral* functionTypeLiteral;
 		if (accept(TokenType::OpenParenthesis))
 		{
 			if (!parseExpression(outNode))
@@ -327,8 +411,13 @@ struct Parser
 			auto* expr = createNode<AST::SymbolExpression>(lastToken().symbol);
 			*outNode = expr;
 		}
-		else if (parsePrimitiveTypeExpression(outNode))
+		else if (parseTypeLiteral(&typeLiteral))
 		{
+			*outNode = typeLiteral;
+		}
+		else if (parseFunctionTypeLiteral(&functionTypeLiteral))
+		{
+			*outNode = functionTypeLiteral;
 		}
 		else
 		{
@@ -501,6 +590,7 @@ struct Parser
 		*outDeclaration = node;
 
 		node->symbol = lastToken().symbol;
+		node->isExternal = isExternal;
 
 		// Optional type declaration
 		if (accept(TokenType::Colon))

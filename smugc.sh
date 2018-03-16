@@ -12,14 +12,16 @@ if [ -z "$OUTPUT" ]
 		OUTPUT=".out" 
 fi
 
-
 RESULT=$(./bin/smugc $1)
 
-if [ -n "$OUTPUT" ] 
+if [ -n "$RESULT" ] 
 	then
 		mkdir -p .smug
 		# Compile c output
-		gcc -xc $RESULT.c -o c$OUTPUT -Wno-implicit-function-declaration  -Wno-parentheses-equality -Wno-unused-value
+		gcc -xc $RESULT.c -o c$OUTPUT -Wno-implicit-function-declaration -Wno-parentheses-equality -Wno-unused-value -Wno-incompatible-library-redeclaration -Wno-pointer-sign
 		# Compile llvm ir output
 		clang -x ir -Wno-override-module $RESULT.ll -o llvm$OUTPUT
-fi		
+		exit 0
+fi
+
+exit 1

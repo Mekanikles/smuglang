@@ -33,6 +33,7 @@ enum class TokenType
 	IncrementOp,
 	DecrementOp,
 	Ellipsis,
+	Arrow,
 	StartOfScan,
 	EndOfScan,
 	Invalid,
@@ -86,6 +87,7 @@ string toString(TokenType type)
 		case TokenType::IncrementOp: return "Operator increment";
 		case TokenType::DecrementOp: return "Operator decrement";
 		case TokenType::Ellipsis: return "Ellipsis";
+		case TokenType::Arrow: return "Arrow";
 		case TokenType::StartOfScan: return "Start Of Scan";
 		case TokenType::EndOfScan: return "End Of Scan";	
 		default: return "UknownToken";

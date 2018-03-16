@@ -413,6 +413,12 @@ public:
 				*outToken = Token(TokenType::CompareOp);
 				return true;
 			}
+			else if (n == '-' && n2 == '>')
+			{
+				m_inStream.ignore(2);
+				*outToken = Token(TokenType::Arrow);
+				return true;
+			}
 
 			// Note: scan lone dot after numericals to allow decimal point
 			if (n == '.')

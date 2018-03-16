@@ -53,7 +53,13 @@ string getTypeClassName(const TypeClass* typeClass)
 		{
 			auto& p = typeClass->as<PrimitiveClass>();
 			return getIntegerTypeName(p);
-			break;
+		}
+		case TypeClass::Pointer:
+		{
+			auto& p = typeClass->as<PointerClass>();
+			string ret = getTypeClassName(p.type.typeClass.get());
+			ret += "*";
+			return ret;
 		}
 		default:
 			assert("Generator does not support type" && false);
@@ -80,6 +86,7 @@ struct BodyGenerator : AST::Visitor
 		assert(!node->scope.hasCatchAlls());
 		for (auto* ss : node->scope.getDeclarations())
 		{
+			const bool isExternal = ss->isExternal();
 			Symbol* symbol = ss->getSymbol();
 
 			// params are already declared in the signature
@@ -90,22 +97,25 @@ struct BodyGenerator : AST::Visitor
 
 			if (type.isFunction())
 			{
-				// Add forward declarations for all functions in scope
-				// This also triggers adding function translations
-				AST::FunctionDeclaration* declNode = (AST::FunctionDeclaration*)symbol->declNode;
-
-				if (declNode->funcLiteral)
+				if (isExternal)
 				{
+					const string name = symbol->name;
+					generateFunctionPrototype(type.getFunction(), name, m_out.imports);
+					*m_out.imports << ";\n";
+					s_functionTranslations.push_back(SymbolTranslation{symbol, name});
+				}
+				else
+				{
+					// Add forward declarations for all functions in scope
+					// This also triggers adding function translations
+					AST::FunctionDeclaration* declNode = (AST::FunctionDeclaration*)symbol->declNode;
+
+					assert(declNode->funcLiteral);
 					const string name = string("") + declNode->symbol + "_" + std::to_string(declNode->order);
 					generateFunctionSignature(declNode->funcLiteral, name, m_out.imports);
 					*m_out.imports << ";\n";
 					s_functionTranslations.push_back(SymbolTranslation{declNode->getSymbol(), name});
 					functionDeclarations.push_back(declNode);
-				}
-				else
-				{
-					// TODO: Handle duplicate externals
-					//*m_out.data << "extern int " << declNode->symbolObj->name << "();\n";
 				}
 			}
 			else
@@ -307,6 +317,29 @@ struct BodyGenerator : AST::Visitor
 	{	
 		auto& out = *m_out.body;
 		out << node->value; 
+	}
+
+	void generateFunctionPrototype(const FunctionClass& functionClass, const string& name, std::ostream* out)
+	{
+		// TODO: Add support for out params
+		*out << "void " << name << "(";
+
+		int size = functionClass.inTypes.size();
+		for (int i = 0; i < size; ++i)
+		{
+			const Type& param = functionClass.inTypes[i];
+			assert(!param.isTypeVariable());
+			auto typeClass = param.typeClass.get();
+
+			*out << getTypeClassName(typeClass);
+			if (i < size - 1)
+				*out << ", ";
+		}
+
+		if (functionClass.isVariadic)
+			*out << ", ...";
+
+		*out << ")";		
 	}
 
 	void generateFunctionSignature(AST::FunctionLiteral* node, const string& name, std::ostream* out)

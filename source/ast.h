@@ -18,6 +18,7 @@ namespace AST
 	struct IntegerLiteral;
 	struct FloatLiteral;
 	struct TypeLiteral;
+	struct FunctionTypeLiteral;
 	struct FunctionLiteral;
 	struct UnaryOp;
 	struct UnaryPostfixOp;
@@ -57,6 +58,7 @@ namespace AST
 		virtual void visit(IntegerLiteral* node) { visit((Expression*)node); }
 		virtual void visit(FloatLiteral* node) { visit((Expression*)node); }
 		virtual void visit(TypeLiteral* node) { visit((Expression*)node); }
+		virtual void visit(FunctionTypeLiteral* node) { visit((Expression*)node); }
 		virtual void visit(FunctionLiteral* node) { visit((Expression*)node); }
 		virtual void visit(UnaryOp* node) { visit((Expression*)node); }
 		virtual void visit(UnaryPostfixOp* node) { visit((Expression*)node); }
@@ -93,7 +95,8 @@ namespace AST
 	void visitChildren(Statement* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
 
 	struct Declaration : Statement
-	{};
+	{
+	};
 
 	void visitChildren(Declaration* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
 
@@ -301,6 +304,65 @@ namespace AST
 		}	
 	};
 
+	struct FunctionTypeLiteral : public NodeImpl<FunctionTypeLiteral, Expression>
+	{
+		vector<Expression*> inExprs;
+		vector<Expression*> outExprs;
+		bool isAnyFunc = false;
+		bool isVariadic = false;
+		Type type;
+
+		string toString() override 
+		{ 
+			string s = "FunctionTypeLiteral(isVariadic: " + std::to_string(isVariadic) +
+					", isAny: " + std::to_string(isAnyFunc) + ")";
+			return s;
+		}
+
+		Type& getType() override
+		{
+			// TODO:
+			if (type.isAny())
+			{
+				auto typeClass = std::make_unique<FunctionClass>();
+				typeClass->isVariadic = isVariadic;
+
+				for (auto* expr : inExprs)
+				{
+					const Type& t = expr->getType();
+					typeClass->inTypes.push_back(t.innerTypeFromTypeVariable());
+				}
+
+				for (auto* expr : outExprs)
+				{
+					const Type& t = expr->getType();
+					typeClass->outTypes.push_back(t.innerTypeFromTypeVariable());
+				}
+
+				type = createTypeVariable(std::move(typeClass));
+			}
+			return type;
+		}
+
+		void addInParameter(Expression* expr)
+		{
+			inExprs.push_back(expr);
+		}
+
+		void addOutParameter(Expression* expr)
+		{
+			outExprs.push_back(expr);
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.insert(ret.end(), inExprs.begin(), inExprs.end());
+			ret.insert(ret.end(), outExprs.begin(), outExprs.end());
+			return ret;
+		}		
+	};
+
 	struct SymbolExpression : public NodeImpl<SymbolExpression, Expression>
 	{
 		string symbol;
@@ -395,7 +457,8 @@ namespace AST
 		Type& getType() override
 		{
 			// TODO: Bubble up types through ops for now
-			return expr->getType();
+			Type& t = expr->getType();
+			return t;
 		}
 	};
 
@@ -403,6 +466,7 @@ namespace AST
 	{
 		TokenType opType;
 		Expression* expr = nullptr;
+		Type type;
 
 		string toString() override 
 		{ 
@@ -419,8 +483,20 @@ namespace AST
 
 		Type& getType() override
 		{
-			// TODO: Bubble up types through ops for now
-			return expr->getType();
+			if (type.isAny())
+			{
+				// TODO: Bubble up types through ops for now
+				const Type& t = expr->getType();
+				if (opType == TokenType::Asterisk)
+				{
+					type = createPointerTypeVariable(t);
+				}
+				else
+				{
+					type = t;
+				}
+			}
+			return type;
 		}
 	};
 
@@ -462,13 +538,16 @@ namespace AST
 	{
 		string symbol;
 		bool isParam = false;
+		bool isExternal = false;
 		Expression* typeExpr = nullptr;
 		Expression* initExpr = nullptr;
 		Symbol* symbolObj = nullptr;
 
 		string toString() override 
 		{ 
-			string s = "SymbolDeclaration(" + symbol + ")";
+			string s = "SymbolDeclaration(" + symbol + ", isExternal = " + 
+					std::to_string(isExternal) + ", isParam: " + 
+					std::to_string(isParam) + ")";
 			return s; 
 		}
 
@@ -544,6 +623,7 @@ namespace AST
 		}
 	};
 
+	// TODO: Replace with normal symbol declaration/definition
 	struct FunctionDeclaration : public NodeImpl<FunctionDeclaration, Declaration>
 	{
 		string symbol;
@@ -553,8 +633,6 @@ namespace AST
 		string toString() override 
 		{ 
 			string s;
-			if (!funcLiteral)
-				s = "External ";
 			s += "FunctionDeclaration(" + symbol + ")";
 			return s;
 		}

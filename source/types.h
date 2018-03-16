@@ -2,6 +2,7 @@
 #include <memory>
 
 struct PrimitiveClass;
+struct FunctionClass;
 
 struct TypeClass
 {
@@ -10,7 +11,8 @@ struct TypeClass
 		Any,
 		Primitive,
 		Array,
-		Function
+		Function,
+		Pointer
 	};
 
 	TypeClass(ClassType type) : type(type)
@@ -85,9 +87,20 @@ struct Type
 			this->typeClass->isSubClass(*o.typeClass);
 	}
 
+	bool isAny()
+	{
+		return kind == Any;
+	}
+
 	bool isFunction() const
 	{
 		return kind == Value && typeClass->type == TypeClass::Function;
+	}
+
+	const FunctionClass& getFunction() const
+	{
+		assert(isFunction());
+		return typeClass->as<FunctionClass>();
 	}
 
 	bool isPrimitive() const 
@@ -237,22 +250,45 @@ struct ArrayClass : TypeClass
 
 struct FunctionClass : TypeClass
 {
-	// TODO: Add signatures and figure out subtyping for functions
+	vector<Type> inTypes;
+	vector<Type> outTypes;
+	bool isVariadic = false;
+
+	// TODO: Figure out subtyping for functions
 	FunctionClass() 
 		: TypeClass(TypeClass::Function)
 	{}	
 
-	bool operator==(const ArrayClass& o) const
+	bool operator==(const FunctionClass& o) const
 	{
 		return true;
 	}
 
-	bool isSubClass(const ArrayClass& o) const
+	bool isSubClass(const FunctionClass& o) const
 	{
 		return true;
 	}
 };
 
+struct PointerClass : TypeClass
+{
+	Type type;
+
+	PointerClass(const Type& type) 
+		: TypeClass(TypeClass::Pointer)
+		, type(type)
+	{}	
+
+	bool operator==(const PointerClass& o) const
+	{
+		return true;
+	}
+
+	bool isSubClass(const PointerClass& o) const
+	{
+		return true;
+	}
+};
 
 bool TypeClass::operator==(const TypeClass& o) const
 {
@@ -263,6 +299,10 @@ bool TypeClass::operator==(const TypeClass& o) const
 		return this->compareAs<PrimitiveClass>(&o);
 	else if (o.type == Array)
 		return this->compareAs<ArrayClass>(&o);
+	else if (o.type == Function)
+		return this->compareAs<FunctionClass>(&o);
+	else if (o.type == Pointer)
+		return this->compareAs<PointerClass>(&o);
 
 	// Any
 	return true;
@@ -280,6 +320,10 @@ bool TypeClass::isSubClass(const TypeClass& o) const
 		return this->isSubClassAs<PrimitiveClass>(&o);
 	else if (o.type == Array)
 		return this->isSubClassAs<ArrayClass>(&o);
+	else if (o.type == Function)
+		return this->isSubClassAs<FunctionClass>(&o);
+	else if (o.type == Pointer)
+		return this->isSubClassAs<PointerClass>(&o);
 
 	return false;
 }
@@ -292,6 +336,12 @@ Type createPrimitiveType(PrimitiveClass::PrimitiveType primitiveType)
 Type createStaticArrayType(const Type& type, int length)
 {
 	return Type(false, std::make_shared<ArrayClass>(ArrayClass::Static, type, length));
+}
+
+Type createPointerTypeVariable(const Type& type)
+{
+	assert(type.isTypeVariable());
+	return Type(true, std::make_shared<PointerClass>(type));
 }
 
 Type createFunctionType()

@@ -104,7 +104,7 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 		Symbol* symbol = createSymbol(node->symbol, node);
 		symbol->isParam = node->isParam;
 
-		auto symbolSource = createDeclarationSymbolSource(symbol, node);
+		auto symbolSource = createDeclarationSymbolSource(symbol, node, node->isExternal);
 		this->currentScope->addSymbolSource(symbolSource);
 		node->symbolObj = symbol;
 
@@ -218,6 +218,10 @@ struct ASTProcessor : AST::Visitor
 
 				// TODO: How to apply unification to expression?
 			}
+		}
+		else if (node->isExternal)
+		{
+			symbol->firstInitOrder = node->order;
 		}
 
 		// TODO: Resolve any type requests within this and underlying scopes
@@ -426,6 +430,7 @@ int main(int argc, char** argv)
 			}
 		}
 
+		/*
 		std::stringstream llvmOutput;
 		LLVMIRGenerator llvmgenerator(&llvmOutput);
 		llvmgenerator.run(&ast);
@@ -441,7 +446,7 @@ int main(int argc, char** argv)
 				outFile << l << std::endl;
 			}
 		}
-
+*/
 		// output generic filename without ext
 		std::cout << outFileName;
 	}
