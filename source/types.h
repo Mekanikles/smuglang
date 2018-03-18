@@ -3,6 +3,8 @@
 
 struct PrimitiveClass;
 struct FunctionClass;
+struct PointerClass;
+struct ArrayClass;
 
 struct TypeClass
 {
@@ -117,6 +119,17 @@ struct Type
 	bool isArray() const 
 	{
 		return kind == Value && typeClass->type == TypeClass::Array;
+	}
+
+	bool isPointer() const 
+	{
+		return kind == Value && typeClass->type == TypeClass::Pointer;
+	}
+
+	const PointerClass& getPointer() const
+	{
+		assert(isPointer());
+		return typeClass->as<PointerClass>();
 	}
 
 	bool isTypeVariable() const
@@ -340,7 +353,7 @@ Type createStaticArrayType(const Type& type, int length)
 
 Type createPointerTypeVariable(const Type& type)
 {
-	assert(type.isTypeVariable());
+	assert(!type.isTypeVariable());
 	return Type(true, std::make_shared<PointerClass>(type));
 }
 

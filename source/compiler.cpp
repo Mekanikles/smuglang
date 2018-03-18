@@ -414,6 +414,7 @@ int main(int argc, char** argv)
 
 		string outFileName = string(".smug/") + matches[2].str();
 
+		/*
 		std::stringstream output;
 		CGenerator generator(&output);
 		generator.run(&ast);
@@ -429,8 +430,8 @@ int main(int argc, char** argv)
 				outFile << l << std::endl;
 			}
 		}
-
-		/*
+		*/
+		
 		std::stringstream llvmOutput;
 		LLVMIRGenerator llvmgenerator(&llvmOutput);
 		llvmgenerator.run(&ast);
@@ -446,7 +447,7 @@ int main(int argc, char** argv)
 				outFile << l << std::endl;
 			}
 		}
-*/
+
 		// output generic filename without ext
 		std::cout << outFileName;
 	}

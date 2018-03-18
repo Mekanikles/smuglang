@@ -489,7 +489,7 @@ namespace AST
 				const Type& t = expr->getType();
 				if (opType == TokenType::Asterisk)
 				{
-					type = createPointerTypeVariable(t);
+					type = createPointerTypeVariable(t.innerTypeFromTypeVariable());
 				}
 				else
 				{

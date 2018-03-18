@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/Optional.h"
 #include "llvm/ADT/STLExtras.h"
@@ -34,16 +36,47 @@ static std::map<string, llvm::Value*> s_namedValues;
 
 struct LLVMIRGenerator : AST::Visitor
 {
+	llvm::Type* resolveType(const Type& type)
+	{
+		if (type.isPointer())
+		{
+			const auto& pointer = type.getPointer();
+			auto pType = resolveType(pointer.type)->getPointerTo();
+			return pType;
+		}
+		else if (type.isPrimitive())
+		{
+			const auto& primitive = type.getPrimitive();
+			if (primitive.isInteger())
+			{
+				auto size = primitive.knowsSize() ? primitive.size : DEFAULT_INT_SIZE;
+				auto iType = llvm::IntegerType::get(m_context, size);
+				return iType;
+			}
+		}
+
+		assert("Cannot resolve type" && false);
+		return nullptr;
+	}
+
 	using AST::Visitor::visit;
 	void visit(AST::StringLiteral* node) override
 	{ 
-		auto s = llvm::StringRef(node->value);
-		m_valueStack.push_back(llvm::ConstantDataArray::getString(m_context, s, false));
+		/*auto s = llvm::StringRef(node->value);
+		auto zero = llvm::ConstantInt::get(llvm::Type::getInt8Ty(m_context), 0);
+		llvm::Value* indexList[2] = {zero, zero};
+		// TODO: Do not null terminate strings
+		m_valueStack.push_back(m_builder.CreateGEP(
+				llvm::ConstantDataArray::getString(m_context, s, true),
+				indexList));*/
+		const string str = processQuotedInputString(node->value);
+		m_valueStack.push_back(m_builder.CreateGlobalStringPtr(str.c_str()));
 	}
 	void visit(AST::IntegerLiteral* node) override 
 	{ 	
 		auto s = llvm::StringRef(node->value);
 		const Type& t = node->getType();
+
 		const auto& primitive = t.getPrimitive();
 		assert(primitive.isInteger());
 
@@ -65,6 +98,55 @@ struct LLVMIRGenerator : AST::Visitor
 	{
 		visit((AST::Expression*)node);
 		assert(false && "hmmm");
+	}
+
+	void visit(AST::SymbolDeclaration* node) override
+	{
+		Symbol* symbol = node->getSymbol();
+		const Type& type = symbol->type;
+
+		assert(type.isFunction());
+		{
+			const FunctionClass& function = type.getFunction();
+
+			std::vector<llvm::Type*> args;
+			for (const Type& t : function.inTypes)
+			{
+				args.push_back(resolveType(t));
+			}
+
+			// TODO: multiple return values
+			llvm::Type* returnType = nullptr;
+			if (!function.outTypes.empty())
+			{
+				assert(function.outTypes.size() == 1);
+				returnType = resolveType(function.outTypes[0]);
+			}
+
+			auto functionType = llvm::FunctionType::get(
+				returnType, args, function.isVariadic);
+
+			auto func = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, symbol->name, &m_module);
+			m_functions[symbol] = func;
+		}
+	}
+
+	void visit(AST::Call* node) override
+	{
+		Symbol* symbol = node->expr->dependency->getSymbol();
+		llvm::Function* func = m_functions[symbol];
+		assert(func);
+
+		std::vector<llvm::Value*> args;
+		for (auto* expr : node->args)
+		{
+			expr->accept(this);
+			assert(!m_valueStack.empty());
+			args.push_back(m_valueStack.back());
+			m_valueStack.pop_back();
+		}
+
+		m_builder.CreateCall(func, args);
 	}
 
 	void visit(AST::BinaryOp* node) override
@@ -214,9 +296,10 @@ struct LLVMIRGenerator : AST::Visitor
 		{
 			print("Warning: found unused values: ");
 			printLine(std::to_string(m_valueStack.size()));
-			// Temp
-			m_builder.CreateRet(m_valueStack.back());
 		}
+
+		// Main exit code
+		m_builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_context), 0));
 
 		verifyFunction(*mainFunc);
 
@@ -233,5 +316,9 @@ struct LLVMIRGenerator : AST::Visitor
 	llvm::Module& m_module;
 	llvm::LLVMContext& m_context;
 	llvm::IRBuilder<llvm::NoFolder> m_builder;
-	std::vector<llvm::Value*> m_valueStack;	
+	std::vector<llvm::Value*> m_valueStack;
+
+
+	std::unordered_map<Symbol*, llvm::Function*> m_functions;
+
 };
