@@ -183,6 +183,39 @@ void resolveDependencies(AST::Node* root)
 
 struct ASTProcessor : AST::Visitor
 {
+	void visit(AST::Call* node) override
+	{
+		if (node->processed)
+			return;
+		node->processed = true;
+
+		// Make sure function expression is processed
+		node->expr->accept(this);
+
+		Type& functionType = node->expr->getType();
+		assert(functionType.isFunction());
+		FunctionClass& function = functionType.getFunction();
+		auto& inTypes = function.inTypes;
+		auto& args = node->args;
+
+		if (function.isVariadic)
+			assert(args.size() >= inTypes.size());
+		else
+			assert(inTypes.size() == args.size());
+
+		for (int i = 0, s = inTypes.size(); i < s; ++i)
+		{
+			Type& inType = inTypes[i];
+			AST::Expression* arg = args[i];
+			Type& argType = arg->getType();
+			const auto result = unifyTypes(argType, inType);
+
+			// TODO: Handle implicit casts?
+			if (result == CannotUnify)
+				assert("Cannot unify function argument" && false);	
+		}		
+	}
+
 	void visit(AST::SymbolDeclaration* node) override
 	{
 		if (node->processed)
@@ -198,7 +231,7 @@ struct ASTProcessor : AST::Visitor
 		if (node->typeExpr)
 		{
 			node->typeExpr->accept(this);
-			const Type type = node->typeExpr->getType();
+			const Type& type = node->typeExpr->getType();
 			symbol->type = type.innerTypeFromTypeVariable();
 		}
 

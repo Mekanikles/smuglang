@@ -221,7 +221,9 @@ namespace AST
 		
 		StringLiteral(const string& value)
 			: value(value)
-			, type(createStaticArrayType(createPrimitiveType(PrimitiveClass::Char), value.length()))
+			, type(createMultiTypeVariable(
+					createStaticArrayType(createPrimitiveType(PrimitiveClass::Char), value.length()),
+					createPointerType(createPrimitiveType(PrimitiveClass::Char))))
 		{
 		}
 
@@ -396,7 +398,7 @@ namespace AST
 	struct Call : public NodeImpl<Call, Statement>
 	{
 		string function; // TODO: Remove?
-		SymbolExpression* expr = nullptr;
+		SymbolExpression* expr = nullptr; // TODO: Can be any expression
 		vector<Expression*> args;
 
 		string toString() override 

@@ -1,20 +1,26 @@
 
 #include <memory>
+#include <initializer_list>
 
+struct Type;
 struct PrimitiveClass;
 struct FunctionClass;
 struct PointerClass;
 struct ArrayClass;
+struct MultiTypeClass;
+
+bool isSubType(const Type& t, const MultiTypeClass& mtc);
 
 struct TypeClass
 {
 	enum ClassType
 	{
-		Any,
+		Any, // TODO: Necessary? Type can be Any also
+		MultiType,
 		Primitive,
 		Array,
 		Function,
-		Pointer
+		Pointer,
 	};
 
 	TypeClass(ClassType type) : type(type)
@@ -51,6 +57,12 @@ struct TypeClass
 	{
 		return *static_cast<const T*>(this);
 	}
+
+	template<typename T>
+	T& as()
+	{
+		return *static_cast<T*>(this);
+	}	
 };
 
 struct Type
@@ -85,6 +97,15 @@ struct Type
 	{
 		if (o.kind == Any)
 			return true;
+
+		// Special 1:n case, where we need to compare a type with a typeclass
+		if (!this->isMultiType() && o.isMultiType())
+		{
+			auto& t1 = *this;
+			auto& multiType = o.getMultiType();
+			return ::isSubType(t1, multiType);
+		};
+
 		return this->kind == o.kind &&
 			this->typeClass->isSubClass(*o.typeClass);
 	}
@@ -100,6 +121,12 @@ struct Type
 	}
 
 	const FunctionClass& getFunction() const
+	{
+		assert(isFunction());
+		return typeClass->as<FunctionClass>();
+	}
+
+	FunctionClass& getFunction()
 	{
 		assert(isFunction());
 		return typeClass->as<FunctionClass>();
@@ -130,6 +157,23 @@ struct Type
 	{
 		assert(isPointer());
 		return typeClass->as<PointerClass>();
+	}
+
+	bool isMultiType() const 
+	{
+		return kind == Value && typeClass->type == TypeClass::MultiType;
+	}
+
+	MultiTypeClass& getMultiType()
+	{
+		assert(isMultiType());
+		return typeClass->as<MultiTypeClass>();
+	}
+
+	const MultiTypeClass& getMultiType() const
+	{
+		assert(isMultiType());
+		return typeClass->as<MultiTypeClass>();
 	}
 
 	bool isTypeVariable() const
@@ -303,6 +347,58 @@ struct PointerClass : TypeClass
 	}
 };
 
+struct MultiTypeClass : TypeClass
+{
+	vector<Type> types;
+
+	MultiTypeClass(std::initializer_list<Type> types) 
+		: TypeClass(TypeClass::MultiType)
+		, types(types)
+	{}
+
+	void addType(const Type& type)
+	{
+		types.push_back(type);
+	}
+
+	bool operator==(const MultiTypeClass& o) const
+	{
+		return true;
+	}
+
+	bool isSubClass(const MultiTypeClass& o) const
+	{
+		for (const Type& t1 : types)
+		{
+			bool foundSubType = false;
+			for (const Type& t2 : o.types)
+			{
+				if (t1.isSubType(t2))
+				{
+					foundSubType = true;
+					break;
+				}
+			}
+
+			if (!foundSubType)
+				return false;
+		}
+
+		return true;
+	}
+};
+
+bool isSubType(const Type& t, const MultiTypeClass& mtc)
+{
+	for (const Type& t2 : mtc.types)
+	{
+		if (t.isSubType(t2))
+			return true;
+	}
+
+	return false;
+}
+
 bool TypeClass::operator==(const TypeClass& o) const
 {
 	if (this->type != o.type)
@@ -316,6 +412,8 @@ bool TypeClass::operator==(const TypeClass& o) const
 		return this->compareAs<FunctionClass>(&o);
 	else if (o.type == Pointer)
 		return this->compareAs<PointerClass>(&o);
+	else if (o.type == MultiType)
+		return this->compareAs<MultiTypeClass>(&o);
 
 	// Any
 	return true;
@@ -326,17 +424,16 @@ bool TypeClass::isSubClass(const TypeClass& o) const
 	if (o.type == TypeClass::Any)
 		return true;
 
-	if (o.type != this->type)
-		return false;
-
 	if (o.type == Primitive)
-		return this->isSubClassAs<PrimitiveClass>(&o);
+		return o.type == this->type && this->isSubClassAs<PrimitiveClass>(&o);
 	else if (o.type == Array)
-		return this->isSubClassAs<ArrayClass>(&o);
+		return o.type == this->type && this->isSubClassAs<ArrayClass>(&o);
 	else if (o.type == Function)
-		return this->isSubClassAs<FunctionClass>(&o);
+		return o.type == this->type && this->isSubClassAs<FunctionClass>(&o);
 	else if (o.type == Pointer)
-		return this->isSubClassAs<PointerClass>(&o);
+		return o.type == this->type && this->isSubClassAs<PointerClass>(&o);
+	else if (o.type == MultiType)
+		return o.type == this->type && this->isSubClassAs<MultiTypeClass>(&o);
 
 	return false;
 }
@@ -367,13 +464,27 @@ Type createTypeVariable(std::unique_ptr<TypeClass> typeClass)
 	return Type(true, std::move(typeClass));
 }
 
+template<class ...Ts>
+Type createMultiTypeVariable(Ts... types)
+{
+	return Type(false, std::make_shared<MultiTypeClass>(std::initializer_list<Type>{types...}));
+}
+
+Type createPointerType(const Type& type)
+{
+	return Type(false, std::make_shared<PointerClass>(type));
+}
+
 enum UnificationResult
 {
 	NoChange,
 	LeftChanged,
 	RightChanged,
+	BothChanged,
 	CannotUnify,
 };
+
+bool tryUnifyMultiTypes(Type& leftType, Type& rightType);
 
 UnificationResult unifyTypes(Type& leftType, Type& rightType)
 {
@@ -392,7 +503,52 @@ UnificationResult unifyTypes(Type& leftType, Type& rightType)
 		return RightChanged;
 	}
 
+	if (tryUnifyMultiTypes(leftType, rightType))
+		return BothChanged;
+
 	return CannotUnify;
+}
+
+bool tryUnifyMultiTypes(Type& leftType, Type& rightType)
+{
+	if (!leftType.isMultiType() || !rightType.isMultiType())
+		return false;
+
+	vector<Type> typeIntersection;
+
+	auto& leftMultiType = leftType.getMultiType();
+	auto& rightMultiType = leftType.getMultiType();
+	for (const Type& t1 : leftMultiType.types)
+	{
+		for (const Type& t2 : rightMultiType.types)
+		{
+			Type tc1 = t1;
+			Type tc2 = t2;
+			const auto result = unifyTypes(tc1, tc2);
+			if (result != CannotUnify)
+			{
+				Type tr;
+				if (result == LeftChanged)
+					tr = tc1;
+				else if (result == RightChanged)
+					tr = tc2;
+				else if (result == BothChanged)
+					tr = tc1;
+
+				typeIntersection.push_back(tr);
+				break;
+			}
+		}
+	}
+
+	if (!typeIntersection.empty())
+	{
+		leftMultiType.types = typeIntersection;
+		rightType = leftType;
+		return true;
+	}
+
+	return false;
 }
 
 
