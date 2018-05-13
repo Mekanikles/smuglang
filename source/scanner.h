@@ -204,7 +204,8 @@ public:
 						out += m_inStream.get();
 						assert(isdigit(m_inStream.peek()));
 						out += m_inStream.get();
-						// We can only digits after exponent sign
+						// TODO: Negative exponents!
+						// We can only parse digits after exponent sign
 						while (isdigit(m_inStream.peek()))
 							out += m_inStream.get();
 					}
@@ -359,6 +360,8 @@ public:
 					*outToken = Token(TokenType::Else);									
 				else if (w == "var")
 					*outToken = Token(TokenType::Var);
+				else if (w == "def")
+					*outToken = Token(TokenType::Def);
 				else if (w == "func")
 					*outToken = Token(TokenType::Func);
 				else if (w == "eval")

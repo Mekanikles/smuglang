@@ -207,68 +207,33 @@ struct Parser
 		return false;
 	}
 
-	bool parseFunctionTypeLiteral(AST::FunctionTypeLiteral** outNode)
+	bool parseFunctionExpression(AST::Expression** outExpr)
 	{
 		if (accept(TokenType::Func))
 		{
-			auto* node = createNode<AST::FunctionTypeLiteral>();		
-			*outNode = node;
-
-			if (accept(TokenType::OpenParenthesis))
+			// Optional signature
+			AST::FunctionSignature* signature = nullptr;
+			if (!parseFunctionSignature(&signature))
 			{
-				AST::Expression* expr;
-				// In params
-				while (parseExpression(&expr))
-				{
-					node->addInParameter(expr);
+				// Default empty signature
+				signature = createNode<AST::FunctionSignature>();
+			}
 
-					if (accept(TokenType::Comma))
-					{
-						if (accept(TokenType::Ellipsis))
-						{
-							// Must be last in expression list
-							node->isVariadic = true;
-							break;
-						}
-					}
-					else
-					{
-						break;
-					}
-				}
+			AST::StatementBody* statementBody = nullptr;
+			if (parseStatementBody(&statementBody))
+			{
+				auto* func = createNode<AST::FunctionLiteral>();
+				func->signature = signature;
+				func->body = statementBody;
 
-				// Output params
-				if (accept(TokenType::Arrow))
-				{
-					while (parseExpression(&expr))
-					{
-						node->addOutParameter(expr);
-
-						if (accept(TokenType::Comma))
-						{
-							if (accept(TokenType::Ellipsis))
-							{
-								// Must be last in expression list
-								node->isVariadic = true;
-								break;
-							}
-						}
-						else
-						{
-							break;
-						}
-					}
-				}
-
-				expect(TokenType::CloseParenthesis);
-
-				return true;
+				*outExpr = func;
 			}
 			else
 			{
-				// TODO: Is there a usecase for this? A lone 'func' would cover all possible functions
-				node->isAnyFunc = true;
+				*outExpr = signature;
 			}
+
+			return true;
 		}
 		
 		return false;
@@ -287,6 +252,8 @@ struct Parser
 				PrimitiveClass::SignedType sign = PrimitiveClass::UnknownSign;
 				uint size;
 
+				auto type = PrimitiveClass::Int;
+
 				if (lastToken().symbol == "c")
 				{
 					expect(TokenType::Dot);
@@ -298,6 +265,7 @@ struct Parser
 					}
 					else if (lastToken().symbol == "char")
 					{
+						type = PrimitiveClass::Char;
 						sign = PrimitiveClass::Signed;
 						size = 8;
 					}
@@ -347,7 +315,7 @@ struct Parser
 					errorOnAccept("Unknown primitive type");
 				}
 
-				auto typeClass = std::make_unique<PrimitiveClass>(PrimitiveClass::Int, size, sign);
+				auto typeClass = std::make_unique<PrimitiveClass>(type, size, sign);
 				auto* node = createNode<AST::TypeLiteral>(std::move(typeClass));		
 				*outNode = node;
 			}
@@ -362,10 +330,15 @@ struct Parser
 		return false;
 	}
 
+	bool parsePrimaryExpressionSymbolContinuation(const string& symbolName, AST::Expression** outNode)
+	{
+		// TODO: Parse function call etc
+		return false;
+	}
+
 	bool parsePrimaryExpression(AST::Expression** outNode)
 	{
 		AST::TypeLiteral* typeLiteral;
-		AST::FunctionTypeLiteral* functionTypeLiteral;
 		if (accept(TokenType::OpenParenthesis))
 		{
 			if (!parseExpression(outNode))
@@ -408,16 +381,19 @@ struct Parser
 		}
 		else if (accept(TokenType::Symbol))
 		{
-			auto* expr = createNode<AST::SymbolExpression>(lastToken().symbol);
-			*outNode = expr;
+			if (!parsePrimaryExpressionSymbolContinuation(lastToken().symbol, outNode))
+			{
+				// Was simple symbol expression
+				auto* expr = createNode<AST::SymbolExpression>(lastToken().symbol);
+				*outNode = expr;
+			}
 		}
 		else if (parseTypeLiteral(&typeLiteral))
 		{
 			*outNode = typeLiteral;
 		}
-		else if (parseFunctionTypeLiteral(&functionTypeLiteral))
+		else if (parseFunctionExpression(outNode))
 		{
-			*outNode = functionTypeLiteral;
 		}
 		else
 		{
@@ -623,48 +599,184 @@ struct Parser
 		return true;
 	}
 
-	bool parseParamDeclaration(AST::SymbolDeclaration** outDeclaration)
+	bool parseFunctionInParam(AST::FunctionInParam** outNode)
 	{
-		AST::SymbolDeclaration* symbolDecl;
-		if (parseSymbolDeclaration(&symbolDecl))
+		if (!accept(TokenType::Symbol))
+			return false;
+		
+		auto node = createNode<AST::FunctionInParam>();
+		node->name = lastToken().symbol;
+
+		if (accept(TokenType::Ellipsis))
+			node->isVariadic = true;
+
+		// Optional type declaration
+		node->typeExpr = nullptr;
+		if (accept(TokenType::Colon))
 		{
-			symbolDecl->isParam = true;
-			*outDeclaration = symbolDecl;
-			return true;
+			// TODO: Should handle generic expressions
+			AST::Expression* expr;
+			if (!parseExpression(&expr))
+			{
+				errorOnExpect("Expected expression");
+			}
+
+			node->typeExpr = expr;
 		}
-		return false;
+
+		// Optional initialization
+		node->initExpr = nullptr;
+		if (accept(TokenType::Equals))
+		{
+			AST::Expression* expr;
+			if (parseExpression(&expr))
+			{
+				node->initExpr = expr;
+			}
+			else
+			{
+				errorOnExpect("Expected expression");
+			}
+		}
+
+		*outNode = node;
+
+		return true;
 	}
 
-	bool parseFuncLiteralSignature(AST::FuncLiteralSignature** outSignature)
+	bool parseFunctionOutParam(AST::FunctionOutParam** outNode)
 	{
+		AST::FunctionOutParam* node = nullptr;
+		AST::Expression* firstExpr = nullptr;
+		// See if this is a named output
+		if (accept(TokenType::Symbol))
+		{
+			node = createNode<AST::FunctionOutParam>();
+
+			if (!parsePrimaryExpressionSymbolContinuation(lastToken().symbol, &firstExpr))
+			{
+				// If we have optional type declaration, we know that symbol was param name
+				if (accept(TokenType::Colon))
+				{
+					node->name = lastToken().symbol;
+					if (!parseExpression(&node->typeExpr))
+					{
+						errorOnExpect("Expected expression");
+					}
+				}
+				else
+				{
+					node->typeExpr = createNode<AST::SymbolExpression>(lastToken().symbol);
+				}
+			}
+			else
+			{
+				// If we have a non-simple expression followed by a colon, the param is malformed
+				if (peek(TokenType::Colon))
+				{
+					errorOnAccept("Parameter name must be simple symbol");
+				}
+
+				node->typeExpr = firstExpr;
+			}
+		}
+		// Otherwise it is just a type expr
+		else if (parseExpression(&firstExpr))
+		{
+			node = createNode<AST::FunctionOutParam>();
+
+			// If we have a non-simple expression followed by a colon, the param is malformed
+			if (peek(TokenType::Colon))
+			{
+				errorOnAccept("Parameter name must be simple symbol");
+			} 
+
+			node->typeExpr = firstExpr;
+		}
+
+		if (!node)
+			return false;
+
+		*outNode = node;
+		return true;
+	}
+
+	bool parseFunctionSignature(AST::FunctionSignature** outSignature)
+	{
+		AST::FunctionSignature* node;
+
 		if (accept(TokenType::OpenParenthesis))
 		{
-			auto* node = createNode<AST::FuncLiteralSignature>();
+			node = createNode<AST::FunctionSignature>();
 			*outSignature = node;
 
-			AST::SymbolDeclaration* declNode;
-			while (parseParamDeclaration(&declNode))
+			node->specifiedInParams = true;
+
+			// Inparams
+			AST::FunctionInParam* inParam;
+			while (parseFunctionInParam(&inParam))
 			{
-				node->addParameterDeclaration(declNode);
+				node->inParams.push_back(inParam);
 
 				if (accept(TokenType::Comma))
 				{
-					continue;
+					if (accept(TokenType::Ellipsis))
+					{
+						if (accept(TokenType::Comma))
+							continue;
+					}
+					else
+					{
+						continue;
+					}
 				}
 				else
 				{
 					break;
 				}
 			}
-
-			// TODO:: Add output params
-
 			expect(TokenType::CloseParenthesis);
-
-			return true;
 		}
 
-		return false;
+		// Output params
+		AST::FunctionOutParam* outParam;
+		if (accept(TokenType::Arrow))
+		{
+			if (!node)
+				node = createNode<AST::FunctionSignature>();
+
+			if (accept(TokenType::OpenParenthesis))
+			{
+				while (parseFunctionOutParam(&outParam))
+				{
+					node->outParams.push_back(outParam);
+
+					if (accept(TokenType::Comma))
+					{
+						continue;
+					}
+					else
+					{
+						break;
+					}
+				}
+				expect(TokenType::CloseParenthesis);
+			}
+			else if (parseFunctionOutParam(&outParam))
+			{
+				node->outParams.push_back(outParam);
+			}
+			else
+			{
+				errorOnExpect("Expected out parameter declaration");
+			}
+		}
+
+		if (!node)
+			return false;
+
+		*outSignature = node;
+		return true;
 	}
 
 	bool parseStatementBody(AST::StatementBody** outStatementBody)
@@ -692,7 +804,7 @@ struct Parser
 		return false;
 	}
 
-	bool parseFunctionDeclaration(AST::FunctionDeclaration** outDeclaration)
+	/*bool parseFunctionDeclaration(AST::FunctionDeclaration** outDeclaration)
 	{
 		if (accept(TokenType::Func))
 		{
@@ -730,13 +842,13 @@ struct Parser
 		}
 
 		return false;
-	}
+	}*/
 
 	// TODO: Should output statement?
 	bool parseDeclarationStatement(AST::Declaration** outDeclaration)
 	{
-		AST::FunctionDeclaration* funcDecl;
-		if (accept(TokenType::Var) || accept(TokenType::Extern))
+		//AST::FunctionDeclaration* funcDecl;
+		if (accept(TokenType::Var) || accept(TokenType::Def) || accept(TokenType::Extern))
 		{
 			const bool isExternalDecl = lastToken().type == TokenType::Extern;
 
@@ -752,12 +864,12 @@ struct Parser
 			*outDeclaration = symbolDecl;
 			return true;
 		}
-		else if (parseFunctionDeclaration(&funcDecl))
+		/*else if (parseFunctionDeclaration(&funcDecl))
 		{
 
 			*outDeclaration = funcDecl;
 			return true;
-		}
+		}*/
 
 		return false;
 	}
@@ -848,7 +960,54 @@ struct Parser
 		AST::StatementBody* statementBody;
 		AST::Expression* expression;
 
-		if (accept(TokenType::Import))
+		if (accept(TokenType::Func))
+		{
+			// Short-hand func declaration
+			if (accept(TokenType::Symbol))
+			{
+				const string functionName = lastToken().symbol;
+				*outStatement = nullptr;
+				AST::FunctionSignature* signature;
+				if (!parseFunctionSignature(&signature))
+				{
+					errorOnAccept("Expected function signature following function delcaration");
+					return true;
+				}
+				
+				if (!parseStatementBody(&statementBody))
+				{
+					errorOnAccept("Expected statement body following function declaration");
+					return true;
+				}
+
+				auto node = createNode<AST::FunctionDeclaration>();
+				node->symbol = functionName;
+
+				auto* func = createNode<AST::FunctionLiteral>();
+				func->signature = signature;
+				func->body = statementBody;
+
+				node->funcLiteral = func;
+
+				*outStatement = node;
+			}
+			else
+			{
+				// Treat this as an expression
+
+				// Optional signature
+				AST::FunctionSignature* signature;
+				if (!parseFunctionSignature(&signature))
+				{
+					signature = createNode<AST::FunctionSignature>();
+				}
+
+				*outStatement = signature;
+			}
+
+			expect(TokenType::SemiColon, false);
+		}
+		else if (accept(TokenType::Import))
 		{
 			AST::Import::Type importType = AST::Import::Type_Native;
 
@@ -992,7 +1151,7 @@ struct Parser
 		return false;
 	}
 
-	bool parse(AST::AST* ast)
+	bool parse(AST::ASTObject* ast)
 	{
 		assert(!ast->root);		
 		auto* node = createNode<AST::Module>();

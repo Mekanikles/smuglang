@@ -350,24 +350,22 @@ struct BodyGenerator : AST::Visitor
 		Output output { out, out, out }; // TODO: bleh
 		BodyGenerator bodyGenerator(output, 0);
 
-		int size = node->signature->params.size();
+		int size = node->signature->inParams.size();
 		for (int i = 0; i < size; ++i)
 		{
-			AST::SymbolDeclaration* decl = node->signature->params[i];
+			AST::FunctionInParam* inParam = node->signature->inParams[i];
 
-			assert(decl->symbolObj);
-			Type& type = decl->symbolObj->type;
+			Type& type = inParam->getType();
 			assert(!type.isTypeVariable());
 			auto typeClass = type.typeClass.get();
 
-			const string& name = decl->symbolObj->name;
-			assert(decl->symbolObj->declNode == decl);
-			const uint declOrder = decl->order;
+			const string& name = inParam->name;
+			const uint declOrder = inParam->order;
 
 			*out << getTypeClassName(typeClass);
 			*out << " " << name << "_" << declOrder;
-			if (decl->initExpr)
-				decl->initExpr->accept(&bodyGenerator);
+			if (inParam->initExpr)
+				inParam->initExpr->accept(&bodyGenerator);
 
 			if (i < size - 1)
 				*out << ", ";

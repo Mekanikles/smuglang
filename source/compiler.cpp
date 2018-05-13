@@ -22,7 +22,7 @@ const bool DEFAULT_INT_ISSIGNED = true;
 #include "evaluation.h"
 #include "parser.h"
 #include "output.h"
-#include "generator.h"
+//#include "generator.h"
 #include "llvmgenerator.h"
 
 string debugName(SymbolSource* o) 
@@ -64,18 +64,42 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 		AST::Visitor::visit(node);
 	}
 
+	void visit(AST::FunctionLiteral* node) override
+	{
+		assert(node->signature);
+		AST::FunctionSignature* signature = node->signature;
+
+		assert(node->body);
+		auto& paramScope = node->body->scope;
+
+		// Parse signature params here where we have knowledge about the body
+		for (AST::FunctionInParam* param : signature->inParams)
+		{
+			Symbol* symbol = createSymbol(param->name);
+			symbol->isParam = true;
+
+			auto symbolSource = createDeclarationSymbolSource(symbol, param, false);
+			paramScope.addSymbolSource(symbolSource);
+			//node->symbolObj = symbol;
+
+			//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)paramScope.id));		
+		}
+
+		AST::Visitor::visit(node);
+	}
+
 	// TODO: Copy paste code, generalize declarations somehow
 	void visit(AST::FunctionDeclaration* node) override
 	{
 		// Make sure symbol is not declared in same scope
 		// 	It is okay to overshadow parent scope declarations.		
-		auto exitingDeclaration = this->currentScope->lookUpDeclarationInScope(node->symbol);
-		if (exitingDeclaration)
+		auto existingDeclaration = this->currentScope->lookUpDeclarationInScope(node->symbol);
+		if (existingDeclaration)
 		{
-			assert(false && "Symbol already declared");
+			assert(false && "Function already declared");
 		}
 
-		Symbol* symbol = createSymbol(node->symbol, node);
+		Symbol* symbol = createSymbol(node->symbol);
 		symbol->type = createFunctionType();
 		// InitOrder of functions is 0 since they are initialized at compile time
 		symbol->firstInitOrder = 0;
@@ -84,7 +108,7 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 		this->currentScope->addSymbolSource(symbolSource);
 		node->symbolSource = symbolSource;
 
-		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)m_currentScope));
+		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)this->currentScope->id));
 
 		AST::Visitor::visit(node);
 	}
@@ -101,14 +125,13 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 
 		// TODO: If this symbol is referenced in the type or init expr
 		//	Can it lead to an infinite recursion when inferring types?
-		Symbol* symbol = createSymbol(node->symbol, node);
-		symbol->isParam = node->isParam;
+		Symbol* symbol = createSymbol(node->symbol);
 
 		auto symbolSource = createDeclarationSymbolSource(symbol, node, node->isExternal);
 		this->currentScope->addSymbolSource(symbolSource);
 		node->symbolObj = symbol;
 
-		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)m_currentScope));
+		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)this->currentScope->id));
 		AST::Visitor::visit(node);
 	}
 
@@ -201,7 +224,7 @@ struct ASTProcessor : AST::Visitor
 		if (function.isVariadic)
 			assert(args.size() >= inTypes.size());
 		else
-			assert(inTypes.size() == args.size());
+ 			assert(inTypes.size() == args.size());
 
 		for (int i = 0, s = inTypes.size(); i < s; ++i)
 		{
@@ -404,7 +427,7 @@ void processAST(AST::Node* root)
 		assert(false && "Had unresolved symbols");
 }
 
-void processAST(AST::AST* ast)
+void processAST(AST::ASTObject* ast)
 {
 	processAST(ast->root);
 }
@@ -417,7 +440,7 @@ int main(int argc, char** argv)
 		ERROR("No input files specified");
 
 	FileSourceInput fileInput(args[0]);
-	AST::AST ast;
+	AST::ASTObject ast;
 
 	LOG("Parsing...");
 	Parser parser(&fileInput);

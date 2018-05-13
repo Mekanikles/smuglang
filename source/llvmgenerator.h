@@ -47,7 +47,7 @@ struct LLVMIRGenerator : AST::Visitor
 		else if (type.isPrimitive())
 		{
 			const auto& primitive = type.getPrimitive();
-			if (primitive.isInteger())
+			if (primitive.isInteger() || primitive.isChar())
 			{
 				auto size = primitive.knowsSize() ? primitive.size : DEFAULT_INT_SIZE;
 				auto iType = llvm::IntegerType::get(m_context, size);
@@ -225,7 +225,7 @@ struct LLVMIRGenerator : AST::Visitor
 	{
 	}
 
-	void run(AST::AST* ast)
+	void run(AST::ASTObject* ast)
 	{
 		// Init llvm stuff
 		{

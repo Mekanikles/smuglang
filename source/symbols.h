@@ -21,22 +21,22 @@ struct Symbol
 	bool isFunction = false;
 
 	// TODO: Remove node, SymbolSource should contain extra data instead
-	AST::Declaration* declNode = nullptr;
+	//AST::Declaration* declNode = nullptr;
 	uint firstInitOrder = ~0U;
 
-	bool isdeclared()
-	{
-		return declNode != nullptr;
-	}
+	//bool isdeclared()
+	//{
+	//	return declNode != nullptr;
+	//}
 };
 
 vector<Symbol*> s_symbols;
 
-Symbol* createSymbol(string name, AST::Declaration* declNode)
+Symbol* createSymbol(string name)
 {
 	Symbol* s = new Symbol { name };
 	s_symbols.push_back(s);
-	s->declNode = declNode;
+	//s->declNode = declNode;
 	return s;
 }
 

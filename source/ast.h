@@ -18,14 +18,16 @@ namespace AST
 	struct IntegerLiteral;
 	struct FloatLiteral;
 	struct TypeLiteral;
-	struct FunctionTypeLiteral;
+	struct FunctionInParam;
+	struct FunctionOutParam;
+	struct FunctionSignature;
 	struct FunctionLiteral;
 	struct UnaryOp;
 	struct UnaryPostfixOp;
 	struct BinaryOp;
 	struct EvalStatement;
 
-	struct FuncLiteralSignature;
+	//struct FuncLiteralSignature;
 	struct StatementBody;
 
 	struct Visitor;
@@ -36,7 +38,7 @@ namespace AST
 	void visitChildren(Expression* node, Visitor* v);
 
 	void visitChildren(StatementBody* node, Visitor* v);
-	void visitChildren(FuncLiteralSignature* node, Visitor* v);
+	//void visitChildren(FuncLiteralSignature* node, Visitor* v);
 
 	struct Visitor
 	{
@@ -58,7 +60,9 @@ namespace AST
 		virtual void visit(IntegerLiteral* node) { visit((Expression*)node); }
 		virtual void visit(FloatLiteral* node) { visit((Expression*)node); }
 		virtual void visit(TypeLiteral* node) { visit((Expression*)node); }
-		virtual void visit(FunctionTypeLiteral* node) { visit((Expression*)node); }
+		virtual void visit(FunctionInParam* node) { visit((Node*)node); }
+		virtual void visit(FunctionOutParam* node) { visit((Node*)node); }
+		virtual void visit(FunctionSignature* node) { visit((Expression*)node); }
 		virtual void visit(FunctionLiteral* node) { visit((Expression*)node); }
 		virtual void visit(UnaryOp* node) { visit((Expression*)node); }
 		virtual void visit(UnaryPostfixOp* node) { visit((Expression*)node); }
@@ -66,7 +70,7 @@ namespace AST
 		virtual void visit(EvalStatement* node) { visit((Statement*)node); }
 
 		virtual void visit(StatementBody* node) { visit((Statement*)node); }
-		virtual void visit(FuncLiteralSignature* node) { visit((Node*)node); }
+		//virtual void visit(FuncLiteralSignature* node) { visit((Node*)node); }
 	};
 
 	static uint s_nodeCount = 0;
@@ -87,7 +91,15 @@ namespace AST
 		bool processed = false;
 	};
 
-	void visitChildren(Node* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
+	void visitChildren(Node* node, Visitor* v) 
+	{ 
+		auto children = node->getChildren();
+		for (auto n : children) 
+		{
+			//print("Visiting child node: "); printLine(n->toString());
+			n->accept(v); 
+		}
+	}
 
 	struct Statement : Node
 	{};
@@ -103,6 +115,8 @@ namespace AST
 	struct Expression : Statement
 	{
 		virtual Type& getType() = 0;
+
+		virtual bool isSymbolExpression() { return false; }
 	};
 
 	void visitChildren(Expression* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
@@ -110,7 +124,11 @@ namespace AST
 	template<typename T, typename P = Node>
 	struct NodeImpl : P
 	{
-		void accept(Visitor* v) override { v->visit((T*)this); }
+		void accept(Visitor* v) override 
+		{ 
+			//print("Accepting node: "); printLine(this->toString());
+			v->visit((T*)this); 
+		}
 	};
 
 	struct StatementBody : public NodeImpl<StatementBody, Statement>
@@ -306,18 +324,87 @@ namespace AST
 		}	
 	};
 
-	struct FunctionTypeLiteral : public NodeImpl<FunctionTypeLiteral, Expression>
+	struct FunctionInParam : public NodeImpl<FunctionInParam, Node>
 	{
-		vector<Expression*> inExprs;
-		vector<Expression*> outExprs;
-		bool isAnyFunc = false;
+		string name;
+		Expression* typeExpr = nullptr;
+		Expression* initExpr = nullptr;
 		bool isVariadic = false;
+		Type type;
+
+		Type& getType()
+		{
+			if (typeExpr)
+			{
+				const auto result = unifyTypes(type, typeExpr->getType());
+				assert(result != CannotUnify);
+			}
+			if (initExpr)
+			{
+				const auto result = unifyTypes(type, typeExpr->getType());
+				if (result == CannotUnify)
+					assert("Cannot unify types" && false);
+			}
+			return type;
+		}
+
+		string toString() override 
+		{ 
+			string s = "FunctionInParam(" + name + ")";
+			return s;
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			auto ret =  vector<Node*>();
+			if (typeExpr)
+				ret.push_back(typeExpr);
+			if (initExpr)
+				ret.push_back(initExpr);
+			return ret;
+		}
+	};
+
+	struct FunctionOutParam : public NodeImpl<FunctionInParam, Node>
+	{
+		string name;
+		Expression* typeExpr = nullptr;
+
+		Type& getType()
+		{
+			assert(typeExpr);
+			return typeExpr->getType();
+		}
+
+		string toString() override 
+		{ 
+			string s = "FunctionOutParam(" + name + ")";
+			return s;
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			assert(typeExpr);
+			auto ret =  vector<Node*>();
+			if (typeExpr)
+				ret.push_back(typeExpr);
+			return ret;
+		}		
+	};
+
+	struct FunctionSignature : public NodeImpl<FunctionSignature, Expression>
+	{
+		vector<FunctionInParam*> inParams;
+		vector<FunctionOutParam*> outParams;
+		bool specifiedInParams = false;
+		bool specifiedOutParams = false;
+		bool isCVariadic = false;
 		Type type;
 
 		string toString() override 
 		{ 
-			string s = "FunctionTypeLiteral(isVariadic: " + std::to_string(isVariadic) +
-					", isAny: " + std::to_string(isAnyFunc) + ")";
+			string s = "FunctionTypeLiteral(isCVariadic: " + std::to_string(isCVariadic) +
+					", isAny: " + std::to_string(type.isAny()) + ")";
 			return s;
 		}
 
@@ -327,18 +414,18 @@ namespace AST
 			if (type.isAny())
 			{
 				auto typeClass = std::make_unique<FunctionClass>();
-				typeClass->isVariadic = isVariadic;
+				typeClass->isVariadic = isCVariadic;
 
-				for (auto* expr : inExprs)
+				for (auto* p : inParams)
 				{
-					const Type& t = expr->getType();
-					typeClass->inTypes.push_back(t.innerTypeFromTypeVariable());
+					Type& t = p->getType();
+					typeClass->inTypes.push_back(t);
 				}
 
-				for (auto* expr : outExprs)
+				for (auto* p : outParams)
 				{
-					const Type& t = expr->getType();
-					typeClass->outTypes.push_back(t.innerTypeFromTypeVariable());
+					Type& t = p->getType();
+					typeClass->outTypes.push_back(t);
 				}
 
 				type = createTypeVariable(std::move(typeClass));
@@ -346,21 +433,11 @@ namespace AST
 			return type;
 		}
 
-		void addInParameter(Expression* expr)
-		{
-			inExprs.push_back(expr);
-		}
-
-		void addOutParameter(Expression* expr)
-		{
-			outExprs.push_back(expr);
-		}
-
 		const vector<Node*> getChildren() override
 		{
 			vector<Node*> ret;
-			ret.insert(ret.end(), inExprs.begin(), inExprs.end());
-			ret.insert(ret.end(), outExprs.begin(), outExprs.end());
+			ret.insert(ret.end(), inParams.begin(), inParams.end());
+			ret.insert(ret.end(), outParams.begin(), outParams.end());
 			return ret;
 		}		
 	};
@@ -373,6 +450,8 @@ namespace AST
 		SymbolExpression(string symbol)
 			: symbol(symbol)
 		{}	
+
+		bool isSymbolExpression() override { return true; }
 
 		Symbol* getSymbol()
 		{
@@ -570,7 +649,7 @@ namespace AST
 		}		
 	};
 
-	struct FuncLiteralSignature : public NodeImpl<FuncLiteralSignature>
+	/*struct FuncLiteralSignature : public NodeImpl<FuncLiteralSignature>
 	{
 		vector<SymbolDeclaration*> params;
 
@@ -589,14 +668,15 @@ namespace AST
 		{
 			return vector<Node*>(params.begin(), params.end());
 		}	
-	};
+	};*/
 
-	void visitChildren(FuncLiteralSignature* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
+	//void visitChildren(FuncLiteralSignature* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
 
 	struct FunctionLiteral : public NodeImpl<FunctionLiteral, Expression>
 	{
 		Type type;
-		FuncLiteralSignature* signature = nullptr;
+		//FuncLiteralSignature* signature = nullptr;
+		FunctionSignature* signature = nullptr;
 		StatementBody* body = nullptr;
 
 		FunctionLiteral()
@@ -654,7 +734,7 @@ namespace AST
 		}
 	};
 
-	struct AST
+	struct ASTObject
 	{
 		Node* root = nullptr;
 	};

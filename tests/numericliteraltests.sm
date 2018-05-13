@@ -1,8 +1,20 @@
 
-extern printf : func(#primitives.c.char*, ... -> #primitives.c.int);
+var cchar = #primitives.c.char;
+var cint = #primitives.c.int;
 
-printf("The number: %i\n", 5 * 4 - 3 / 2 * 1 + 2 * 3);
+func print(fmt : cchar*, args...) -> ()
+{
+	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
+	printf(fmt, args);
+};
+
+var main : func()
+{
+	var hej = "hej";
+	print(hej);
+};
+
+main();
 
 
-//printf(5);
 
