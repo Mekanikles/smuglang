@@ -124,7 +124,7 @@ struct LLVMIRGenerator : AST::Visitor
 			}
 
 			auto functionType = llvm::FunctionType::get(
-				returnType, args, function.isVariadic);
+				returnType, args, function.isCVariadic);
 
 			auto func = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, symbol->name, &m_module);
 			m_functions[symbol] = func;

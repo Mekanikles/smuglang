@@ -341,10 +341,24 @@ struct Parser
 		AST::TypeLiteral* typeLiteral;
 		if (accept(TokenType::OpenParenthesis))
 		{
-			if (!parseExpression(outNode))
-				errorOnExpect("Expected expression");
+			auto* tuple = createNode<AST::Tuple>();
+
+			AST::Expression* expr = nullptr;
+			if (parseExpression(&expr))
+			{
+				tuple->exprs.push_back(expr);
+				while (accept(TokenType::Comma))
+				{
+					if (parseExpression(&expr))
+						tuple->exprs.push_back(expr);
+					else
+						errorOnExpect("Expected expression");
+				}		
+			}
 
 			expect(TokenType::CloseParenthesis);
+
+			*outNode = tuple;
 		}
 		else if (acceptUnaryOperator())
 		{

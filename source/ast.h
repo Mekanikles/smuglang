@@ -1,5 +1,7 @@
 #pragma once
 
+struct FunctionArgumentBinding;
+
 namespace AST
 {
 	struct Node;
@@ -14,6 +16,7 @@ namespace AST
 	struct SymbolDeclaration;
 	struct FunctionDeclaration;
 	struct SymbolExpression;
+	struct Tuple;
 	struct StringLiteral;
 	struct IntegerLiteral;
 	struct FloatLiteral;
@@ -403,7 +406,7 @@ namespace AST
 
 		string toString() override 
 		{ 
-			string s = "FunctionTypeLiteral(isCVariadic: " + std::to_string(isCVariadic) +
+			string s = "FunctionSignature(isCVariadic: " + std::to_string(isCVariadic) +
 					", isAny: " + std::to_string(type.isAny()) + ")";
 			return s;
 		}
@@ -414,7 +417,7 @@ namespace AST
 			if (type.isAny())
 			{
 				auto typeClass = std::make_unique<FunctionClass>();
-				typeClass->isVariadic = isCVariadic;
+				typeClass->isCVariadic = isCVariadic;
 
 				for (auto* p : inParams)
 				{
@@ -472,6 +475,33 @@ namespace AST
 		}
 	};
 
+	struct Tuple : public NodeImpl<Tuple, Expression>
+	{
+		vector<Expression*> exprs;
+		Type type;
+
+		string toString() override 
+		{ 
+			string s;
+			s = "Tuple";
+			return s; 
+		}
+
+		Type& getType() override
+		{
+			// TODO:
+			if (type.isAny())
+			{
+				vector<Type> types;
+				for (auto* e : exprs)				
+					types.push_back(e->getType());
+
+				type = createTupleType(std::move(types));
+			}
+			return type;
+		}
+	};
+
 	// TODO: split functions into calls and call-expression?
 	//	for funcs that can act as an expression/operand
 	struct Call : public NodeImpl<Call, Statement>
@@ -479,6 +509,8 @@ namespace AST
 		string function; // TODO: Remove?
 		SymbolExpression* expr = nullptr; // TODO: Can be any expression
 		vector<Expression*> args;
+
+		FunctionArgumentBinding* argBinding = nullptr;
 
 		string toString() override 
 		{ 
@@ -740,12 +772,9 @@ namespace AST
 	};
 }
 
-vector<AST::Node*> s_nodes;
-
 template<typename NodeT, typename... Args>
 NodeT* createNode(Args... args)
 {
-	NodeT* n = new NodeT(std::forward<Args>(args)...);
-	s_nodes.push_back(n);
+	NodeT* n = createObject<NodeT>(std::forward<Args>(args)...);
 	return n;
 }

@@ -58,4 +58,25 @@ void printError(const string& str)
 
 #define ERROR(text) do { printError(text); exit(-1); } while(false)
 
+template<typename T>
+struct ObjectStore
+{
+	static vector<T*> s_instances;
+};
+
+template<typename T>
+vector<T*> ObjectStore<T>::s_instances = {};
+
+template<typename T, typename... Args>
+T* createObject(Args... args)
+{
+	T* o = new T(std::forward<Args>(args)...);
+	ObjectStore<T>::s_instances.push_back(o);
+	return o;
+}
+
+
+
+
+
 
