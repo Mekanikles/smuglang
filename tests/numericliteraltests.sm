@@ -17,7 +17,7 @@ var main = func()
 
 main();
 */
-
+ 
 var hej = "Hej världen!";
 
 func print(fmt : cchar*, args...) -> ()

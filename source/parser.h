@@ -532,21 +532,16 @@ struct Parser
 	bool parseCallParameters(AST::Call* call)
 	{
 		AST::Expression* exprNode;
-		while (parseExpression(&exprNode))
+		if (parseExpression(&exprNode))
 		{
 			call->args.push_back(exprNode);
 
-			if (peek(TokenType::CloseParenthesis))
+			while (accept(TokenType::Comma))
 			{
-				break;
-			}
-			else if (expect(TokenType::Comma))
-			{
-				continue;
-			}
-			else
-			{
-				break;
+				if (parseExpression(&exprNode))
+					call->args.push_back(exprNode);
+				else
+					errorOnExpect("Expected expression");
 			}
 		}
 
