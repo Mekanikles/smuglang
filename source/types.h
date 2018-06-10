@@ -26,14 +26,19 @@ struct TypeClass
 	};
 
 	TypeClass(ClassType type) : type(type)
-	{}
+	{
+		static unsigned int s_typeId = 0;
+		typeId = s_typeId++;
+	}
 
 	TypeClass(const TypeClass& o) = delete;
 	TypeClass& operator=(const TypeClass& o) = delete;
 
 	virtual std::unique_ptr<TypeClass> clone() const = 0;
+	virtual string toString() const = 0;
 
 	ClassType type = Any;
+	unsigned int typeId;
 	// TODO: symbol might not be known at time of unification
 	//	and can be the same "name" but refer to different symbols
 	//	because of variable/symbol shadowing. There can be a situation
@@ -95,6 +100,30 @@ struct Type
 	Type clone() const
 	{
 		return Type(kind, typeClass ? typeClass->clone() : nullptr);
+	}
+
+	string toString() const
+	{
+		string s;
+		if (kind == Any)
+		{
+			s = "Any";
+			return s;
+		}
+		else if (kind == TypeVariable)
+		{
+			s = "TypeVar";
+		}
+		else
+		{
+			s = "Value";
+		}
+		assert(typeClass);
+		s += "(";
+		s += typeClass->toString();
+		s += ")";
+		s += string(" #") + std::to_string(typeClass->typeId);
+		return s;
 	}
 
 	bool operator==(const Type& o) const
@@ -261,6 +290,31 @@ struct PrimitiveClass : TypeClass
 		return std::make_unique<PrimitiveClass>(primitiveType, knownSize, size, signedType);
 	}
 
+	virtual string toString() const override
+	{
+		string s;
+		if (signedType == Signed)
+			s += "Signed ";
+		else if (signedType == Unsigned)
+			s += "Unsigned ";
+
+		if (primitiveType == Int)
+			s += "Int";
+		else if (primitiveType == Float)
+			s += "Float";
+		else if (primitiveType == Char)
+			s += "Char";
+
+		if (knownSize)
+		{
+			s += "(";
+			s += std::to_string(size);
+			s += ")";
+		}
+
+		return s;
+	}
+
 	bool isInteger() const { return primitiveType == Int; }
 	bool isChar() const { return primitiveType == Char; }
 	bool isSigned() const { return signedType == Signed; }
@@ -321,6 +375,20 @@ struct ArrayClass : TypeClass
 		return std::make_unique<ArrayClass>(arrayType, type.clone(), staticLength);
 	}
 
+	virtual string toString() const override
+	{
+		string s;
+		if (arrayType == AnyArray)
+			s += "Array";
+		else if (arrayType == Static)
+			s += "Static Array";
+		else if (arrayType == Dynamic)
+			s += "Dynamic Array";
+		s += " of ";
+		s += type.toString();
+		return s;
+	}
+
 	bool operator==(const ArrayClass& o) const
 	{
 		return this->type == o.type &&
@@ -371,6 +439,29 @@ struct TupleClass : TypeClass
 		tuple->unbounded = unbounded;
 
 		return std::unique_ptr<TupleClass>(tuple);
+	}
+
+	virtual string toString() const override
+	{
+		string s;
+		if (unbounded)
+		{
+			s += "Unbounded Tuple (";
+			s += types.front().toString();
+			s += ")";
+			return s;
+		}
+
+		s += "Tuple (";
+		for (int i = 0, e = types.size(); i < e; ++i)
+		{
+			auto& t = types[i];
+			s += t.toString();
+			if (i < e - 1)
+				s += ", ";
+		}
+		s += ")";
+		return s;
 	}
 
 	bool operator==(const TupleClass& o) const
@@ -435,6 +526,30 @@ struct FunctionClass : TypeClass
 		return std::unique_ptr<FunctionClass>(function);
 	}
 
+	virtual string toString() const override
+	{
+		string s = "Function (";
+		for (int i = 0, e = inTypes.size(); i < e; ++i)
+		{
+			auto& t = inTypes[i];
+			s += t.toString();
+			if (i < e - 1)
+				s += ", ";
+		}
+		if (isCVariadic)
+			s += ", ...";
+		s += ") -> (";
+		for (int i = 0, e = outTypes.size(); i < e; ++i)
+		{
+			auto& t = outTypes[i];
+			s += t.toString();
+			if (i < e - 1)
+				s += ", ";
+		}
+		s += ")";
+		return s;
+	}
+
 	bool operator==(const FunctionClass& o) const
 	{
 		return true;
@@ -458,6 +573,14 @@ struct PointerClass : TypeClass
 	virtual std::unique_ptr<TypeClass> clone() const override
 	{
 		return std::make_unique<PointerClass>(type.clone());
+	}
+
+	virtual string toString() const override
+	{
+		string s = "Pointer (";
+		s += type.toString();
+		s += ")";
+		return s;
 	}
 
 	bool operator==(const PointerClass& o) const
@@ -494,6 +617,20 @@ struct MultiTypeClass : TypeClass
 		}
 
 		return std::make_unique<MultiTypeClass>(std::move(typesClone));
+	}
+
+	virtual string toString() const override
+	{
+		string s = "MultiType (";
+		for (int i = 0, e = types.size(); i < e; ++i)
+		{
+			auto& t = types[i];
+			s += t.toString();
+			if (i < e - 1)
+				s += ", ";
+		}
+		s += ")";
+		return s;
 	}
 
 	void addType(const Type& type)

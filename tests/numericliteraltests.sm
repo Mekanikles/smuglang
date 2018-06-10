@@ -1,12 +1,13 @@
 
 var cchar = #primitives.c.char;
 var cint = #primitives.c.int;
-/*
-func print(fmt : cchar*, args...) -> ()
+
+/*func print(fmt : cchar*, args...) -> ()
 {
 	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
 	printf(fmt, args);
 };
+
 
 var main = func()
 {

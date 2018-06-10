@@ -253,6 +253,7 @@ namespace AST
 			string val = processQuotedInputString(value);
 			string str = processStringForOutput(val);
 			string s = "StringLiteral(\"" + str + "\")";
+			s += string(", Type: ") + type.toString();
 			return s;
 		}
 
@@ -276,6 +277,7 @@ namespace AST
 		string toString() override 
 		{ 
 			string s = "IntegerLiteral(" + value + ")";
+			s += string(", Type: ") + type.toString();
 			return s;
 		}
 
@@ -299,6 +301,7 @@ namespace AST
 		string toString() override 
 		{ 
 			string s = "FloatLiteral(" + value + ")";
+			s += string(", Type: ") + type.toString();
 			return s;
 		}
 
@@ -318,6 +321,7 @@ namespace AST
 		string toString() override 
 		{ 
 			string s = "TypeLiteral";
+			s += string(", Type: ") + type.toString();
 			return s;
 		}
 
@@ -354,6 +358,7 @@ namespace AST
 		string toString() override 
 		{ 
 			string s = "FunctionInParam(" + name + ")";
+			s += string(", Type: ") + type.toString();
 			return s;
 		}
 
@@ -382,6 +387,7 @@ namespace AST
 		string toString() override 
 		{ 
 			string s = "FunctionOutParam(" + name + ")";
+			s += string(", Type: ") + getType().toString();
 			return s;
 		}
 
@@ -408,6 +414,7 @@ namespace AST
 		{ 
 			string s = "FunctionSignature(isCVariadic: " + std::to_string(isCVariadic) +
 					", isAny: " + std::to_string(type.isAny()) + ")";
+			s += string(", Type: ") + getType().toString();		
 			return s;
 		}
 
@@ -466,6 +473,7 @@ namespace AST
 		{ 
 			string s;
 			s = "SymbolExpression(" + symbol + ")";
+			s += string(", Type: ") + getType().toString();
 			return s; 
 		}
 
@@ -484,6 +492,7 @@ namespace AST
 		{ 
 			string s;
 			s = "Tuple";
+			s += string(", Type: ") + getType().toString();
 			return s; 
 		}
 
@@ -557,6 +566,7 @@ namespace AST
 		string toString() override 
 		{ 
 			string s = "UnaryOp(" + ::toString(opType) + ")";
+			s += string(", Type: ") + getType().toString();
 			return s; 
 		}
 		const vector<Node*> getChildren() override
@@ -584,6 +594,7 @@ namespace AST
 		string toString() override 
 		{ 
 			string s = "UnaryPostfixOp(" + ::toString(opType) + ")";
+			s += string(", Type: ") + getType().toString();
 			return s; 
 		}
 		const vector<Node*> getChildren() override
@@ -622,6 +633,7 @@ namespace AST
 		string toString() override 
 		{ 
 			string s = "BinaryOp(" + ::toString(opType) + ")";
+			s += string(", Type: ") + getType().toString();
 			return s; 
 		}
 		const vector<Node*> getChildren() override
@@ -718,6 +730,7 @@ namespace AST
 		string toString() override 
 		{ 
 			string s = "FunctionLiteral";
+			s += string(", Type: ") + getType().toString();
 			return s;
 		}
 
