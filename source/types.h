@@ -415,8 +415,9 @@ struct ArrayClass : TypeClass
 struct TupleClass : TypeClass
 {
 	vector<Type> types;
+
 	// Note, if unbounded is true, we only use first type for all elements
-	bool unbounded;
+	bool unbounded = false;
 
 	TupleClass(vector<Type> types) 
 		: TypeClass(TypeClass::Tuple)
@@ -424,10 +425,19 @@ struct TupleClass : TypeClass
 		, unbounded(false)
 	{}
 
-	TupleClass()
+	TupleClass(const Type& type)
 		: TypeClass(TypeClass::Tuple)
 		, unbounded(true)
-	{}
+	{
+		types.push_back(type);
+	}
+
+private:
+	TupleClass()
+		: TypeClass(TypeClass::Tuple)
+	{
+	}
+public:
 
 	virtual std::unique_ptr<TypeClass> clone() const override
 	{
@@ -483,16 +493,37 @@ struct TupleClass : TypeClass
 
 	bool isSubClass(const TupleClass& o) const
 	{
-		if (types.size() != o.types.size())
-			return false;
-
-		for (int i = 0, s = types.size(); i < s; ++i)
+		if (o.unbounded)
 		{
-			auto&& t1 = types[i];
-			auto&& t2 = o.types[i];
+			// empty tuple always fit into unbounded tuples
+			if (types.size() == 0)
+				return true;
 
-			if (!t1.isSubType(t2))
+			// Check all types against unbounded type
+			assert(o.types.size() == 1);
+			auto&& t2 = o.types[0];
+			for (int i = 0, s = types.size(); i < s; ++i)
+			{
+				auto&& t1 = types[i];
+				if (!t1.isSubType(t2))
+					return false;
+			}
+		}
+		else
+		{
+			if (unbounded)
 				return false;
+			if (types.size() != o.types.size())
+				return false;
+
+			for (int i = 0, s = types.size(); i < s; ++i)
+			{
+				auto&& t1 = types[i];
+				auto&& t2 = o.types[i];
+
+				if (!t1.isSubType(t2))
+					return false;
+			}
 		}
 
 		return true;
@@ -733,6 +764,11 @@ Type createPointerTypeVariable(const Type& type)
 {
 	assert(!type.isTypeVariable());
 	return Type(true, std::make_shared<PointerClass>(type));
+}
+
+Type createTupleType(const Type& type)
+{
+	return Type(false, std::make_shared<TupleClass>(type));
 }
 
 Type createTupleType(vector<Type> types)

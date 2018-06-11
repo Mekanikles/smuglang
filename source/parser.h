@@ -637,6 +637,9 @@ struct Parser
 		node->initExpr = nullptr;
 		if (accept(TokenType::Equals))
 		{
+			if (node->isVariadic)
+				errorOnAccept("Cannot have default arguments for variadic paramters");
+
 			AST::Expression* expr;
 			if (parseExpression(&expr))
 			{

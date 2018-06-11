@@ -69,7 +69,52 @@ struct ASTProcessor : AST::Visitor
 		assert(node->signature);
 		assert(node->body);
 
+		auto& paramScope = node->body->scope;
+
 		node->signature->accept(this);
+		AST::FunctionSignature* signature = node->signature;
+
+		// Assign types to params
+		for (AST::FunctionInParam* param : signature->inParams)
+		{
+			SymbolSource* symbolSource = paramScope.lookUpSymbolSource(param->name);
+			if (!symbolSource)
+				assert(false && "could not find param in scope");
+
+			const bool isVariadic = param->isVariadic;
+			Symbol* symbol = symbolSource->getSymbol();
+
+			Type type;
+			if (param->typeExpr)
+			{
+				const Type& exprType = param->typeExpr->getType();
+				type = exprType.innerTypeFromTypeVariable();
+			}
+
+			// Infer type from init expression
+			if (param->initExpr && !isVariadic)
+			{
+				symbol->firstInitOrder = node->order;
+				if (param->initExpr)
+				{
+					Type& exprType = param->initExpr->getType();
+					const auto result = unifyTypes(symbol->type, exprType);
+
+					// TODO: Handle implicit casts?
+					if (result == CannotUnify)
+						assert("Cannot unify types" && false);
+
+					// TODO: How to apply unification to expression?
+				}
+			}
+
+			if (isVariadic)
+				symbol->type = createTupleType(type);
+			else
+				symbol->type = type;
+		}
+		// TODO: outparams
+
 		node->body->accept(this);
 
 		// Now we can figure out the types in the signature
@@ -78,9 +123,6 @@ struct ASTProcessor : AST::Visitor
 		assert(func.inTypes.empty());
 		assert(func.outTypes.empty());
 
-		auto& paramScope = node->body->scope;
-
-		AST::FunctionSignature* signature = node->signature;
 		for (AST::FunctionInParam* param : signature->inParams)
 		{
 			SymbolSource* symbolSource = paramScope.lookUpSymbolSource(param->name);
@@ -90,7 +132,6 @@ struct ASTProcessor : AST::Visitor
 			Symbol* symbol = symbolSource->getSymbol();
 			func.inTypes.push_back(symbol->type);
 		}
-
 		// TODO: outparams
 	}
 
