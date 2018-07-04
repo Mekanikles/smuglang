@@ -23,7 +23,6 @@ const bool DEFAULT_INT_ISSIGNED = true;
 #include "evaluation.h"
 #include "parser.h"
 #include "output.h"
-//#include "generator.h"
 #include "llvmgenerator.h"
 
 #include "declarationprocessor.h"
@@ -63,8 +62,6 @@ int main(int argc, char** argv)
 		printLine("AST:");
 		printAST(&ast, 1);
 
-
-
 		// Extract filename without path
 		std::regex filenameRegex(R"((.*[\\\/])?(.+)$))");
 		std::smatch matches;
@@ -72,24 +69,6 @@ int main(int argc, char** argv)
 
 		string outFileName = string(".smug/") + matches[2].str();
 
-		/*
-		std::stringstream output;
-		CGenerator generator(&output);
-		generator.run(&ast);
-		{
-			string outCFileName = outFileName + ".c";
-			std::ofstream outFile(outCFileName);
-
-			printLine("Generated C:");
-			string l;
-			while (getline(output, l))
-			{
-				printLine(l, 1);
-				outFile << l << std::endl;
-			}
-		}
-		*/
-		
 		std::stringstream llvmOutput;
 		LLVMIRGenerator llvmgenerator(&llvmOutput);
 		llvmgenerator.run(&ast);
