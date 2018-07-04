@@ -226,6 +226,10 @@ struct Parser
 				func->signature = signature;
 				func->body = statementBody;
 
+				// Inject signature scope into function
+				signature->scope.parentScope = statementBody->scope.parentScope;
+				statementBody->scope.parentScope = &signature->scope;
+
 				*outExpr = func;
 			}
 			else
@@ -576,7 +580,7 @@ struct Parser
 
 		node->symbol = lastToken().symbol;
 		node->isExternal = isExternal;
-
+		
 		// Optional type declaration
 		if (accept(TokenType::Colon))
 		{
@@ -726,25 +730,21 @@ struct Parser
 
 			// Inparams
 			AST::FunctionInParam* inParam;
-			while (parseFunctionInParam(&inParam))
+			if (parseFunctionInParam(&inParam))
 			{
 				node->inParams.push_back(inParam);
 
-				if (accept(TokenType::Comma))
+				while(accept(TokenType::Comma))
 				{
-					if (accept(TokenType::Ellipsis))
+					if (parseFunctionInParam(&inParam))
 					{
-						if (accept(TokenType::Comma))
-							continue;
+						node->inParams.push_back(inParam);
 					}
 					else
 					{
-						continue;
+						errorOnExpect("Expected parameter");
+						break;
 					}
-				}
-				else
-				{
-					break;
 				}
 			}
 			expect(TokenType::CloseParenthesis);
@@ -991,6 +991,10 @@ struct Parser
 					errorOnAccept("Expected statement body following function declaration");
 					return true;
 				}
+
+				// Inject signature scope into function
+				signature->scope.parentScope = statementBody->scope.parentScope;
+				statementBody->scope.parentScope = &signature->scope;
 
 				auto node = createNode<AST::FunctionDeclaration>();
 				node->symbol = functionName;

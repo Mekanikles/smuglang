@@ -532,8 +532,27 @@ public:
 
 struct FunctionClass : TypeClass
 {
-	vector<Type> inTypes;
-	vector<Type> outTypes;
+	struct Param
+	{
+		string identifier;
+		Type type;
+
+		Param clone() const
+		{
+			return {identifier, type.clone()};
+		}
+
+		string toString() const
+		{
+			string s = identifier;
+			s += " : ";
+			s += type.toString();
+			return s;
+		}
+	};
+
+	vector<Param> inParams;
+	vector<Param> outParams;
 	bool isCVariadic = false;
 
 	// TODO: Figure out subtyping for functions
@@ -541,16 +560,26 @@ struct FunctionClass : TypeClass
 		: TypeClass(TypeClass::Function)
 	{}	
 
+	void appendInParam(const Type& type, const string id)
+	{
+		inParams.push_back({id, type});
+	}
+
+	void appendOutParam(const Type& type, const string id)
+	{
+		outParams.push_back({id, type});
+	}
+
 	virtual std::unique_ptr<TypeClass> clone() const override
 	{
 		auto function = new FunctionClass();
-		for (auto& t : inTypes)
+		for (auto& p : inParams)
 		{
-			function->inTypes.push_back(t.clone());
+			function->inParams.push_back(p.clone());
 		}
-		for (auto& t : outTypes)
+		for (auto& p : outParams)
 		{
-			function->outTypes.push_back(t.clone());
+			function->outParams.push_back(p.clone());
 		}	
 		function->isCVariadic = isCVariadic;
 
@@ -560,20 +589,20 @@ struct FunctionClass : TypeClass
 	virtual string toString() const override
 	{
 		string s = "Function (";
-		for (int i = 0, e = inTypes.size(); i < e; ++i)
+		for (int i = 0, e = inParams.size(); i < e; ++i)
 		{
-			auto& t = inTypes[i];
-			s += t.toString();
+			auto& p = inParams[i];
+			s += p.toString();
 			if (i < e - 1)
 				s += ", ";
 		}
 		if (isCVariadic)
 			s += ", ...";
 		s += ") -> (";
-		for (int i = 0, e = outTypes.size(); i < e; ++i)
+		for (int i = 0, e = outParams.size(); i < e; ++i)
 		{
-			auto& t = outTypes[i];
-			s += t.toString();
+			auto& p = outParams[i];
+			s += p.toString();
 			if (i < e - 1)
 				s += ", ";
 		}

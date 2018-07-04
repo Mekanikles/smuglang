@@ -342,26 +342,27 @@ namespace AST
 		Expression* typeExpr = nullptr;
 		Expression* initExpr = nullptr;
 		bool isVariadic = false;
-		Type type;
+		Symbol* symbolObj = nullptr;
+
+		Symbol* getSymbol()
+		{
+			return symbolObj;
+		}
 
 		Type& getType()
 		{
-			if (typeExpr)
-			{
-				const auto result = unifyTypes(type, typeExpr->getType());
-				assert(result != CannotUnify);
-			}
-			if (initExpr)
-			{
-				const auto result = unifyTypes(type, typeExpr->getType());
-				if (result == CannotUnify)
-					assert("Cannot unify types" && false);
-			}
-			return type;
+			assert(symbolObj);
+			return symbolObj->type;
+		}
+
+		const string& getName()
+		{
+			assert(symbolObj);
+			return symbolObj->name;
 		}
 
 		string toString() override 
-		{ 
+		{ 	
 			string s = "FunctionInParam(" + name + ")";
 			s += typeString(getType());
 			return s;
@@ -382,11 +383,23 @@ namespace AST
 	{
 		string name;
 		Expression* typeExpr = nullptr;
+		Symbol* symbolObj = nullptr;
+
+		Symbol* getSymbol()
+		{
+			return symbolObj;
+		}
 
 		Type& getType()
 		{
-			assert(typeExpr);
-			return typeExpr->getType();
+			assert(symbolObj);
+			return symbolObj->type;
+		}
+
+		const string& getName()
+		{
+			assert(symbolObj);
+			return symbolObj->name;
 		}
 
 		string toString() override 
@@ -408,6 +421,7 @@ namespace AST
 
 	struct FunctionSignature : public NodeImpl<FunctionSignature, Expression>
 	{
+		SymbolScope scope;
 		vector<FunctionInParam*> inParams;
 		vector<FunctionOutParam*> outParams;
 		bool specifiedInParams = false;
@@ -428,22 +442,22 @@ namespace AST
 			// TODO:
 			if (type.isAny())
 			{
-				auto typeClass = std::make_unique<FunctionClass>();
-				typeClass->isCVariadic = isCVariadic;
+				auto func = std::make_unique<FunctionClass>();
+				func->isCVariadic = isCVariadic;
 
 				for (auto* p : inParams)
 				{
 					Type& t = p->getType();
-					typeClass->inTypes.push_back(t);
+					func->appendInParam(t, p->getName());
 				}
 
 				for (auto* p : outParams)
 				{
 					Type& t = p->getType();
-					typeClass->outTypes.push_back(t);
+					func->appendOutParam(t, p->getName());
 				}
 
-				type = createTypeVariable(std::move(typeClass));
+				type = createTypeVariable(std::move(func));
 			}
 			return type;
 		}
@@ -514,6 +528,13 @@ namespace AST
 			}
 			return type;
 		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.insert(ret.end(), exprs.begin(), exprs.end());
+			return ret;
+		}	
 	};
 
 	// TODO: split functions into calls and call-expression?
@@ -729,7 +750,6 @@ namespace AST
 		StatementBody* body = nullptr;
 
 		FunctionLiteral()
-			: type(createFunctionType())
 		{}	
 
 		string toString() override 
@@ -741,6 +761,9 @@ namespace AST
 
 		Type& getType() override
 		{
+			assert(signature);
+			// Meh, do we really need to use references to types everywhere?
+			type = signature->getType().innerTypeFromTypeVariable();
 			return type;
 		}
 

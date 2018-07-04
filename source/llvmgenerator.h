@@ -96,8 +96,98 @@ struct LLVMIRGenerator : AST::Visitor
 	}
 	void visit(AST::TypeLiteral* node) override
 	{
-		visit((AST::Expression*)node);
-		assert(false && "hmmm");
+		// TODO: Prune pure type stuff before ir generation
+	}
+
+	llvm::Function* createFunction(const Type& type, const string& name, bool isExternal = false)
+	{
+		assert(type.isFunction());
+		const FunctionClass& function = type.getFunction();
+
+		vector<string> paramNames;
+
+		bool isCVariadic = false;
+		std::vector<llvm::Type*> args;
+		for (int i = 0, e = function.inParams.size(); i < e; ++i)
+		{
+			const auto& p = function.inParams[i];
+			const Type& t = p.type;
+			// TODO: Make sure CVariadics can only have one tuple at the end
+			if (isExternal && t.isTuple())
+			{
+				// TODO: Handle bounded tuples?
+				isCVariadic = true;
+				assert(i == e - 1 && "External function cannot have more than one unbounded tuple");
+				break;
+			}
+			
+			args.push_back(resolveType(t));
+			paramNames.push_back(p.identifier);
+		}
+
+		// TODO: multiple return values
+		llvm::Type* returnType = m_builder.getVoidTy();
+		if (!function.outParams.empty())
+		{
+			assert(function.outParams.size() == 1);
+			returnType = resolveType(function.outParams[0].type);
+		}
+
+		auto functionType = llvm::FunctionType::get(
+			returnType, args, isCVariadic);
+
+		auto func = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, &m_module);
+
+		// Assign parameter names
+		uint i = 0;
+		for (auto& a : func->args())
+			a.setName(paramNames[i++]);
+
+		return func;
+	}
+
+	llvm::Function* processFunctionLiteral(AST::FunctionLiteral* node, const string& name)
+	{
+		auto func = createFunction(node->getType(), name);
+		m_functionLiterals[node] = func;
+
+		auto previousBlock = m_builder.GetInsertBlock();
+		auto entryBlock = llvm::BasicBlock::Create(m_context, "entry", func);
+		m_builder.SetInsertPoint(entryBlock);
+
+		// Create storage for all parameters
+		// TODO: Necessary for non mutable params?
+		for (auto& arg : func->args())
+		{
+			auto a = m_builder.CreateAlloca(arg.getType(), nullptr, arg.getName());
+			m_builder.CreateStore(&arg, a);
+			m_variables[arg.getName()] = a;
+		}
+
+		assert(node->body);
+		node->body->accept(this);
+
+		m_builder.CreateRetVoid();
+
+		verifyFunction(*func);
+
+		// Restore any previous basic block
+		m_builder.SetInsertPoint(previousBlock);
+
+		return func;	
+	}
+
+	void visit(AST::FunctionDeclaration* node) override
+	{
+		auto source = node->symbolSource;
+		assert(source);
+		Symbol* symbol = source->getSymbol();
+
+		auto funcLiteral = node->funcLiteral;
+		assert(funcLiteral);
+		auto func = processFunctionLiteral(funcLiteral, symbol->name);
+
+		m_functions[symbol] = func;
 	}
 
 	void visit(AST::SymbolDeclaration* node) override
@@ -105,34 +195,35 @@ struct LLVMIRGenerator : AST::Visitor
 		Symbol* symbol = node->getSymbol();
 		const Type& type = symbol->type;
 
-		assert(type.isFunction());
+		if (type.isFunction())
 		{
-			const FunctionClass& function = type.getFunction();
-
-			std::vector<llvm::Type*> args;
-			for (const Type& t : function.inTypes)
-			{
-				args.push_back(resolveType(t));
-			}
-
-			// TODO: multiple return values
-			llvm::Type* returnType = nullptr;
-			if (!function.outTypes.empty())
-			{
-				assert(function.outTypes.size() == 1);
-				returnType = resolveType(function.outTypes[0]);
-			}
-
-			auto functionType = llvm::FunctionType::get(
-				returnType, args, function.isCVariadic);
-
-			auto func = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, symbol->name, &m_module);
-			m_functions[symbol] = func;
+			m_functions[symbol] = createFunction(type, symbol->name, node->isExternal);
 		}
+		else
+		{
+			// TODO: Prune pure type stuff before generating ir
+			assert(!type.isTypeVariable());
+
+			auto t = resolveType(type);
+			auto a = m_builder.CreateAlloca(t, nullptr, symbol->name.c_str());
+			m_variables[symbol->name] = a;
+		}
+	}
+
+	void visit(AST::SymbolExpression* node) override
+	{
+		assert(node->dependency);
+		Symbol* symbol = node->dependency->getSymbol();
+		auto var = m_variables[symbol->name];
+		assert(var && "Could not find declared symbol");
+
+		auto loadInst = m_builder.CreateLoad(var);
+		m_valueStack.push_back(loadInst);
 	}
 
 	void visit(AST::Call* node) override
 	{
+		assert(node->expr->dependency);
 		Symbol* symbol = node->expr->dependency->getSymbol();
 		llvm::Function* func = m_functions[symbol];
 		assert(func);
@@ -214,7 +305,6 @@ struct LLVMIRGenerator : AST::Visitor
 	void visit(AST::StatementBody* node) override
 	{
 		AST::Visitor::visit(node);
-
 	}
 
 	LLVMIRGenerator(std::ostream* out)
@@ -320,5 +410,7 @@ struct LLVMIRGenerator : AST::Visitor
 
 
 	std::unordered_map<Symbol*, llvm::Function*> m_functions;
+	std::unordered_map<AST::FunctionLiteral*, llvm::Function*> m_functionLiterals;
 
+	std::unordered_map<string, llvm::AllocaInst*> m_variables;
 };

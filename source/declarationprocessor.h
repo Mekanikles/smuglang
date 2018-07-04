@@ -31,27 +31,38 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 		AST::Visitor::visit(node);
 	}
 
-	void visit(AST::FunctionLiteral* node) override
+	void visit(AST::FunctionSignature* node) override
 	{
-		assert(node->signature);
-		AST::FunctionSignature* signature = node->signature;
+		auto& paramScope = node->scope;
 
-		assert(node->body);
-		auto& paramScope = node->body->scope;
-
-		// Parse signature params here where we have knowledge about the body
-		for (AST::FunctionInParam* param : signature->inParams)
+		for (AST::FunctionInParam* param : node->inParams)
 		{
 			Symbol* symbol = createSymbol(param->name);
 			symbol->isParam = true;
 
 			auto symbolSource = createDeclarationSymbolSource(symbol, param, false);
 			paramScope.addSymbolSource(symbolSource);
-			//node->symbolObj = symbol;
+			param->symbolObj = symbol;
 
 			//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)paramScope.id));		
 		}
 
+		for (AST::FunctionOutParam* param : node->outParams)
+		{
+			Symbol* symbol = createSymbol(param->name);
+			symbol->isParam = true;
+
+			auto symbolSource = createDeclarationSymbolSource(symbol, param, false);
+			paramScope.addSymbolSource(symbolSource);
+			param->symbolObj = symbol;
+
+			//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)paramScope.id));		
+		}
+
+	}
+
+	void visit(AST::FunctionLiteral* node) override
+	{
 		AST::Visitor::visit(node);
 	}
 

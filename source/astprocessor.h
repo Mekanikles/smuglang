@@ -60,29 +60,12 @@ struct ASTProcessor : AST::Visitor
 		symbol->type = functionType;
 	}
 
-	void visit(AST::FunctionLiteral* node) override
+	void visit(AST::FunctionSignature* node) override
 	{
-		if (node->processed)
-			return;
-		node->processed = true;
-
-		assert(node->signature);
-		assert(node->body);
-
-		auto& paramScope = node->body->scope;
-
-		node->signature->accept(this);
-		AST::FunctionSignature* signature = node->signature;
-
-		// Assign types to params
-		for (AST::FunctionInParam* param : signature->inParams)
+		// Assign types to inparams
+		for (AST::FunctionInParam* param : node->inParams)
 		{
-			SymbolSource* symbolSource = paramScope.lookUpSymbolSource(param->name);
-			if (!symbolSource)
-				assert(false && "could not find param in scope");
-
-			const bool isVariadic = param->isVariadic;
-			Symbol* symbol = symbolSource->getSymbol();
+			Symbol* symbol = param->getSymbol();
 
 			Type type;
 			if (param->typeExpr)
@@ -90,6 +73,12 @@ struct ASTProcessor : AST::Visitor
 				const Type& exprType = param->typeExpr->getType();
 				type = exprType.innerTypeFromTypeVariable();
 			}
+
+			const bool isVariadic = param->isVariadic;
+			if (isVariadic)
+				symbol->type = createTupleType(type);
+			else
+				symbol->type = type;
 
 			// Infer type from init expression
 			if (param->initExpr && !isVariadic)
@@ -107,32 +96,35 @@ struct ASTProcessor : AST::Visitor
 					// TODO: How to apply unification to expression?
 				}
 			}
-
-			if (isVariadic)
-				symbol->type = createTupleType(type);
-			else
-				symbol->type = type;
 		}
-		// TODO: outparams
 
-		node->body->accept(this);
-
-		// Now we can figure out the types in the signature
-		//	and construct the complete function type
-		FunctionClass& func = node->getType().getFunction();
-		assert(func.inTypes.empty());
-		assert(func.outTypes.empty());
-
-		for (AST::FunctionInParam* param : signature->inParams)
+		// Assign types to outparams
+		for (AST::FunctionOutParam* param : node->outParams)
 		{
-			SymbolSource* symbolSource = paramScope.lookUpSymbolSource(param->name);
-			if (!symbolSource)
-				assert(false && "could not find param in scope");
+			Symbol* symbol = param->getSymbol();
 
-			Symbol* symbol = symbolSource->getSymbol();
-			func.inTypes.push_back(symbol->type);
+			Type type;
+			if (param->typeExpr)
+			{
+				const Type& exprType = param->typeExpr->getType();
+				type = exprType.innerTypeFromTypeVariable();
+			}
+
+			symbol->type = type;
 		}
-		// TODO: outparams
+	}
+
+	void visit(AST::FunctionLiteral* node) override
+	{
+		if (node->processed)
+			return;
+		node->processed = true;
+
+		assert(node->signature);
+		assert(node->body);
+
+		node->signature->accept(this);
+		node->body->accept(this);
 	}
 
 	void visit(AST::SymbolDeclaration* node) override

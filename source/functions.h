@@ -17,7 +17,7 @@ FunctionArgumentBinding* createFunctionArgumentBinding(AST::Call* callNode, cons
 {
 	auto* binding = createObject<FunctionArgumentBinding>();
 
-	const auto& functionInTypes = functionClass.inTypes;
+	const auto& functionInParams = functionClass.inParams;
 	const auto& args = callNode->args;
 
 	const int argCount = args.size();
@@ -26,11 +26,11 @@ FunctionArgumentBinding* createFunctionArgumentBinding(AST::Call* callNode, cons
 	//	tuples must be explicitly provided.
 	// In the future, we want to allow fleible mapping between single args
 	//	and tuples, plus named argument
-	for (const Type& type : functionInTypes)
+	for (const auto& p : functionInParams)
 	{
+		const Type& type = p.type;
 		if (argsConsumed >= argCount)
 			assert(false && "Too few arguments to function");
-
 
 		// Important to clone type so we can do type inference for each
 		//	call rather than the function

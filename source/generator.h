@@ -324,12 +324,12 @@ struct BodyGenerator : AST::Visitor
 		// TODO: Add support for out params
 		*out << "void " << name << "(";
 
-		int size = functionClass.inTypes.size();
+		int size = functionClass.inParams.size();
 		for (int i = 0; i < size; ++i)
 		{
-			const Type& param = functionClass.inTypes[i];
+			const Type& param = functionClass.inParams[i].type;
 			assert(!param.isTypeVariable());
-			auto typeClass = param.typeClass.get();
+			auto typeClass = param.type.typeClass.get();
 
 			*out << getTypeClassName(typeClass);
 			if (i < size - 1)
