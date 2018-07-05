@@ -1,6 +1,6 @@
 
-//var cchar = #primitives.c.char;
-//(var cint = #primitives.c.int;
+def cchar = #primitives.c.char;
+def cint = #primitives.c.int;
 
 /*func print(fmt : cchar*, args...) -> ()
 {
@@ -11,7 +11,7 @@
 
 var main = func()
 {
-	var hej = "hej";
+	var hej = "hej"; 
 	print(hej, ());
 };
 

@@ -570,7 +570,7 @@ struct Parser
 		}
 	}
 
-	bool parseSymbolDeclaration(AST::SymbolDeclaration** outDeclaration, bool isExternal = false)
+	bool parseSymbolDeclaration(AST::SymbolDeclaration** outDeclaration, StorageQualifier storageQualifier)
 	{
 		if (!accept(TokenType::Symbol))
 			return false;
@@ -579,8 +579,8 @@ struct Parser
 		*outDeclaration = node;
 
 		node->symbol = lastToken().symbol;
-		node->isExternal = isExternal;
-		
+		node->storageQualifier = storageQualifier;
+
 		// Optional type declaration
 		if (accept(TokenType::Colon))
 		{
@@ -596,7 +596,7 @@ struct Parser
 
 		// Optional initialization
 		// TODO: Not allowed for externals, add custom error
-		if (!isExternal && accept(TokenType::Equals))
+		if (!node->isExternal() && accept(TokenType::Equals))
 		{
 			AST::Expression* expr;
 			if (parseExpression(&expr))
@@ -860,12 +860,20 @@ struct Parser
 	bool parseDeclarationStatement(AST::Declaration** outDeclaration)
 	{
 		//AST::FunctionDeclaration* funcDecl;
-		if (accept(TokenType::Var) || accept(TokenType::Def) || accept(TokenType::Extern))
+		if (accept(TokenType::Var) || accept(TokenType::Def) || accept(TokenType::Const) || accept(TokenType::Extern))
 		{
-			const bool isExternalDecl = lastToken().type == TokenType::Extern;
+			StorageQualifier sq;
+			if (lastToken().type == TokenType::Var)
+				sq = StorageQualifier::Var;
+			else if (lastToken().type == TokenType::Const)
+				sq = StorageQualifier::Const;
+			else if (lastToken().type == TokenType::Def)
+				sq = StorageQualifier::Def;
+			else
+				sq = StorageQualifier::Extern;
 
 			AST::SymbolDeclaration* symbolDecl;
-			if (!parseSymbolDeclaration(&symbolDecl, isExternalDecl))
+			if (!parseSymbolDeclaration(&symbolDecl, sq))
 			{
 				errorOnExpect("Expected symbol declaration");
 				*outDeclaration = nullptr;

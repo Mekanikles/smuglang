@@ -163,7 +163,7 @@ struct ASTProcessor : AST::Visitor
 				// TODO: How to apply unification to expression?
 			}
 		}
-		else if (node->isExternal)
+		else if (node->isExternal())
 		{
 			symbol->firstInitOrder = node->order;
 		}

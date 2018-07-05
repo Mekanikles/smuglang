@@ -192,13 +192,17 @@ struct LLVMIRGenerator : AST::Visitor
 
 	void visit(AST::SymbolDeclaration* node) override
 	{
+		// Definitions does not generate any code
+		if (node->isDefine())
+			return;
+
 		Symbol* symbol = node->getSymbol();
 		const Type& type = symbol->type;
 
 		if (type.isFunction())
 		{
-			assert(node->isExternal);
-			m_functions[symbol] = createFunction(type, symbol->name, node->isExternal);
+			assert(node->isExternal());
+			m_functions[symbol] = createFunction(type, symbol->name, node->isExternal());
 		}
 		else
 		{

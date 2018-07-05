@@ -40,7 +40,7 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 			Symbol* symbol = createSymbol(param->name);
 			symbol->isParam = true;
 
-			auto symbolSource = createDeclarationSymbolSource(symbol, param, false);
+			auto symbolSource = createDeclarationSymbolSource(symbol, param, StorageQualifier::Const);
 			paramScope.addSymbolSource(symbolSource);
 			param->symbolObj = symbol;
 
@@ -52,7 +52,7 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 			Symbol* symbol = createSymbol(param->name);
 			symbol->isParam = true;
 
-			auto symbolSource = createDeclarationSymbolSource(symbol, param, false);
+			auto symbolSource = createDeclarationSymbolSource(symbol, param, StorageQualifier::Var);
 			paramScope.addSymbolSource(symbolSource);
 			param->symbolObj = symbol;
 
@@ -82,7 +82,7 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 		// InitOrder of functions is 0 since they are initialized at compile time
 		symbol->firstInitOrder = 0;
 
-		auto symbolSource = createDeclarationSymbolSource(symbol, node);
+		auto symbolSource = createDeclarationSymbolSource(symbol, node, StorageQualifier::Def);
 		this->currentScope->addSymbolSource(symbolSource);
 		node->symbolSource = symbolSource;
 
@@ -105,7 +105,7 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 		//	Can it lead to an infinite recursion when inferring types?
 		Symbol* symbol = createSymbol(node->symbol);
 
-		auto symbolSource = createDeclarationSymbolSource(symbol, node, node->isExternal);
+		auto symbolSource = createDeclarationSymbolSource(symbol, node, node->storageQualifier);
 		this->currentScope->addSymbolSource(symbolSource);
 		node->symbolObj = symbol;
 

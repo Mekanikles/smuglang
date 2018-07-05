@@ -689,18 +689,22 @@ namespace AST
 	{
 		string symbol;
 		bool isParam = false;
-		bool isExternal = false;
+		StorageQualifier storageQualifier = StorageQualifier::Var;
 		Expression* typeExpr = nullptr;
 		Expression* initExpr = nullptr;
 		Symbol* symbolObj = nullptr;
 
 		string toString() override 
 		{ 
-			string s = "SymbolDeclaration(" + symbol + ", isExternal = " + 
-					std::to_string(isExternal) + ", isParam: " + 
+			string s = "SymbolDeclaration(" + symbol + ", SQ = " + 
+					sqToString(storageQualifier) + ", isParam: " + 
 					std::to_string(isParam) + ")";
 			return s; 
 		}
+
+		bool isExternal() { return storageQualifier == StorageQualifier::Extern; }
+		bool isConst() { return storageQualifier == StorageQualifier::Const; }
+		bool isDefine() { return storageQualifier == StorageQualifier::Def; }
 
 		Symbol* getSymbol()
 		{

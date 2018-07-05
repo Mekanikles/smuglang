@@ -11,6 +11,26 @@ namespace AST
 	struct SymbolExpression;
 }
 
+enum class StorageQualifier
+{
+	Var,
+	Const,
+	Def,
+	Extern
+};
+
+string sqToString(StorageQualifier s)
+{
+	switch(s)
+	{
+		case StorageQualifier::Var: return "Var";
+		case StorageQualifier::Const: return "Const";
+		case StorageQualifier::Def: return "Def";
+		case StorageQualifier::Extern: return "Extern";
+	}
+	return "Unknown";
+}
+
 struct Symbol
 {
 	string name;
@@ -65,14 +85,14 @@ struct DeclarationSymbolSource : SymbolSource
 {
 	AST::Node* node;
 	Symbol* symbol = nullptr;
-	bool external = false;
+	StorageQualifier storageQualifier;
 
 	bool providesSymbolName(const string& s) override { return s == symbol->name; }
 	void hookDependency(SymbolDependency* dependency) override;
 	bool isSingleSymbolSource() override { return true; }
 	Symbol* getSymbol() override { assert(symbol); return symbol; }
 	AST::Node* getNode() override { assert(node); return node; }
-	bool isExternal() override { return external; }
+	bool isExternal() override { return storageQualifier == StorageQualifier::Extern; }
 };
 
 struct CatchAllSymbolSource : SymbolSource
@@ -120,14 +140,12 @@ void CatchAllSymbolSource::hookDependency(SymbolDependency* dependency)
 
 vector<SymbolSource*> s_symbolSources;
 
-
-
-DeclarationSymbolSource* createDeclarationSymbolSource(Symbol* symbol, AST::Node* node, bool isExternal = false)
+DeclarationSymbolSource* createDeclarationSymbolSource(Symbol* symbol, AST::Node* node, StorageQualifier storageQualifier)
 {
 	auto s = new DeclarationSymbolSource();
 	s->node = node;
 	s->symbol = symbol;
-	s->external = isExternal;
+	s->storageQualifier = storageQualifier;
 	s_symbolSources.push_back(s);
 	return s;
 }
