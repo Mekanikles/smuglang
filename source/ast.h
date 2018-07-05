@@ -122,6 +122,11 @@ namespace AST
 
 	static string functionString(const string& s)
 	{
+		return string("\033[91;1m") + s + string("\033[0m");
+	}
+
+	static string symbolString(const string& s)
+	{
 		return string("\033[94;1m") + s + string("\033[0m");
 	}
 
@@ -368,7 +373,7 @@ namespace AST
 
 		string toString() override 
 		{ 	
-			string s = "FunctionInParam(" + name + ")";
+			string s = "FunctionInParam(" + symbolString(name) + ")";
 			s += typeString(getType());
 			return s;
 		}
@@ -409,7 +414,7 @@ namespace AST
 
 		string toString() override 
 		{ 
-			string s = "FunctionOutParam(" + name + ")";
+			string s = "FunctionOutParam(" + symbolString(name) + ")";
 			s += typeString(getType());
 			return s;
 		}
@@ -701,7 +706,7 @@ namespace AST
 
 		string toString() override 
 		{ 
-			string s = "SymbolDeclaration(" + symbol + ", SQ = " + 
+			string s = "SymbolDeclaration(" + symbolString(symbol) + ", SQ = " + 
 					sqToString(storageQualifier) + ", isParam: " + 
 					std::to_string(isParam) + ")";
 			return s; 
@@ -797,7 +802,7 @@ namespace AST
 		string toString() override 
 		{ 
 			string s;
-			s += "FunctionDeclaration(" + symbol + ")";
+			s += "FunctionDeclaration(" + symbolString(symbol) + ")";
 			return s;
 		}
 
