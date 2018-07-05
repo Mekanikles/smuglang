@@ -197,6 +197,7 @@ struct LLVMIRGenerator : AST::Visitor
 
 		if (type.isFunction())
 		{
+			assert(node->isExternal);
 			m_functions[symbol] = createFunction(type, symbol->name, node->isExternal);
 		}
 		else
@@ -206,6 +207,17 @@ struct LLVMIRGenerator : AST::Visitor
 
 			auto t = resolveType(type);
 			auto a = m_builder.CreateAlloca(t, nullptr, symbol->name.c_str());
+
+			if (node->initExpr)
+			{
+				const int valueCount = m_valueStack.size();
+				node->initExpr->accept(this);
+				assert(m_valueStack.size() == valueCount + 1);
+
+				m_builder.CreateStore(m_valueStack.back(), a);
+				m_valueStack.pop_back();
+			}
+
 			m_variables[symbol->name] = a;
 		}
 	}

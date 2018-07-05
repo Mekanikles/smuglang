@@ -26,12 +26,12 @@ main();
 
 //print(hej, ());
 
-//var hej : #primitives.c.int = 5;
+var hej : #primitives.c.int = 666;
 
 func print(lol : #primitives.c.int) -> () 
 {
 	extern printf : func(fmt : #primitives.c.char*, args...) -> errCode : #primitives.c.int;
-	printf("The number: %i\n", (lol));
+	printf("The number of the beast: %i\n", (lol));
 };
 
-print(666);
+print(hej);
