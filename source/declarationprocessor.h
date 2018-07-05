@@ -59,6 +59,7 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 			//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)paramScope.id));		
 		}
 
+		AST::Visitor::visit(node);
 	}
 
 	void visit(AST::FunctionLiteral* node) override
