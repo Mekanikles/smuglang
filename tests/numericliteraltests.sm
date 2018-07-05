@@ -26,7 +26,7 @@ main();
 
 //print(hej, ());
 
-var hej : cint = 666;
+var hej = 666;
 
 func print(lol : cint) -> () 
 {

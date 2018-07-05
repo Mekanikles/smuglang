@@ -120,6 +120,11 @@ namespace AST
 		return string(", \033[35;1mType: \033[0m\033[35m") + t.toString() + string("\033[0m");
 	}
 
+	static string functionString(const string& s)
+	{
+		return string("\033[94;1m") + s + string("\033[0m");
+	}
+
 	struct Expression : Statement
 	{
 		virtual Type& getType() = 0;
@@ -162,7 +167,7 @@ namespace AST
 	{
 		StatementBody* body;
 
-		string toString() override { return "StatementBody"; }
+		string toString() override { return "Module"; }
 		const vector<Node*> getChildren() override
 		{
 			assert(body);
@@ -758,7 +763,7 @@ namespace AST
 
 		string toString() override 
 		{ 
-			string s = "FunctionLiteral";
+			string s = functionString("FunctionLiteral");
 			s += typeString(getType());
 			return s;
 		}

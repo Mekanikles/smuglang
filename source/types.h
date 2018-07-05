@@ -112,17 +112,14 @@ struct Type
 		}
 		else if (kind == TypeVariable)
 		{
-			s = "TypeVar";
+			s = "TypeVar(";
 		}
-		else
-		{
-			s = "Value";
-		}
+
 		assert(typeClass);
-		s += "(";
 		s += typeClass->toString();
-		s += ")";
-		s += string(" #") + std::to_string(typeClass->typeId);
+		if (kind == TypeVariable)
+			s += ")";
+		s += string(" \033[1m#") + std::to_string(typeClass->typeId);
 		return s;
 	}
 
@@ -544,6 +541,8 @@ struct FunctionClass : TypeClass
 
 		string toString() const
 		{
+			if (identifier.empty())
+				return "";
 			string s = identifier;
 			s += " : ";
 			s += type.toString();
@@ -637,7 +636,7 @@ struct PointerClass : TypeClass
 
 	virtual string toString() const override
 	{
-		string s = "Pointer (";
+		string s = "Pointer(";
 		s += type.toString();
 		s += ")";
 		return s;
