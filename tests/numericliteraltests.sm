@@ -1,6 +1,6 @@
 
-def cchar = #primitives.c.char;
-def cint = #primitives.c.int;
+//def cchar = #primitives.c.char;
+//def cint = #primitives.c.int;
 
 /*func print(fmt : cchar*, args...) -> ()
 {
@@ -26,12 +26,16 @@ main();
 
 //print(hej, ());
 
-var hej = 666;
+var hej = 64;
 
-func print(lol : cint) -> () 
+/*func print(lol : cint) -> () 
 {
 	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
 	printf("The number of the beast: %i\n", (lol));
 };
 
-print(hej);
+print(hej);*/
+
+var hejint16 : #primitives.s16;
+hejint16 = hej;
+//var hejint8 : #primitives.s8 = hej;

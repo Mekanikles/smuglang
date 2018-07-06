@@ -1100,6 +1100,7 @@ struct Parser
 				*outStatement = node;
 				
 				auto* symExpr = createNode<AST::SymbolExpression>(symbol);
+				symExpr->isPartOfAssignment = true;
 
 				// Assignment
 				AST::Expression* expr;

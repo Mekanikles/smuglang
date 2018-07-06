@@ -147,7 +147,7 @@ struct ASTProcessor : AST::Visitor
 		}
 
 		// Infer type from init expression
-		if (node->initExpr || node->isParam)
+		if (node->initExpr)
 		{
 			symbol->firstInitOrder = node->order;
 			if (node->initExpr)
@@ -169,6 +169,31 @@ struct ASTProcessor : AST::Visitor
 		}
 
 		// TODO: Resolve any type requests within this and underlying scopes
+	}
+
+	void visit(AST::Assignment* node) override
+	{
+		if (node->processed)
+			return;
+		node->processed = true;
+
+		assert(node->symExpr);
+		node->symExpr->accept(this);
+		Symbol* symbol = node->symExpr->getSymbol();
+
+		if (symbol->firstInitOrder < node->order)
+			symbol->firstInitOrder = node->order;
+
+		// Infer type from assignment
+		assert(node->expr);
+		node->expr->accept(this);
+
+		Type& exprType = node->expr->getType();
+		const auto result = unifyTypes(symbol->type, exprType);
+
+		// TODO: Handle implicit casts?
+		if (result == CannotUnify)
+			assert("Cannot unify types" && false);	
 	}
 
 	void visit(AST::SymbolExpression* node) override
@@ -195,7 +220,7 @@ struct ASTProcessor : AST::Visitor
 		//	Consider doing this at a later pass, in some execution-order
 		//	based traversal.
 		Symbol* symbol = node->getSymbol();
-		if (symbol->firstInitOrder > node->order)
+		if (!node->isPartOfAssignment && symbol->firstInitOrder > node->order)
 		{	
 			// TODO: add line/column
 			printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization" + 

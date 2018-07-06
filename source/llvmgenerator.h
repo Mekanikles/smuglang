@@ -226,6 +226,27 @@ struct LLVMIRGenerator : AST::Visitor
 		}
 	}
 
+	void visit(AST::Assignment* node) override
+	{
+		// NOTE: Do NOT evaluate symbol expr, we don't want a load here
+		// TODO: Handle expressions that return assignable "values"
+		assert(node->symExpr);
+		Symbol* symbol = node->symExpr->getSymbol();
+
+		// TODO: This relies on decl node being parsed first,
+		// 	make sure IR is arranged in correct order
+		auto var = m_variables[symbol->name];
+		assert(var);
+
+		assert(node->expr);
+		const int valueCount = m_valueStack.size();	
+		node->expr->accept(this);
+		assert(m_valueStack.size() == valueCount + 1);
+
+		m_builder.CreateStore(m_valueStack.back(), var);
+		m_valueStack.pop_back();
+	}
+
 	void visit(AST::SymbolExpression* node) override
 	{
 		assert(node->dependency);

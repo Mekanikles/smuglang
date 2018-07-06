@@ -485,6 +485,7 @@ namespace AST
 	{
 		string symbol;
 		SymbolDependency* dependency = nullptr;
+		bool isPartOfAssignment = false;
 
 		SymbolExpression(string symbol)
 			: symbol(symbol)
@@ -698,7 +699,6 @@ namespace AST
 	struct SymbolDeclaration : public NodeImpl<SymbolDeclaration, Declaration>
 	{
 		string symbol;
-		bool isParam = false;
 		StorageQualifier storageQualifier = StorageQualifier::Var;
 		Expression* typeExpr = nullptr;
 		Expression* initExpr = nullptr;
@@ -707,8 +707,7 @@ namespace AST
 		string toString() override 
 		{ 
 			string s = "SymbolDeclaration(" + symbolString(symbol) + ", SQ = " + 
-					sqToString(storageQualifier) + ", isParam: " + 
-					std::to_string(isParam) + ")";
+					sqToString(storageQualifier) + ")" + typeString(getType());
 			return s; 
 		}
 
@@ -719,6 +718,12 @@ namespace AST
 		Symbol* getSymbol()
 		{
 			return symbolObj;
+		}
+
+		const Type& getType()
+		{
+			assert(symbolObj);
+			return symbolObj->type;
 		}
 
 		const vector<Node*> getChildren() override
