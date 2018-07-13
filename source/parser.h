@@ -320,7 +320,7 @@ struct Parser
 				}
 
 				auto typeClass = std::make_unique<PrimitiveClass>(type, size, sign);
-				auto* node = createNode<AST::TypeLiteral>(std::move(typeClass));		
+				auto* node = createNode<AST::TypeLiteral>(Type(std::move(typeClass)));		
 				*outNode = node;
 			}
 			else

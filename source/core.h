@@ -5,6 +5,13 @@
 #include <vector>
 #include <string>
 
+#include <experimental/optional>
+namespace std
+{
+	template<typename T>
+	using optional = experimental::optional<T>;
+}
+
 template<typename T>
 using vector = std::vector<T>;
 using string = std::string;

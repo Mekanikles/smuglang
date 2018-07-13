@@ -41,7 +41,7 @@ struct LLVMIRGenerator : AST::Visitor
 		if (type.isPointer())
 		{
 			const auto& pointer = type.getPointer();
-			auto pType = resolveType(pointer.type)->getPointerTo();
+			auto pType = resolveType(pointer.type.getType())->getPointerTo();
 			return pType;
 		}
 		else if (type.isPrimitive())
@@ -111,9 +111,9 @@ struct LLVMIRGenerator : AST::Visitor
 		for (int i = 0, e = function.inParams.size(); i < e; ++i)
 		{
 			const auto& p = function.inParams[i];
-			const Type& t = p.type;
+			const TypeRef& t = p.type;
 			// TODO: Make sure CVariadics can only have one tuple at the end
-			if (isExternal && t.isTuple())
+			if (isExternal && t.getType().isTuple())
 			{
 				// TODO: Handle bounded tuples?
 				isCVariadic = true;
@@ -121,7 +121,7 @@ struct LLVMIRGenerator : AST::Visitor
 				break;
 			}
 			
-			args.push_back(resolveType(t));
+			args.push_back(resolveType(t.getType()));
 			paramNames.push_back(p.identifier);
 		}
 
@@ -291,8 +291,8 @@ struct LLVMIRGenerator : AST::Visitor
 		auto rightVal = m_valueStack.back(); 
 		m_valueStack.pop_back();
 
-		assert(type.isPrimitive());
-		const auto& primitive = type.getPrimitive();
+		assert(type->isPrimitive());
+		const auto& primitive = type->getPrimitive();
 		if (primitive.isInteger() || primitive.isChar())
 		{
 			switch (node->opType)

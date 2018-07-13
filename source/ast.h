@@ -115,7 +115,7 @@ namespace AST
 
 	void visitChildren(Declaration* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
 
-	static string typeString(const Type& t)
+	static string typeString(const TypeRef& t)
 	{
 		return string(", \033[35;1mType: \033[0m\033[35m") + t.toString() + string("\033[0m");
 	}
@@ -132,7 +132,7 @@ namespace AST
 
 	struct Expression : Statement
 	{
-		virtual Type& getType() = 0;
+		virtual TypeRef& getType() = 0;
 
 		virtual bool isSymbolExpression() { return false; }
 	};
@@ -253,14 +253,15 @@ namespace AST
 	struct StringLiteral : public NodeImpl<StringLiteral, Expression>
 	{
 		string value;
-		Type type;
+		TypeRef type;
 		
 		StringLiteral(const string& value)
 			: value(value)
-			, type(createMultiTypeVariable(
-					createStaticArrayType(createPrimitiveType(PrimitiveClass::Char), value.length()),
-					createPointerType(createPrimitiveType(PrimitiveClass::Char))))
+			, type(createMultiTypeVariable())
 		{
+			auto& types = type->getMultiType();
+			types.appendType(createStaticArrayType(createPrimitiveType(PrimitiveClass::Char), value.length()));
+			types.appendType(createPointerType(createPrimitiveType(PrimitiveClass::Char)));
 		}
 
 		string toString() override
@@ -272,7 +273,7 @@ namespace AST
 			return s;
 		}
 
-		Type& getType() override
+		TypeRef& getType() override
 		{
 			return type;
 		}
@@ -281,7 +282,7 @@ namespace AST
 	struct IntegerLiteral : public NodeImpl<IntegerLiteral, Expression>
 	{
 		string value;
-		Type type;
+		TypeRef type;
 
 		IntegerLiteral(const string& value)
 			: value(value)
@@ -296,7 +297,7 @@ namespace AST
 			return s;
 		}
 
-		Type& getType() override
+		TypeRef& getType() override
 		{
 			return type;
 		}
@@ -305,7 +306,7 @@ namespace AST
 	struct FloatLiteral : public NodeImpl<FloatLiteral, Expression>
 	{
 		string value;
-		Type type;
+		TypeRef type;
 		
 		FloatLiteral(const string& value)
 			: value(value)
@@ -320,7 +321,7 @@ namespace AST
 			return s;
 		}
 
-		Type& getType() override
+		TypeRef& getType() override
 		{
 			return type;
 		}
@@ -328,9 +329,9 @@ namespace AST
 
 	struct TypeLiteral : public NodeImpl<TypeLiteral, Expression>
 	{
-		Type type;
-		TypeLiteral(std::unique_ptr<TypeClass> typeClass)
-			: type(createTypeVariable(std::move(typeClass)))
+		TypeRef type;
+		TypeLiteral(TypeRef&& type)
+			: type(createTypeVariable(std::move(type)))
 		{}
 
 		string toString() override 
@@ -340,7 +341,7 @@ namespace AST
 			return s;
 		}
 
-		Type& getType() override
+		TypeRef& getType() override
 		{
 			return type;
 		}	
@@ -359,10 +360,10 @@ namespace AST
 			return symbolObj;
 		}
 
-		Type& getType()
+		TypeRef& getType()
 		{
 			assert(symbolObj);
-			return symbolObj->type;
+			return symbolObj->getType();
 		}
 
 		const string& getName()
@@ -400,10 +401,10 @@ namespace AST
 			return symbolObj;
 		}
 
-		Type& getType()
+		TypeRef& getType()
 		{
 			assert(symbolObj);
-			return symbolObj->type;
+			return symbolObj->getType();
 		}
 
 		const string& getName()
@@ -437,39 +438,39 @@ namespace AST
 		bool specifiedInParams = false;
 		bool specifiedOutParams = false;
 		bool isCVariadic = false;
-		Type type;
+		std::optional<TypeRef> type;
 
 		string toString() override 
 		{ 
 			string s = "FunctionSignature(isCVariadic: " + std::to_string(isCVariadic) +
-					", isAny: " + std::to_string(type.isAny()) + ")";
+					", isAny: " + std::to_string(getType().getType().isAny()) + ")";
 			s += typeString(getType());	
 			return s;
 		}
 
-		Type& getType() override
+		TypeRef& getType() override
 		{
 			// TODO:
-			if (type.isAny())
+			if (!type)
 			{
 				auto func = std::make_unique<FunctionClass>();
 				func->isCVariadic = isCVariadic;
 
 				for (auto* p : inParams)
 				{
-					Type& t = p->getType();
-					func->appendInParam(t, p->getName());
+					TypeRef& t = p->getType();
+					func->appendInParam(t.clone(), p->getName());
 				}
 
 				for (auto* p : outParams)
 				{
-					Type& t = p->getType();
-					func->appendOutParam(t, p->getName());
+					TypeRef& t = p->getType();
+					func->appendOutParam(t.clone(), p->getName());
 				}
 
-				type = createTypeVariable(std::move(func));
+				type.emplace(createTypeVariable(Type(std::move(func))));
 			}
-			return type;
+			return *type;
 		}
 
 		const vector<Node*> getChildren() override
@@ -507,16 +508,16 @@ namespace AST
 			return s; 
 		}
 
-		Type& getType() override
+		TypeRef& getType() override
 		{
-			return getSymbol()->type;
+			return getSymbol()->getType();
 		}
 	};
 
 	struct Tuple : public NodeImpl<Tuple, Expression>
 	{
 		vector<Expression*> exprs;
-		Type type;
+		std::optional<TypeRef> type;
 
 		string toString() override 
 		{ 
@@ -526,18 +527,18 @@ namespace AST
 			return s; 
 		}
 
-		Type& getType() override
+		TypeRef& getType() override
 		{
 			// TODO:
-			if (type.isAny())
+			if (!type)
 			{
-				vector<Type> types;
+				vector<TypeRef> types;
 				for (auto* e : exprs)				
-					types.push_back(e->getType());
+					types.push_back(e->getType().clone());
 
-				type = createTupleType(std::move(types));
+				type.emplace(createTupleType(std::move(types)));
 			}
-			return type;
+			return *type;
 		}
 
 		const vector<Node*> getChildren() override
@@ -614,11 +615,10 @@ namespace AST
 			return ret;
 		}
 
-		Type& getType() override
+		TypeRef& getType() override
 		{
 			// TODO: Bubble up types through ops for now
-			Type& t = expr->getType();
-			return t;
+			return expr->getType();
 		}
 	};
 
@@ -626,7 +626,7 @@ namespace AST
 	{
 		TokenType opType;
 		Expression* expr = nullptr;
-		Type type;
+		std::optional<TypeRef> type;
 
 		string toString() override 
 		{ 
@@ -642,22 +642,22 @@ namespace AST
 			return ret;
 		}
 
-		Type& getType() override
+		TypeRef& getType() override
 		{
-			if (type.isAny())
+			if (!type)
 			{
 				// TODO: Bubble up types through ops for now
-				const Type& t = expr->getType();
+				const TypeRef& t = expr->getType();
 				if (opType == TokenType::Asterisk)
 				{
-					type = createPointerTypeVariable(t.innerTypeFromTypeVariable());
+					type.emplace(createPointerTypeVariable(t.getType().getTypeVariable().type.clone()));
 				}
 				else
 				{
-					type = t;
+					type.emplace(t.clone());
 				}
 			}
-			return type;
+			return *type;
 		}
 	};
 
@@ -682,11 +682,11 @@ namespace AST
 			return ret;
 		}
 
-		Type& getType() override
+		TypeRef& getType() override
 		{
 			// TODO: Bubble up types through ops for now
-			Type& t1 = left->getType();
-			Type& t2 = right->getType();
+			TypeRef& t1 = left->getType();
+			TypeRef& t2 = right->getType();
 
 			const auto result = unifyTypes(t1, t2);
 			if (result == CannotUnify)
@@ -720,10 +720,10 @@ namespace AST
 			return symbolObj;
 		}
 
-		const Type& getType()
+		const TypeRef& getType()
 		{
 			assert(symbolObj);
-			return symbolObj->type;
+			return symbolObj->getType();
 		}
 
 		const vector<Node*> getChildren() override
@@ -778,12 +778,10 @@ namespace AST
 			return s;
 		}
 
-		Type& getType() override
+		TypeRef& getType() override
 		{
 			assert(signature);
-			// Meh, do we really need to use references to types everywhere?
-			type = signature->getType().innerTypeFromTypeVariable();
-			return type;
+			return signature->getType().getType().getTypeVariable().type;
 		}
 
 		const vector<Node*> getChildren() override

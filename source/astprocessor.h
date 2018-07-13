@@ -53,7 +53,7 @@ struct ASTProcessor : AST::Visitor
 		// Process literal
 		node->funcLiteral->accept(this);
 
-		Type& functionType = node->funcLiteral->getType();
+		TypeRef& functionType = node->funcLiteral->getType();
 
 		Symbol* symbol = node->getSymbol();
 		symbol->firstInitOrder = node->order;
@@ -67,18 +67,18 @@ struct ASTProcessor : AST::Visitor
 		{
 			Symbol* symbol = param->getSymbol();
 
-			Type type;
+			TypeRef type;
 			if (param->typeExpr)
 			{
-				const Type& exprType = param->typeExpr->getType();
-				type = exprType.innerTypeFromTypeVariable();
+				const TypeRef& exprType = param->typeExpr->getType();
+				type = exprType->getTypeVariable().type;
 			}
 
 			const bool isVariadic = param->isVariadic;
 			if (isVariadic)
-				symbol->type = createTupleType(type);
+				symbol->getType() = createTupleType(std::move(type));
 			else
-				symbol->type = type;
+				symbol->getType() = type;
 
 			// Infer type from init expression
 			if (param->initExpr && !isVariadic)
@@ -86,8 +86,8 @@ struct ASTProcessor : AST::Visitor
 				symbol->firstInitOrder = node->order;
 				if (param->initExpr)
 				{
-					Type& exprType = param->initExpr->getType();
-					const auto result = unifyTypes(symbol->type, exprType);
+					TypeRef& exprType = param->initExpr->getType();
+					const auto result = unifyTypes(symbol->getType(), exprType);
 
 					// TODO: Handle implicit casts?
 					if (result == CannotUnify)
@@ -103,11 +103,11 @@ struct ASTProcessor : AST::Visitor
 		{
 			Symbol* symbol = param->getSymbol();
 
-			Type type;
+			TypeRef type;
 			if (param->typeExpr)
 			{
-				const Type& exprType = param->typeExpr->getType();
-				type = exprType.innerTypeFromTypeVariable();
+				const TypeRef& exprType = param->typeExpr->getType();
+				type = exprType->getTypeVariable().type;
 			}
 
 			symbol->type = type;
@@ -143,7 +143,7 @@ struct ASTProcessor : AST::Visitor
 		{
 			node->typeExpr->accept(this);
 			const Type& type = node->typeExpr->getType();
-			symbol->type = type.innerTypeFromTypeVariable();
+			symbol->type = type.getTypeVariable().type;
 		}
 
 		// Infer type from init expression
@@ -153,8 +153,8 @@ struct ASTProcessor : AST::Visitor
 			if (node->initExpr)
 			{
 				node->initExpr->accept(this);
-				Type& exprType = node->initExpr->getType();
-				const auto result = unifyTypes(symbol->type, exprType);
+				TypeRef& exprType = node->initExpr->getType();
+				const auto result = unifyTypes(symbol->getType(), exprType);
 
 				// TODO: Handle implicit casts?
 				if (result == CannotUnify)
@@ -188,7 +188,7 @@ struct ASTProcessor : AST::Visitor
 		assert(node->expr);
 		node->expr->accept(this);
 
-		Type& exprType = node->expr->getType();
+		TypeRef& exprType = node->expr->getType();
 		const auto result = unifyTypes(symbol->type, exprType);
 
 		// TODO: Handle implicit casts?
@@ -249,8 +249,8 @@ struct ASTProcessor : AST::Visitor
 		}
 
 		auto& type = nodeVal.type;
-		const ArrayClass* ac = type.isArray() ? &type.typeClass->as<ArrayClass>() : nullptr;
-		if (!ac || !ac->type.isPrimitive() || !ac->type.typeClass->as<PrimitiveClass>().isChar())
+		const ArrayClass* ac = type->isArray() ? &type->typeClass->as<ArrayClass>() : nullptr;
+		if (!ac || !ac->type->isPrimitive() || !ac->type->typeClass->as<PrimitiveClass>().isChar())
 		{
 			assert("Expression is not of string type" && false);
 		}

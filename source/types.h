@@ -6,17 +6,20 @@ struct Type;
 struct PrimitiveClass;
 struct FunctionClass;
 struct PointerClass;
+struct TypeVariableClass;
 struct ArrayClass;
 struct TupleClass;
 struct MultiTypeClass;
 
+struct TypeRef;
 bool isSubType(const Type& t, const MultiTypeClass& mtc);
 
 struct TypeClass
 {
 	enum ClassType
 	{
-		Any, // TODO: Necessary? Type can be Any also
+		Any,
+		TypeVariable,
 		MultiType,
 		Primitive,
 		Array,
@@ -79,27 +82,30 @@ struct Type
 	enum Kind
 	{
 		Any,
-		TypeVariable,
 		Value
 	};
 
 	Kind kind;
-	std::shared_ptr<TypeClass> typeClass;
+	std::unique_ptr<TypeClass> typeClass;
 
 	Type() : kind(Kind::Any) {};
-	Type(Kind kind, std::shared_ptr<TypeClass> typeClass)
-		: kind(kind), typeClass(typeClass)
+	Type(Kind kind, std::unique_ptr<TypeClass> typeClass)
+		: kind(kind), typeClass(std::move(typeClass))
 	{}
-	Type(bool isTypeVariable, std::shared_ptr<TypeClass> typeClass)
-		: typeClass(typeClass)
+	Type(std::unique_ptr<TypeClass> _typeClass)
+		: typeClass(std::move(_typeClass))
 	{
 		assert(typeClass.get());
-		kind = isTypeVariable ? TypeVariable : Value;
+		kind = Value;
 	}
 
-	Type clone() const
+	Type(const Type&) = delete;
+	Type& operator=(const Type&) = delete;
+	Type(Type&& o) = default;
+
+	Type&& clone() const
 	{
-		return Type(kind, typeClass ? typeClass->clone() : nullptr);
+		return std::move(Type(kind, typeClass ? typeClass->clone() : nullptr));
 	}
 
 	string toString() const
@@ -110,15 +116,9 @@ struct Type
 			s = "Any";
 			return s;
 		}
-		else if (kind == TypeVariable)
-		{
-			s = "TypeVar(";
-		}
 
 		assert(typeClass);
 		s += typeClass->toString();
-		if (kind == TypeVariable)
-			s += ")";
 		s += string(" \033[1m#") + std::to_string(typeClass->typeId);
 		return s;
 	}
@@ -233,15 +233,150 @@ struct Type
 
 	bool isTypeVariable() const
 	{
-		return kind == TypeVariable;
+		return hasTypeClass() && typeClass->type == TypeClass::TypeVariable;
 	}
 
-	Type innerTypeFromTypeVariable() const
+	const TypeVariableClass& getTypeVariable() const
 	{
 		assert(isTypeVariable());
-		return Type(false, typeClass);
+		return typeClass->as<TypeVariableClass>();
+	}
+
+	TypeVariableClass& getTypeVariable()
+	{
+		assert(isTypeVariable());
+		return typeClass->as<TypeVariableClass>();
+	}
+
+	bool hasTypeClass() const
+	{
+		return typeClass.get() != nullptr;
+	}
+
+	bool isAutoType() const
+	{
+		return !hasTypeClass();
 	}
 };
+
+////////////////////////////////////////////////////////////////////////////////
+
+// TODO: This is to be able to re-assign type references during
+//	inference. It feels rather cumbersome, look into Algorithm W etc
+struct TypeWrapper
+{
+	Type type;
+
+	mutable vector<struct TypeRef*> references;
+
+	TypeWrapper(Type&& type)
+		: type(std::move(type))
+	{
+	}
+
+	void addRef(TypeRef* typeRef) const
+	{
+		references.push_back(typeRef);
+	}
+
+	void removeRef(TypeRef* typeRef) const
+	{
+		auto it = std::find(references.begin(), references.end(), typeRef);
+		if (it != references.end())
+			references.erase(it);
+	}
+
+	Type& getType() { return type; }
+	const Type& getType() const { return type; }
+};
+
+struct TypeRef
+{
+	std::shared_ptr<TypeWrapper> typeWrapper;
+
+	TypeRef() 
+	{
+		typeWrapper = std::make_shared<TypeWrapper>(Type());
+		typeWrapper->addRef(this);
+	}
+
+	TypeRef(Type&& type)
+	{
+		typeWrapper = std::make_shared<TypeWrapper>(std::move(type));
+		typeWrapper->addRef(this);
+	}
+
+	TypeRef(const std::shared_ptr<TypeWrapper>& typeWrapper)
+		: typeWrapper(typeWrapper)
+	{
+		typeWrapper->addRef(this);
+	}
+
+	~TypeRef()
+	{
+		if (typeWrapper)
+			typeWrapper->removeRef(this);
+	}
+
+	TypeRef& operator=(const TypeRef& o)
+	{
+		typeWrapper->removeRef(this);
+		typeWrapper = o.typeWrapper;
+		typeWrapper->addRef(this);
+		return *this;
+	}
+
+	TypeRef(TypeRef&& o) 
+	{
+		o.typeWrapper->removeRef(&o);
+		typeWrapper = std::move(o.typeWrapper);
+		typeWrapper->addRef(this);
+	}
+
+	TypeRef(const TypeRef&) = delete;
+
+	Type& getType() { return typeWrapper->getType(); }
+	const Type& getType() const { return typeWrapper->getType(); }
+
+	operator Type&() { return getType(); }
+	operator const Type&() const { return getType(); }
+
+	Type* operator->() { return &getType(); }
+	const Type* operator->() const { return &getType(); }
+
+	TypeRef&& clone() const
+	{
+		return std::move(TypeRef(typeWrapper));
+	}
+
+	string toString() const
+	{
+		return typeWrapper->getType().toString();
+	}
+
+	bool operator==(const TypeRef& o) const
+	{
+		return getType() == o.getType();
+	}
+
+	bool isSubType(const TypeRef& o) const
+	{
+		return getType().isSubType(o.getType());
+	}
+
+	void mergeInto(const TypeRef& o)
+	{
+		// Copy since merging will modify the original reference list
+		auto refs = typeWrapper->references;
+
+		for (TypeRef* ref : refs)
+		{
+			*ref = o;
+		}
+	}
+};
+
+////////////////////////////////////////////////////////////////////////////////
 
 struct PrimitiveClass : TypeClass
 {
@@ -359,12 +494,12 @@ struct ArrayClass : TypeClass
 	};
 
 	ArrayType arrayType;
-	Type type;
+	TypeRef type;
 	uint staticLength;
 
-	ArrayClass(ArrayType arrayType, const Type& type, uint staticLength = 0) 
+	ArrayClass(ArrayType arrayType, TypeRef&& type, uint staticLength = 0) 
 		: TypeClass(TypeClass::Array)
-		, arrayType(arrayType), type(type), staticLength(staticLength)
+		, arrayType(arrayType), type(std::move(type)), staticLength(staticLength)
 	{}
 
 	virtual std::unique_ptr<TypeClass> clone() const override
@@ -411,22 +546,22 @@ struct ArrayClass : TypeClass
 
 struct TupleClass : TypeClass
 {
-	vector<Type> types;
+	vector<TypeRef> types;
 
 	// Note, if unbounded is true, we only use first type for all elements
 	bool unbounded = false;
 
-	TupleClass(vector<Type> types) 
+	TupleClass(vector<TypeRef>&& types) 
 		: TypeClass(TypeClass::Tuple)
-		, types(types)
+		, types(std::move(types))
 		, unbounded(false)
 	{}
 
-	TupleClass(const Type& type)
+	TupleClass(TypeRef&& type)
 		: TypeClass(TypeClass::Tuple)
 		, unbounded(true)
 	{
-		types.push_back(type);
+		types.push_back(std::move(type));
 	}
 
 private:
@@ -532,11 +667,11 @@ struct FunctionClass : TypeClass
 	struct Param
 	{
 		string identifier;
-		Type type;
+		TypeRef type;
 
-		Param clone() const
+		Param&& clone() const
 		{
-			return {identifier, type.clone()};
+			return std::move(Param{identifier, type.clone()});
 		}
 
 		string toString() const
@@ -559,14 +694,14 @@ struct FunctionClass : TypeClass
 		: TypeClass(TypeClass::Function)
 	{}	
 
-	void appendInParam(const Type& type, const string id)
+	void appendInParam(TypeRef&& type, const string id)
 	{
-		inParams.push_back({id, type});
+		inParams.push_back({id, std::move(type)});
 	}
 
-	void appendOutParam(const Type& type, const string id)
+	void appendOutParam(TypeRef&& type, const string id)
 	{
-		outParams.push_back({id, type});
+		outParams.push_back({id, std::move(type)});
 	}
 
 	virtual std::unique_ptr<TypeClass> clone() const override
@@ -622,11 +757,11 @@ struct FunctionClass : TypeClass
 
 struct PointerClass : TypeClass
 {
-	Type type;
+	TypeRef type;
 
-	PointerClass(const Type& type) 
+	PointerClass(TypeRef&& type) 
 		: TypeClass(TypeClass::Pointer)
-		, type(type)
+		, type(std::move(type))
 	{}	
 
 	virtual std::unique_ptr<TypeClass> clone() const override
@@ -644,10 +779,45 @@ struct PointerClass : TypeClass
 
 	bool operator==(const PointerClass& o) const
 	{
+		// TODO
 		return true;
 	}
 
 	bool isSubClass(const PointerClass& o) const
+	{
+		// TODO
+		return true;
+	}
+};
+
+struct TypeVariableClass : TypeClass
+{
+	TypeRef type;
+
+	TypeVariableClass(TypeRef&& type) 
+		: TypeClass(TypeClass::TypeVariable)
+		, type(std::move(type))
+	{}	
+
+	virtual std::unique_ptr<TypeClass> clone() const override
+	{
+		return std::make_unique<TypeVariableClass>(type.clone());
+	}
+
+	virtual string toString() const override
+	{
+		string s = "TypeVariable(";
+		s += type.toString();
+		s += ")";
+		return s;
+	}
+
+	bool operator==(const TypeVariableClass& o) const
+	{
+		return true;
+	}
+
+	bool isSubClass(const TypeVariableClass& o) const
 	{
 		return true;
 	}
@@ -655,21 +825,20 @@ struct PointerClass : TypeClass
 
 struct MultiTypeClass : TypeClass
 {
-	vector<Type> types;
+	vector<TypeRef> types;
 
-	MultiTypeClass(std::initializer_list<Type> types) 
+	MultiTypeClass()
 		: TypeClass(TypeClass::MultiType)
-		, types(types)
 	{}
 
-	MultiTypeClass(vector<Type> types) 
+	MultiTypeClass(vector<TypeRef>&& types) 
 		: TypeClass(TypeClass::MultiType)
-		, types(types)
+		, types(std::move(types))
 	{}	
 
 	virtual std::unique_ptr<TypeClass> clone() const override
 	{
-		vector<Type> typesClone;
+		vector<TypeRef> typesClone;
 		for (auto& t : types)
 		{
 			typesClone.push_back(t.clone());
@@ -677,7 +846,7 @@ struct MultiTypeClass : TypeClass
 
 		return std::make_unique<MultiTypeClass>(std::move(typesClone));
 	}
-
+ 
 	virtual string toString() const override
 	{
 		string s = "MultiType (";
@@ -692,9 +861,9 @@ struct MultiTypeClass : TypeClass
 		return s;
 	}
 
-	void addType(const Type& type)
+	void appendType(TypeRef&& type)
 	{
-		types.push_back(type);
+		types.push_back(std::move(type));
 	}
 
 	bool operator==(const MultiTypeClass& o) const
@@ -704,10 +873,10 @@ struct MultiTypeClass : TypeClass
 
 	bool isSubClass(const MultiTypeClass& o) const
 	{
-		for (const Type& t1 : types)
+		for (const TypeRef& t1 : types)
 		{
 			bool foundSubType = false;
-			for (const Type& t2 : o.types)
+			for (const TypeRef& t2 : o.types)
 			{
 				if (t1.isSubType(t2))
 				{
@@ -726,9 +895,9 @@ struct MultiTypeClass : TypeClass
 
 bool isSubType(const Type& t, const MultiTypeClass& mtc)
 {
-	for (const Type& t2 : mtc.types)
+	for (const TypeRef& t2 : mtc.types)
 	{
-		if (t.isSubType(t2))
+		if (t.isSubType(t2.getType()))
 			return true;
 	}
 
@@ -778,78 +947,76 @@ bool TypeClass::isSubClass(const TypeClass& o) const
 	return false;
 }
 
+////////////////////////////////////////////////////////////////////////////////
+
 Type createPrimitiveType(PrimitiveClass::PrimitiveType primitiveType)
 {
-	return Type(false, std::make_shared<PrimitiveClass>(primitiveType));
+	return Type(std::make_unique<PrimitiveClass>(primitiveType));
 }
 
-Type createStaticArrayType(const Type& type, int length)
+Type createStaticArrayType(TypeRef&& type, int length)
 {
-	return Type(false, std::make_shared<ArrayClass>(ArrayClass::Static, type, length));
+	return Type(std::make_unique<ArrayClass>(ArrayClass::Static, std::move(type), length));
 }
 
-Type createPointerTypeVariable(const Type& type)
+Type createTypeVariable(TypeRef&& type)
 {
-	assert(!type.isTypeVariable());
-	return Type(true, std::make_shared<PointerClass>(type));
+	return Type(std::make_unique<TypeVariableClass>(std::move(type)));
 }
 
-Type createTupleType(const Type& type)
+Type createPointerTypeVariable(TypeRef&& type)
 {
-	return Type(false, std::make_shared<TupleClass>(type));
+	assert(!type.getType().isTypeVariable());
+	return createTypeVariable(Type(std::make_unique<PointerClass>(std::move(type))));
 }
 
-Type createTupleType(vector<Type> types)
+Type createTupleType(TypeRef&& type)
 {
-	return Type(false, std::make_shared<TupleClass>(std::move(types)));
+	return Type(std::make_unique<TupleClass>(std::move(type)));
+}
+
+Type createTupleType(vector<TypeRef>&& types)
+{
+	return Type(std::make_unique<TupleClass>(std::move(types)));
 }
 
 Type createFunctionType()
 {
-	return Type(false, std::make_shared<FunctionClass>());
+	return Type(std::make_unique<FunctionClass>());
 }
 
-Type createTypeVariable(std::unique_ptr<TypeClass> typeClass)
+Type createMultiTypeVariable()
 {
-	return Type(true, std::move(typeClass));
+	return Type(std::make_unique<MultiTypeClass>());
 }
 
-template<class ...Ts>
-Type createMultiTypeVariable(Ts... types)
+Type createPointerType(TypeRef&& type)
 {
-	return Type(false, std::make_shared<MultiTypeClass>(std::initializer_list<Type>{types...}));
+	return Type(std::make_unique<PointerClass>(std::move(type)));
 }
 
-Type createPointerType(const Type& type)
-{
-	return Type(false, std::make_shared<PointerClass>(type));
-}
+////////////////////////////////////////////////////////////////////////////////
 
 enum UnificationResult
 {
-	NoChange,
 	LeftChanged,
 	RightChanged,
 	BothChanged,
 	CannotUnify,
 };
 
-bool tryUnifyMultiTypes(Type& leftType, Type& rightType);
+bool tryUnifyMultiTypes(TypeRef& leftType, TypeRef& rightType);
 
-UnificationResult unifyTypes(Type& leftType, Type& rightType)
+UnificationResult unifyTypes(TypeRef& leftType, TypeRef& rightType)
 {
-	if (leftType == rightType)
+	if (leftType == rightType || rightType.isSubType(leftType))
 	{
-		return NoChange;
-	}
-	else if (rightType.isSubType(leftType))
-	{
-		leftType = rightType;
+		leftType.mergeInto(rightType);
 		return LeftChanged;
 	}
 	else if (leftType.isSubType(rightType))
 	{
-		rightType = leftType;
+		rightType.mergeInto(leftType);
 		return RightChanged;
 	}
 
@@ -859,33 +1026,33 @@ UnificationResult unifyTypes(Type& leftType, Type& rightType)
 	return CannotUnify;
 }
 
-bool tryUnifyMultiTypes(Type& leftType, Type& rightType)
+bool tryUnifyMultiTypes(TypeRef& leftType, TypeRef& rightType)
 {
-	if (!leftType.isMultiType() || !rightType.isMultiType())
+	if (!leftType.getType().isMultiType() || !rightType.getType().isMultiType())
 		return false;
 
-	vector<Type> typeIntersection;
+	vector<TypeRef> typeIntersection;
 
-	auto& leftMultiType = leftType.getMultiType();
-	auto& rightMultiType = leftType.getMultiType();
-	for (const Type& t1 : leftMultiType.types)
+	auto& leftMultiType = leftType.getType().getMultiType();
+	auto& rightMultiType = leftType.getType().getMultiType();
+	for (const TypeRef& t1 : leftMultiType.types)
 	{
-		for (const Type& t2 : rightMultiType.types)
+		for (const TypeRef& t2 : rightMultiType.types)
 		{
-			Type tc1 = t1;
-			Type tc2 = t2;
+			// TODO: Potential performance problem, n2 clone
+			TypeRef tc1 = t1.clone();
+			TypeRef tc2 = t2.clone();
 			const auto result = unifyTypes(tc1, tc2);
 			if (result != CannotUnify)
 			{
-				Type tr;
-				if (result == LeftChanged)
-					tr = tc1;
+				if (result == LeftChanged || result == BothChanged)
+				{
+					typeIntersection.push_back(std::move(tc1));
+				}
 				else if (result == RightChanged)
-					tr = tc2;
-				else if (result == BothChanged)
-					tr = tc1;
-
-				typeIntersection.push_back(tr);
+				{
+					typeIntersection.push_back(std::move(tc2));
+				}
 				break;
 			}
 		}
@@ -893,15 +1060,13 @@ bool tryUnifyMultiTypes(Type& leftType, Type& rightType)
 
 	if (!typeIntersection.empty())
 	{
-		leftMultiType.types = typeIntersection;
-		rightType = leftType;
+		leftMultiType.types = std::move(typeIntersection);
+		rightType.mergeInto(leftType);
 		return true;
 	}
 
 	return false;
 }
-
-
 
 
 

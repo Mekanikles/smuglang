@@ -1,0 +1,6 @@
+TODO LIST
+
+[ ] Call Expressions
+	* Calls are statements only atm, need to figure out inference through calls
+	* Use the same solution for binary ops
+

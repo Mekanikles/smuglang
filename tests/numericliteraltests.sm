@@ -38,4 +38,5 @@ print(hej);*/
 
 var hejint16 : #primitives.s16;
 hejint16 = hej;
+
 //var hejint8 : #primitives.s8 = hej;

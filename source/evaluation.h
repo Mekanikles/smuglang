@@ -1,7 +1,9 @@
 
 struct Value
 {
-	Type type;
+	// TODO: Should be type ref or just type?
+	//	Should not be able to affect this type by inference at this point
+	TypeRef type;
 	vector<char> data;
 };
 
@@ -17,7 +19,7 @@ struct ExpressionEvaluator : AST::Visitor
 	{
 		auto& val = *this->outValue;
 
-		val.type = node->type;
+		val.type = node->getType();
 
 		string str = processQuotedInputString(node->value);
 

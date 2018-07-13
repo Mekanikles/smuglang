@@ -78,8 +78,7 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 			assert(false && "Function already declared");
 		}
 
-		Symbol* symbol = createSymbol(node->symbol);
-		symbol->type = createFunctionType();
+		Symbol* symbol = createSymbol(node->symbol, createFunctionType());
 		// InitOrder of functions is 0 since they are initialized at compile time
 		symbol->firstInitOrder = 0;
 

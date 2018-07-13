@@ -17,8 +17,6 @@ RESULT=$(./bin/smugc $1)
 if [ -n "$RESULT" ] 
 	then
 		mkdir -p .smug
-		# Compile c output
-		gcc -xc $RESULT.c -o c$OUTPUT -Wno-implicit-function-declaration -Wno-parentheses-equality -Wno-unused-value -Wno-incompatible-library-redeclaration -Wno-pointer-sign
 		# Compile llvm ir output
 		clang -x ir -Wno-override-module $RESULT.ll -o llvm$OUTPUT
 		exit 0

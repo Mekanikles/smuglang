@@ -36,7 +36,7 @@ struct Symbol
 	string name;
 	// TODO Type;
 
-	Type type;
+	TypeRef type;
 	bool isParam = false;
 	bool isFunction = false;
 
@@ -48,16 +48,24 @@ struct Symbol
 	//{
 	//	return declNode != nullptr;
 	//}
+
+	TypeRef& getType() { return type; }
+	const TypeRef& getType() const { return type; }
 };
 
 vector<Symbol*> s_symbols;
 
-Symbol* createSymbol(string name)
+Symbol* createSymbol(string name, TypeRef&& type)
 {
-	Symbol* s = new Symbol { name };
+	Symbol* s = new Symbol { name, std::move(type) };
 	s_symbols.push_back(s);
 	//s->declNode = declNode;
 	return s;
+}
+
+Symbol* createSymbol(string name)
+{
+	return createSymbol(name, Type());
 }
 
 vector<Symbol*>& getSymbols()

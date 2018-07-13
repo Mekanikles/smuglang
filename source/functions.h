@@ -4,10 +4,10 @@ struct FunctionArgumentBinding
 {
 	struct Param
 	{
-		Type type;
+		TypeRef type;
 		int index;
 
-		Param(Type type, int index) : type(type), index(index) {}
+		Param(TypeRef&& type, int index) : type(std::move(type)), index(index) {}
 	};
 
 	vector<Param> params;
@@ -28,7 +28,7 @@ FunctionArgumentBinding* createFunctionArgumentBinding(AST::Call* callNode, cons
 	//	and tuples, plus named argument
 	for (const auto& p : functionInParams)
 	{
-		const Type& type = p.type;
+		const TypeRef& type = p.type;
 		if (argsConsumed >= argCount)
 			assert(false && "Too few arguments to function");
 
@@ -50,8 +50,8 @@ bool unifyArguments(AST::Call* callNode, FunctionArgumentBinding* argBinding)
 	auto& args = callNode->args;
 	for (auto& p : argBinding->params)
 	{
-		Type& t1 = args[p.index]->getType();
-		Type& t2 = p.type;
+		TypeRef& t1 = args[p.index]->getType();
+		TypeRef& t2 = p.type;
 
 		const auto result = unifyTypes(t1, t2);
 		if (result == CannotUnify)
