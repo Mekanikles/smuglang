@@ -103,9 +103,9 @@ struct Type
 	Type& operator=(const Type&) = delete;
 	Type(Type&& o) = default;
 
-	Type&& clone() const
+	Type clone() const
 	{
-		return std::move(Type(kind, typeClass ? typeClass->clone() : nullptr));
+		return Type(kind, typeClass ? typeClass->clone() : nullptr);
 	}
 
 	string toString() const
@@ -344,9 +344,9 @@ struct TypeRef
 	Type* operator->() { return &getType(); }
 	const Type* operator->() const { return &getType(); }
 
-	TypeRef&& clone() const
+	TypeRef clone() const
 	{
-		return std::move(TypeRef(typeWrapper));
+		return TypeRef(typeWrapper);
 	}
 
 	string toString() const
@@ -669,9 +669,9 @@ struct FunctionClass : TypeClass
 		string identifier;
 		TypeRef type;
 
-		Param&& clone() const
+		Param clone() const
 		{
-			return std::move(Param{identifier, type.clone()});
+			return Param{identifier, type.clone()};
 		}
 
 		string toString() const
@@ -694,14 +694,14 @@ struct FunctionClass : TypeClass
 		: TypeClass(TypeClass::Function)
 	{}	
 
-	void appendInParam(TypeRef&& type, const string id)
+	void appendInParam(TypeRef&& _type, const string id)
 	{
-		inParams.push_back({id, std::move(type)});
+		inParams.push_back({id, std::move(_type)});
 	}
 
-	void appendOutParam(TypeRef&& type, const string id)
+	void appendOutParam(TypeRef&& _type, const string id)
 	{
-		outParams.push_back({id, std::move(type)});
+		outParams.push_back({id, std::move(_type)});
 	}
 
 	virtual std::unique_ptr<TypeClass> clone() const override

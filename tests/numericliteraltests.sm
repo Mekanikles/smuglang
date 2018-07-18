@@ -1,5 +1,5 @@
 
-//def cchar = #primitives.c.char;
+def cchar = #primitives.c.char;
 //def cint = #primitives.c.int;
 
 /*func print(fmt : cchar*, args...) -> ()
@@ -18,15 +18,15 @@ var main = func()
 main();
 */
 
-//var hej = "Hej världen!";
+func main(hej : #primitives.c.int) {};
 
+
+//var hej = "Hej världen!";
 
 //func print(fmt : cchar*, args...) -> ()
 //{};
 
 //print(hej, ());
-
-var hej = 64;
 
 /*func print(lol : cint) -> () 
 {
@@ -35,8 +35,3 @@ var hej = 64;
 };
 
 print(hej);*/
-
-var hejint16 : #primitives.s16;
-hejint16 = hej;
-
-//var hejint8 : #primitives.s8 = hej;
