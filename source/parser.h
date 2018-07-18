@@ -254,7 +254,7 @@ struct Parser
 
 				expect(TokenType::Symbol);
 				PrimitiveClass::SignedType sign = PrimitiveClass::UnknownSign;
-				uint size;
+				int size = 32;
 
 				auto type = PrimitiveClass::Int;
 
@@ -274,10 +274,36 @@ struct Parser
 						size = 8;
 					}
 				}
-				else if (lastToken().symbol == "s64")
+				else if (lastToken().symbol == "int")
 				{
-					sign = PrimitiveClass::Signed;
-					size = 64;
+					// TODO: Make int a proper parameterized type
+					//	with size and sign defaulting to 32, true
+					//	This allows user to write "int" for unspecified ints
+					expect(TokenType::OpenParenthesis);
+
+					expect(TokenType::IntegerLiteral);
+
+					size = atoi(lastToken().symbol.c_str());
+					if (size <= 0)
+					{
+						errorOnAccept("Size must be a positive integer");
+					}
+
+					expect(TokenType::Comma);
+					if (accept(TokenType::True))
+					{
+						sign = PrimitiveClass::Signed;
+					}
+					else if (accept(TokenType::False))
+					{
+						sign = PrimitiveClass::Unsigned;
+					}
+					else
+					{
+						errorOnExpect("Expected boolean");
+					}
+					
+					expect(TokenType::CloseParenthesis);
 				}
 				else if (lastToken().symbol == "u64")
 				{
@@ -319,7 +345,7 @@ struct Parser
 					errorOnAccept("Unknown primitive type");
 				}
 
-				auto typeClass = std::make_unique<PrimitiveClass>(type, size, sign);
+				auto typeClass = std::make_unique<PrimitiveClass>(type, (uint)size, sign);
 				auto* node = createNode<AST::TypeLiteral>(Type(std::move(typeClass)));		
 				*outNode = node;
 			}

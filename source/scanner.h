@@ -366,6 +366,10 @@ public:
 					*outToken = Token(TokenType::Func);
 				else if (w == "eval")
 					*outToken = Token(TokenType::Eval);
+				else if (w == "true")
+					*outToken = Token(TokenType::True);
+				else if (w == "false")
+					*outToken = Token(TokenType::False);				
 				else
 					*outToken = Token(TokenType::Symbol, w);
 				return true;

@@ -2,6 +2,11 @@
 def cchar = #primitives.c.char;
 def cint = #primitives.c.int;
 
+def s64 = #primitives.int(64, true);
+def u64 = #primitives.int(64, false);
+def s32 = #primitives.int(32, true);
+def u32 = #primitives.int(32, false);
+
 /*func print(fmt : cchar*, args...) -> ()
 {
 	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
@@ -28,6 +33,7 @@ main();
 
 //print(hej, ());
 
+/*
 var text = "The number of the beast: %i\n";
 var num : cint = 666;
 
@@ -38,3 +44,5 @@ func print(fmt : cchar*, args...) -> ()
 };
 
 print(text, (num));
+*/
+

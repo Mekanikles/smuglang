@@ -21,6 +21,8 @@ enum class TokenType
 	If,
 	Else,
 	Equals,
+	True,
+	False,
 	CompilerDirective,
 	SemiColon,
 	Comma,
@@ -76,6 +78,8 @@ string toString(TokenType type)
 		case TokenType::If: return "If";
 		case TokenType::Else: return "Else";
 		case TokenType::Equals: return "Equals";
+		case TokenType::True: return "True";
+		case TokenType::False: return "False";
 		// TODO: # should be its own token, compiler directive should be on parser level
 		case TokenType::CompilerDirective: return "CompilerDirective";		
 		case TokenType::SemiColon: return "Semi Colon";
