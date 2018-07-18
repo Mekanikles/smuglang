@@ -117,12 +117,10 @@ namespace AST
 
 	static string typeString(const TypeRef& t)
 	{
-		return string(", \033[35;1mType: \033[0m\033[35m") + t.toString() + string("\033[0m");
-	}
-
-	static string functionString(const string& s)
-	{
-		return string("\033[91;1m") + s + string("\033[0m");
+		if (t->isConcrete())
+			return string(", \033[35;1mType: \033[0m\033[35m") + t.toString() + string("\033[0m");
+		else
+			return string(", \033[91;1mType: \033[0m\033[91m") + t.toString() + string("\033[0m");
 	}
 
 	static string symbolString(const string& s)
@@ -773,7 +771,7 @@ namespace AST
 
 		string toString() override 
 		{ 
-			string s = functionString("FunctionLiteral");
+			string s = "FunctionLiteral";
 			s += typeString(getType());
 			return s;
 		}

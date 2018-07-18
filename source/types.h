@@ -39,6 +39,7 @@ struct TypeClass
 
 	virtual std::unique_ptr<TypeClass> clone() const = 0;
 	virtual string toString() const = 0;
+	virtual bool isConcrete() const = 0;
 
 	ClassType type = Any;
 	unsigned int typeId;
@@ -119,8 +120,16 @@ struct Type
 
 		assert(typeClass);
 		s += typeClass->toString();
-		s += string(" \033[1m#") + std::to_string(typeClass->typeId);
+		s += string(" \033[1m#") + std::to_string(typeClass->typeId) + string("\033[22m");
 		return s;
+	}
+
+	bool isConcrete() const
+	{
+		if (kind == Any)
+			return false;
+		else
+			return typeClass->isConcrete();
 	}
 
 	bool operator==(const Type& o) const
@@ -447,6 +456,11 @@ struct PrimitiveClass : TypeClass
 		return s;
 	}
 
+	virtual bool isConcrete() const override
+	{
+		return knownSize && signedType != UnknownSign;
+	}
+
 	bool isInteger() const { return primitiveType == Int; }
 	bool isChar() const { return primitiveType == Char; }
 	bool isSigned() const { return signedType == Signed; }
@@ -519,6 +533,12 @@ struct ArrayClass : TypeClass
 		s += " of ";
 		s += type.toString();
 		return s;
+	}
+
+	virtual bool isConcrete() const override
+	{
+		return arrayType != AnyArray &&
+			type->isConcrete();
 	}
 
 	bool operator==(const ArrayClass& o) const
@@ -604,6 +624,17 @@ public:
 		}
 		s += ")";
 		return s;
+	}
+
+	virtual bool isConcrete() const override
+	{
+		// TODO: Is tuple ever concrete? Unbounded tuples also?
+		for (const auto& t : types)
+		{
+			if (!t->isConcrete())
+				return false;
+		}
+		return true;
 	}
 
 	bool operator==(const TupleClass& o) const
@@ -744,6 +775,23 @@ struct FunctionClass : TypeClass
 		return s;
 	}
 
+	virtual bool isConcrete() const override
+	{
+		for (const auto& p : inParams)
+		{
+			if (!p.type->isConcrete())
+				return false;
+		}
+
+		for (const auto& p : outParams)
+		{
+			if (!p.type->isConcrete())
+				return false;
+		}
+
+		return true;
+	}	
+
 	bool operator==(const FunctionClass& o) const
 	{
 		return true;
@@ -775,6 +823,11 @@ struct PointerClass : TypeClass
 		s += type.toString();
 		s += ")";
 		return s;
+	}
+
+	virtual bool isConcrete() const override
+	{
+		return type->isConcrete();
 	}
 
 	bool operator==(const PointerClass& o) const
@@ -810,6 +863,11 @@ struct TypeVariableClass : TypeClass
 		s += type.toString();
 		s += ")";
 		return s;
+	}
+
+	virtual bool isConcrete() const override
+	{
+		return type->isConcrete();
 	}
 
 	bool operator==(const TypeVariableClass& o) const
@@ -859,6 +917,11 @@ struct MultiTypeClass : TypeClass
 		}
 		s += ")";
 		return s;
+	}
+
+	virtual bool isConcrete() const override
+	{
+		return false;
 	}
 
 	void appendType(TypeRef&& type)

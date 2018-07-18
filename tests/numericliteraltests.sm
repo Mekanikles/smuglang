@@ -1,6 +1,6 @@
 
 def cchar = #primitives.c.char;
-//def cint = #primitives.c.int;
+def cint = #primitives.c.int;
 
 /*func print(fmt : cchar*, args...) -> ()
 {
@@ -18,7 +18,7 @@ var main = func()
 main();
 */
 
-func main(hej : #primitives.c.int) {};
+//func main(hej : cchar) {};
 
 
 //var hej = "Hej världen!";
@@ -28,10 +28,13 @@ func main(hej : #primitives.c.int) {};
 
 //print(hej, ());
 
-/*func print(lol : cint) -> () 
+var text = "The number of the beast: %i\n";
+var num : cint = 666;
+
+func print(fmt : cchar*, args...) -> () 
 {
 	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
-	printf("The number of the beast: %i\n", (lol));
+	printf(fmt, args);
 };
 
-print(hej);*/
+print(text, (num));
