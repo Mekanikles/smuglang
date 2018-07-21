@@ -110,19 +110,51 @@ struct LLVMIRGenerator : AST::Visitor
 		std::vector<llvm::Type*> args;
 		for (int i = 0, e = function.inParams.size(); i < e; ++i)
 		{
-			const auto& p = function.inParams[i];
-			const TypeRef& t = p.type;
-			// TODO: Make sure CVariadics can only have one tuple at the end
-			if (isExternal && t.getType().isTuple())
+			const auto& param = function.inParams[i];
+			const TypeRef& t = param.type;
+
+			assert(t->isConcrete() && "Inconcrete types are not allowed in ir generation");
+
+			if (t->isTuple())
 			{
-				// TODO: Handle bounded tuples?
-				isCVariadic = true;
-				assert(i == e - 1 && "External function cannot have more than one unbounded tuple");
-				break;
+				auto& tuple = t->getTuple();
+
+				// TODO: Make sure CVariadics can only have one tuple at the end
+				//	Check this in the parser?
+				if (tuple.unbounded)
+				{
+					if (isExternal)
+					{
+						// TODO: Handle bounded tuples?
+						isCVariadic = true;
+						assert(i == e - 1 && "External function cannot have more than one unbounded tuple");
+						break;	
+					}
+					else
+					{
+						assert("Unbounded tuples are not allowed for non-externals");
+					}
+				}
+				else
+				{
+					uint count = 0;
+					for (const TypeRef& tt : tuple.types)
+					{
+						assert(!tt->isTuple() && "Nested tuple types not allowed");
+
+						args.push_back(resolveType(tt.getType()));
+						string id = param.identifier;
+						id += ".";
+						id += std::to_string(count++);
+						paramNames.push_back(id);
+					}
+				}
 			}
-			
-			args.push_back(resolveType(t.getType()));
-			paramNames.push_back(p.identifier);
+			else
+			{
+				args.push_back(resolveType(t.getType()));
+				paramNames.push_back(param.identifier);
+			}
 		}
 
 		// TODO: multiple return values
@@ -251,11 +283,32 @@ struct LLVMIRGenerator : AST::Visitor
 	{
 		assert(node->dependency);
 		Symbol* symbol = node->dependency->getSymbol();
-		auto var = m_variables[symbol->name];
-		assert(var && "Could not find declared symbol");
 
-		auto loadInst = m_builder.CreateLoad(var);
-		m_valueStack.push_back(loadInst);
+		const TypeRef& type = symbol->getType();
+		if (type->isTuple())
+		{
+			auto& tuple = type->getTuple();
+			for (uint i = 0, s = tuple.types.size(); i < s; ++i)
+			{
+				string id = symbol->name;
+				id += ".";
+				id += std::to_string(i);
+
+				auto var = m_variables[id];
+				assert(var && "Could not find declared symbol");
+
+				auto loadInst = m_builder.CreateLoad(var);
+				m_valueStack.push_back(loadInst);
+			}
+		}
+		else
+		{
+			auto var = m_variables[symbol->name];
+			assert(var && "Could not find declared symbol");
+
+			auto loadInst = m_builder.CreateLoad(var);
+			m_valueStack.push_back(loadInst);
+		}
 	}
 
 	void visit(AST::Call* node) override
@@ -265,13 +318,29 @@ struct LLVMIRGenerator : AST::Visitor
 		llvm::Function* func = m_functions[symbol];
 		assert(func);
 
+		const int prevValCount = m_valueStack.size();
+
 		std::vector<llvm::Value*> args;
 		for (auto* expr : node->args)
 		{
 			expr->accept(this);
-			assert(!m_valueStack.empty());
-			args.push_back(m_valueStack.back());
-			m_valueStack.pop_back();
+
+			// Flatten tuples
+			uint expectedValCount = 1;
+			const TypeRef& type = expr->getType();
+			if (type->isTuple())
+			{
+				auto& tuple = type->getTuple();
+				assert(!tuple.unbounded);
+				expectedValCount = tuple.types.size();
+			}
+
+			assert(m_valueStack.size() == prevValCount + expectedValCount);
+			for (uint i = 0; i < expectedValCount; ++i)
+			{
+				args.push_back(m_valueStack.back());
+				m_valueStack.pop_back();
+			}
 		}
 
 		m_builder.CreateCall(func, args);

@@ -33,16 +33,18 @@ main();
 
 //print(hej, ());
 
-/*
-var text = "The number of the beast: %i\n";
-var num : cint = 666;
-
 func print(fmt : cchar*, args...) -> () 
 {
 	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
 	printf(fmt, args);
 };
 
-print(text, (num));
-*/
+var text = "Let's count to 5: %i, %i, %i, %i, %i\n";
+var n1 : s32 = 1;
+var n2 : s32 = 2;
+var n3 : s32 = 3;
+var n4 : s32 = 4;
+var n5 : s32 = 5;
+print(text, (n1, n2, n3, n4, n5));
+
 
