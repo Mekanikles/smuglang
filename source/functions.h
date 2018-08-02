@@ -13,7 +13,7 @@ struct FunctionArgumentBinding
 	vector<Param> params;
 };
 
-FunctionArgumentBinding* createFunctionArgumentBinding(AST::Call* callNode, const FunctionClass& functionClass)
+FunctionArgumentBinding* createFunctionArgumentBinding(const AST::Call* callNode, const FunctionClass& functionClass)
 {
 	auto* binding = createObject<FunctionArgumentBinding>();
 

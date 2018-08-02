@@ -457,13 +457,13 @@ namespace AST
 				for (auto* p : inParams)
 				{
 					TypeRef& t = p->getType();
-					func->appendInParam(t.clone(), p->getName());
+					func->appendInParam(TypeRef(t), p->getName());
 				}
 
 				for (auto* p : outParams)
 				{
 					TypeRef& t = p->getType();
-					func->appendOutParam(t.clone(), p->getName());
+					func->appendOutParam(TypeRef(t), p->getName());
 				}
 
 				type.emplace(createTypeVariable(Type(std::move(func))));
@@ -532,7 +532,7 @@ namespace AST
 			{
 				vector<TypeRef> types;
 				for (auto* e : exprs)				
-					types.push_back(e->getType().clone());
+					types.push_back(TypeRef(e->getType()));
 
 				type.emplace(createTupleType(std::move(types)));
 			}
@@ -648,11 +648,11 @@ namespace AST
 				const TypeRef& t = expr->getType();
 				if (opType == TokenType::Asterisk)
 				{
-					type.emplace(createPointerTypeVariable(t.getType().getTypeVariable().type.clone()));
+					type.emplace(createPointerTypeVariable(TypeRef(t.getType().getTypeVariable().type)));
 				}
 				else
 				{
-					type.emplace(t.clone());
+					type.emplace(TypeRef(t));
 				}
 			}
 			return *type;

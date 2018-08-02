@@ -321,18 +321,10 @@ struct TypeRef
 		typeWrapper->addRef(this);
 	}
 
-	~TypeRef()
+	TypeRef(const TypeRef& o)
+		: typeWrapper(o.typeWrapper)
 	{
-		if (typeWrapper)
-			typeWrapper->removeRef(this);
-	}
-
-	TypeRef& operator=(const TypeRef& o)
-	{
-		typeWrapper->removeRef(this);
-		typeWrapper = o.typeWrapper;
 		typeWrapper->addRef(this);
-		return *this;
 	}
 
 	TypeRef(TypeRef&& o) 
@@ -342,7 +334,20 @@ struct TypeRef
 		typeWrapper->addRef(this);
 	}
 
-	TypeRef(const TypeRef&) = delete;
+	~TypeRef()
+	{
+		if (typeWrapper)
+			typeWrapper->removeRef(this);
+	}
+
+
+	TypeRef& operator=(const TypeRef& o)
+	{
+		typeWrapper->removeRef(this);
+		typeWrapper = o.typeWrapper;
+		typeWrapper->addRef(this);
+		return *this;
+	}
 
 	Type& getType() { return typeWrapper->getType(); }
 	const Type& getType() const { return typeWrapper->getType(); }
@@ -355,7 +360,7 @@ struct TypeRef
 
 	TypeRef clone() const
 	{
-		return TypeRef(typeWrapper);
+		return TypeRef(typeWrapper->getType().clone());
 	}
 
 	string toString() const

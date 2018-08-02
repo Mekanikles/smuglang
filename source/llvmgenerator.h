@@ -113,8 +113,6 @@ struct LLVMIRGenerator : AST::Visitor
 			const auto& param = function.inParams[i];
 			const TypeRef& t = param.type;
 
-			assert(t->isConcrete() && "Inconcrete types are not allowed in ir generation");
-
 			if (t->isTuple())
 			{
 				auto& tuple = t->getTuple();
@@ -137,6 +135,8 @@ struct LLVMIRGenerator : AST::Visitor
 				}
 				else
 				{
+					assert(t->isConcrete() && "Inconcrete types are not allowed in ir generation");
+
 					uint count = 0;
 					for (const TypeRef& tt : tuple.types)
 					{
@@ -152,6 +152,8 @@ struct LLVMIRGenerator : AST::Visitor
 			}
 			else
 			{
+				assert(t->isConcrete() && "Inconcrete types are not allowed in ir generation");
+
 				args.push_back(resolveType(t.getType()));
 				paramNames.push_back(param.identifier);
 			}
