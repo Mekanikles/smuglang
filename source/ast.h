@@ -351,23 +351,22 @@ namespace AST
 		Expression* typeExpr = nullptr;
 		Expression* initExpr = nullptr;
 		bool isVariadic = false;
-		Symbol* symbolObj = nullptr;
+		SymbolSource* symbolSource = nullptr;
 
 		Symbol* getSymbol()
 		{
-			return symbolObj;
+			assert(symbolSource);
+			return symbolSource->getSymbol();
 		}
 
 		TypeRef& getType()
 		{
-			assert(symbolObj);
-			return symbolObj->getType();
+			return getSymbol()->getType();
 		}
 
 		const string& getName()
 		{
-			assert(symbolObj);
-			return symbolObj->name;
+			return getSymbol()->name;
 		}
 
 		string toString() override 
@@ -392,23 +391,22 @@ namespace AST
 	{
 		string name;
 		Expression* typeExpr = nullptr;
-		Symbol* symbolObj = nullptr;
+		SymbolSource* symbolSource = nullptr;
 
 		Symbol* getSymbol()
 		{
-			return symbolObj;
+			assert(symbolSource);
+			return symbolSource->getSymbol();
 		}
 
 		TypeRef& getType()
 		{
-			assert(symbolObj);
-			return symbolObj->getType();
+			return getSymbol()->getType();
 		}
 
 		const string& getName()
 		{
-			assert(symbolObj);
-			return symbolObj->name;
+			return getSymbol()->name;
 		}
 
 		string toString() override 
@@ -700,7 +698,7 @@ namespace AST
 		StorageQualifier storageQualifier = StorageQualifier::Var;
 		Expression* typeExpr = nullptr;
 		Expression* initExpr = nullptr;
-		Symbol* symbolObj = nullptr;
+		SymbolSource* symbolSource = nullptr;
 
 		string toString() override 
 		{ 
@@ -715,13 +713,13 @@ namespace AST
 
 		Symbol* getSymbol()
 		{
-			return symbolObj;
+			assert(symbolSource);
+			return symbolSource->getSymbol();
 		}
 
 		const TypeRef& getType()
 		{
-			assert(symbolObj);
-			return symbolObj->getType();
+			return getSymbol()->getType();
 		}
 
 		const vector<Node*> getChildren() override

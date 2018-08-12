@@ -42,7 +42,7 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 
 			auto symbolSource = createDeclarationSymbolSource(symbol, param, StorageQualifier::Const);
 			paramScope.addSymbolSource(symbolSource);
-			param->symbolObj = symbol;
+			param->symbolSource = symbolSource;
 
 			//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)paramScope.id));		
 		}
@@ -54,7 +54,7 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 
 			auto symbolSource = createDeclarationSymbolSource(symbol, param, StorageQualifier::Var);
 			paramScope.addSymbolSource(symbolSource);
-			param->symbolObj = symbol;
+			param->symbolSource = symbolSource;
 
 			//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)paramScope.id));		
 		}
@@ -107,7 +107,7 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 
 		auto symbolSource = createDeclarationSymbolSource(symbol, node, node->storageQualifier);
 		this->currentScope->addSymbolSource(symbolSource);
-		node->symbolObj = symbol;
+		node->symbolSource = symbolSource;
 
 		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)this->currentScope->id));
 		AST::Visitor::visit(node);

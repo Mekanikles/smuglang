@@ -10,6 +10,22 @@ pass("Hello world",
 
 //fail('hello');
 
+// string is cchar* or char[]
+func print(string fmt, args...)
+{
+	int paramCount = 0;
+	for (c : char in fmt, a in args)
+	{
+		if (c == '%')
+		{
+			next c;
+			
+
+		}
+	}
+
+}
+
 
 
 

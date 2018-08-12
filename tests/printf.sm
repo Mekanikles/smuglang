@@ -1,0 +1,74 @@
+def cchar = #primitives.c.char;
+def cint = #primitives.c.int;
+def cuint = #primitives.c.uint;
+def clong = #primitives.c.long;
+def culong = #primitives.c.ulong;
+
+def s64 = #primitives.int(64, true);
+def u64 = #primitives.int(64, false);
+def s32 = #primitives.int(32, true);
+def u32 = #primitives.int(32, false);
+
+func printf(def fmt : cchar*, args...)
+{
+	func get_types(fmt : cchar*) -> (type[], s32)
+	{
+		var types : [256]; // TODO: implement dynamic arrays and replace return types
+		var count : s32 = 0;
+		var cptr : cchar* = fmt;
+		while (*cptr != '\0') // TODO: Don't rely on cchar* strings for parsing chars
+		{
+			var c : cchar = *cptr++;
+			if (c == '%')
+			{
+				c = *cptr++;
+				if (c == 'c')
+					types[count++] = cchar;
+				if (c == 's')
+					types[count++] = cchar*;	
+				else if (c == 'i' || c == 'd')
+				{
+					if (c == 'l')
+						types[count++] = clong;
+					else
+						types[count++] = cint;	
+				}
+				else if (c == 'u')
+				{
+					if (c == 'l')
+						types[count++] = culong;
+					else
+						types[count++] = cuint;	
+				}
+				else
+				{
+					// TODO: This is not possible, function is not necessarily compile-time
+					//	Can this be done with error returns, or asserts instead?
+					//#error("Expected c/i[l]/d/[l]/u[l] after % in format string");
+				}
+			}
+		}
+		return types, count;
+	}
+
+	func printf(def fmt : cchar*, args : #primitives.tuple(get_types(fmt)))
+	{
+		extern printf(fmt : cchar*, args...) -> err : cint;
+		printf(fmt, args);
+	}
+
+	printf(fmt, args);
+}
+
+printf("Typesafe printf test!\n");
+printf("Print char: %c\n", '0');
+printf("Print int: %i\n", 1);
+printf("Print uint: %u\n", 2);
+printf("Print long: %il\n", 3);
+printf("Print ulong: %il\n", 4);
+
+
+
+
+
+
