@@ -1,48 +1,46 @@
-
-struct ScopeTrackingVisitor : AST::Visitor
+struct DeclarationProcessor : public AST::Visitor
 {
-	ScopeTrackingVisitor(SymbolScope* initalScope)
-		: currentScope(initalScope)
-	{}	
+	Context* context;
+	SymbolScope* currentScope;
 
-	virtual void visit(AST::StatementBody* node) override
+	DeclarationProcessor(Context* context, SymbolScope* initialScope)
+		: context(context)
+		, currentScope(initialScope)
 	{
-		auto oldScope = this->currentScope;
-		this->currentScope = &node->scope;
-		AST::Visitor::visit(node);
-		this->currentScope = oldScope;
-	}
-
-	SymbolScope* currentScope;	
-};
-
-struct DeclarationProcessor : ScopeTrackingVisitor
-{
-	using ScopeTrackingVisitor::ScopeTrackingVisitor;
-	using ScopeTrackingVisitor::visit;
+	}	
 
 	// Hack? Store scope on each ast node, so we can jump between
 	//	dependencies when processing
 	// TODO: Do this when parsing?
 	void visit(AST::Node* node) override
 	{
-		//printLine(string("Declaration Processor visited node: ") + node->toString());
-		node->scopeRef = currentScope;
+		//printLine(string("Declaration Processor visited node: ") + node->toString(this->context));
+		this->context->setScope(node, this->currentScope);
 		AST::Visitor::visit(node);
+	}
+
+	void visit(AST::StatementBody* node) override
+	{
+		this->currentScope = context->createScope(this->currentScope);
+		AST::Visitor::visit(node);
+		this->currentScope = this->currentScope->parentScope;
 	}
 
 	void visit(AST::FunctionSignature* node) override
 	{
-		auto& paramScope = node->scope;
+		// Signature has its own scope
+		this->currentScope = context->createScope(this->currentScope);
+
+		auto& paramScope = *this->currentScope;
 
 		for (AST::FunctionInParam* param : node->inParams)
 		{
 			Symbol* symbol = createSymbol(param->name);
 			symbol->isParam = true;
 
-			auto symbolSource = createDeclarationSymbolSource(symbol, param, StorageQualifier::Const);
+			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, param, StorageQualifier::Const);
 			paramScope.addSymbolSource(symbolSource);
-			param->symbolSource = symbolSource;
+			this->context->setSymbolSource(param, symbolSource);
 
 			//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)paramScope.id));		
 		}
@@ -52,19 +50,30 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 			Symbol* symbol = createSymbol(param->name);
 			symbol->isParam = true;
 
-			auto symbolSource = createDeclarationSymbolSource(symbol, param, StorageQualifier::Var);
+			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, param, StorageQualifier::Var);
 			paramScope.addSymbolSource(symbolSource);
-			param->symbolSource = symbolSource;
+			this->context->setSymbolSource(param, symbolSource);
 
 			//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)paramScope.id));		
 		}
 
 		AST::Visitor::visit(node);
+
+		this->currentScope = this->currentScope->parentScope;
 	}
 
 	void visit(AST::FunctionLiteral* node) override
 	{
-		AST::Visitor::visit(node);
+		visit(node->signature);
+
+		auto* signatureScope = this->context->getScope(node->signature);
+		assert(signatureScope);
+
+		// Inject signature scope above statement body
+		assert(this->currentScope != signatureScope);
+		this->currentScope = signatureScope;
+		visit(node->body);
+		this->currentScope = this->currentScope->parentScope;		
 	}
 
 	// TODO: Copy paste code, generalize declarations somehow
@@ -82,12 +91,11 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 		// InitOrder of functions is 0 since they are initialized at compile time
 		symbol->firstInitOrder = 0;
 
-		auto symbolSource = createDeclarationSymbolSource(symbol, node, StorageQualifier::Def);
+		auto symbolSource = createDeclarationSymbolSource(this->context, symbol, node, StorageQualifier::Def);
 		this->currentScope->addSymbolSource(symbolSource);
-		node->symbolSource = symbolSource;
+		this->context->setSymbolSource(node, symbolSource);
 
 		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)this->currentScope->id));
-
 		AST::Visitor::visit(node);
 	}
 
@@ -105,9 +113,9 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 		//	Can it lead to an infinite recursion when inferring types?
 		Symbol* symbol = createSymbol(node->symbol);
 
-		auto symbolSource = createDeclarationSymbolSource(symbol, node, node->storageQualifier);
+		auto symbolSource = createDeclarationSymbolSource(this->context, symbol, node, node->storageQualifier);
 		this->currentScope->addSymbolSource(symbolSource);
-		node->symbolSource = symbolSource;
+		this->context->setSymbolSource(node, symbolSource);
 
 		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)this->currentScope->id));
 		AST::Visitor::visit(node);
@@ -118,19 +126,18 @@ struct DeclarationProcessor : ScopeTrackingVisitor
 		// Eval statments can potentially provide any symbol declaration
 		//	so we add a catch-all symbol source and deal with them later
 		// 	when we are able to eval the expression
-		auto* catchAllSource = createCatchAllSymbolSource(node);
+		auto* catchAllSource = createCatchAllSymbolSource(this->context, node);
 		this->currentScope->addSymbolSource(catchAllSource);
-		assert(!node->catchAllSource);
-		node->catchAllSource = catchAllSource;
+		context->setCatchAllSymbolSource(node, catchAllSource);
 
 		AST::Visitor::visit(node);
 	}
 };
 
-void processDeclarations(AST::Node* root, SymbolScope* initalScope = nullptr)
+void processDeclarations(Context* context, AST::Node* root, SymbolScope* initialScope = nullptr)
 {
 	//LOG("Processing declarations...");
-	DeclarationProcessor dp(initalScope);
+	DeclarationProcessor dp(context, initialScope);
 	root->accept(&dp);
 }
 

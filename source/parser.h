@@ -226,10 +226,6 @@ struct Parser
 				func->signature = signature;
 				func->body = statementBody;
 
-				// Inject signature scope into function
-				signature->scope.parentScope = statementBody->scope.parentScope;
-				statementBody->scope.parentScope = &signature->scope;
-
 				*outExpr = func;
 			}
 			else
@@ -822,9 +818,6 @@ struct Parser
 		if (accept(TokenType::OpenBrace))
 		{
 			auto* node = createNode<AST::StatementBody>();
-			node->scope.parentScope = this->currentScope;
-			this->currentScope = &node->scope;
-
 			*outStatementBody = node;
 
 			AST::Statement* statement;
@@ -834,8 +827,6 @@ struct Parser
 			}
 
 			expect(TokenType::CloseBrace);
-
-			this->currentScope = node->scope.parentScope;
 
 			return true;
 		}
@@ -1026,10 +1017,6 @@ struct Parser
 					return true;
 				}
 
-				// Inject signature scope into function
-				signature->scope.parentScope = statementBody->scope.parentScope;
-				statementBody->scope.parentScope = &signature->scope;
-
 				auto node = createNode<AST::FunctionDeclaration>();
 				node->symbol = functionName;
 
@@ -1059,7 +1046,7 @@ struct Parser
 		}
 		else if (accept(TokenType::Import))
 		{
-			AST::Import::Type importType = AST::Import::Type_Native;
+			AST::Import::LinkType linkType = AST::Import::LinkType_Native;
 
 			// optional import params
 			// TODO: invoke new parameter list scanner?
@@ -1069,7 +1056,7 @@ struct Parser
 				if (stringSymbolValue(lastToken().symbol) != "c")
 					errorOnAccept("Only 'c' imports type specifier is supported");
 
-				importType = AST::Import::Type_C;
+				linkType = AST::Import::LinkType_C;
 
 				expect(TokenType::CloseParenthesis);	
 			}
@@ -1081,9 +1068,9 @@ struct Parser
 
 			auto node = createNode<AST::Import>();
 			node->file = file;
-			if(importType != AST::Import::Type_C)
+			if(linkType != AST::Import::LinkType_C)
 				errorOnAccept("Only 'c' type imports are supported");
-			node->type = importType;
+			node->linkType = linkType;
 			*outStatement = node;
 		}
 		// TODO: Parse expression properly
@@ -1183,8 +1170,6 @@ struct Parser
 		auto* body = createNode<AST::StatementBody>();
 		module->body = body;
 
-		this->currentScope = &body->scope;
-
 		while(!peek(TokenType::EndOfScan))
 		{
 			AST::Statement* stmnt;
@@ -1219,11 +1204,10 @@ struct Parser
 	const vector<Token> getTokens() const { return this->tokens; }
 	const SourceInput* getSourceInput() const { return this->sourceInput; }
 
-	Parser(const SourceInput* sourceInput, SymbolScope* initialScope = nullptr)
+	Parser(const SourceInput* sourceInput)
 		: scannerFactory(BufferedInputStream(sourceInput->createStream()))
 		, baseScanner(scannerFactory.scanTopLevel())
 		, sourceInput(sourceInput)
-		, currentScope(initialScope)
 	{
 		pushScanner(this->baseScanner);
 		advanceToken();
@@ -1240,8 +1224,6 @@ struct Parser
 	int newErrors = 0;
 	uint lastTokenColumn = 0;
 	uint lastTokenRow = 0;
-
-	SymbolScope* currentScope;	
 };
 
 

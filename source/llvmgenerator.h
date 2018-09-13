@@ -75,7 +75,7 @@ struct LLVMIRGenerator : AST::Visitor
 	void visit(AST::IntegerLiteral* node) override 
 	{ 	
 		auto s = llvm::StringRef(node->value);
-		const Type& t = node->getType();
+		const Type& t = node->getType(m_astContext);
 
 		const auto& primitive = t.getPrimitive();
 		assert(primitive.isInteger());
@@ -182,7 +182,7 @@ struct LLVMIRGenerator : AST::Visitor
 
 	llvm::Function* processFunctionLiteral(AST::FunctionLiteral* node, const string& name)
 	{
-		auto func = createFunction(node->getType(), name);
+		auto func = createFunction(node->getType(m_astContext), name);
 		m_functionLiterals[node] = func;
 
 		auto previousBlock = m_builder.GetInsertBlock();
@@ -213,9 +213,7 @@ struct LLVMIRGenerator : AST::Visitor
 
 	void visit(AST::FunctionDeclaration* node) override
 	{
-		auto source = node->symbolSource;
-		assert(source);
-		Symbol* symbol = source->getSymbol();
+		Symbol* symbol = node->getSymbol(m_astContext);
 
 		auto funcLiteral = node->funcLiteral;
 		assert(funcLiteral);
@@ -230,7 +228,7 @@ struct LLVMIRGenerator : AST::Visitor
 		if (node->isDefine())
 			return;
 
-		Symbol* symbol = node->getSymbol();
+		Symbol* symbol = node->getSymbol(m_astContext);
 		const Type& type = symbol->type;
 
 		if (type.isFunction())
@@ -265,7 +263,7 @@ struct LLVMIRGenerator : AST::Visitor
 		// NOTE: Do NOT evaluate symbol expr, we don't want a load here
 		// TODO: Handle expressions that return assignable "values"
 		assert(node->symExpr);
-		Symbol* symbol = node->symExpr->getSymbol();
+		Symbol* symbol = node->symExpr->getSymbol(m_astContext);
 
 		// TODO: This relies on decl node being parsed first,
 		// 	make sure IR is arranged in correct order
@@ -283,8 +281,7 @@ struct LLVMIRGenerator : AST::Visitor
 
 	void visit(AST::SymbolExpression* node) override
 	{
-		assert(node->dependency);
-		Symbol* symbol = node->dependency->getSymbol();
+		Symbol* symbol = node->getSymbol(m_astContext);
 
 		const TypeRef& type = symbol->getType();
 		if (type->isTuple())
@@ -315,8 +312,8 @@ struct LLVMIRGenerator : AST::Visitor
 
 	void visit(AST::Call* node) override
 	{
-		assert(node->expr->dependency);
-		Symbol* symbol = node->expr->dependency->getSymbol();
+		assert(node->expr);
+		Symbol* symbol = node->expr->getSymbol(m_astContext);
 		llvm::Function* func = m_functions[symbol];
 		assert(func);
 
@@ -329,7 +326,7 @@ struct LLVMIRGenerator : AST::Visitor
 
 			// Flatten tuples
 			uint expectedValCount = 1;
-			const TypeRef& type = expr->getType();
+			const TypeRef& type = expr->getType(m_astContext);
 			if (type->isTuple())
 			{
 				auto& tuple = type->getTuple();
@@ -352,7 +349,7 @@ struct LLVMIRGenerator : AST::Visitor
 	{	
 		auto* leftExpr = node->left;
 		auto* rightExpr = node->right;
-		const auto& type = node->getType();
+		const auto& type = node->getType(m_astContext);
 
 		leftExpr->accept(this);
 		auto leftVal = m_valueStack.back(); 
@@ -415,8 +412,9 @@ struct LLVMIRGenerator : AST::Visitor
 		AST::Visitor::visit(node);
 	}
 
-	LLVMIRGenerator(std::ostream* out)
-		: m_out(*out)
+	LLVMIRGenerator(Context* context, std::ostream* out)
+		: m_astContext(context)
+		, m_out(*out)
 		, m_module(*s_theModule)
 		, m_context(s_theContext)
 		, m_builder(s_builder)		
@@ -509,6 +507,8 @@ struct LLVMIRGenerator : AST::Visitor
 		passManager.add(llvm::createPrintModulePass(m_out));
 		passManager.run(m_module);
 	}
+
+	Context* m_astContext;
 
 	llvm::raw_os_ostream m_out;
 	llvm::Module& m_module;

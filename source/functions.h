@@ -45,12 +45,12 @@ FunctionArgumentBinding* createFunctionArgumentBinding(const AST::Call* callNode
 	return binding;
 }
 
-bool unifyArguments(AST::Call* callNode, FunctionArgumentBinding* argBinding)
+bool unifyArguments(Context* context, AST::Call* callNode, FunctionArgumentBinding* argBinding)
 {
 	auto& args = callNode->args;
 	for (auto& p : argBinding->params)
 	{
-		TypeRef& t1 = args[p.index]->getType();
+		TypeRef& t1 = args[p.index]->getType(context);
 		TypeRef& t2 = p.type;
 
 		const auto result = unifyTypes(t1, t2);

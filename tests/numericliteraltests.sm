@@ -48,10 +48,10 @@ func print() -> ()
 print();
 */
 
-func test(s : cchar*)
+func test(arg : cchar*)
 {
 	extern printf : func(fmt : cchar*, args : cchar*) -> errCode : cint;
-	printf("Hello %s\n", s);
+	printf("Hello %s\n", arg);
 };
 
 var s : cchar* = "World";

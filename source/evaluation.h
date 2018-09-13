@@ -9,8 +9,9 @@ struct Value
 
 struct ExpressionEvaluator : AST::Visitor
 {
-	ExpressionEvaluator(Value* outValue)
+	ExpressionEvaluator(Context* context, Value* outValue)
 		: outValue(outValue)
+		, context(context)
 	{
 		assert(outValue);
 	}
@@ -19,7 +20,7 @@ struct ExpressionEvaluator : AST::Visitor
 	{
 		auto& val = *this->outValue;
 
-		val.type = node->getType();
+		val.type = node->getType(context);
 
 		string str = processQuotedInputString(node->value);
 
@@ -32,11 +33,12 @@ struct ExpressionEvaluator : AST::Visitor
 
 	bool success = false;
 	Value* outValue = nullptr;
+	Context* context;	
 };
 
-bool evaluateExpression(AST::Expression* expr, Value* outValue)
+bool evaluateExpression(Context* context, AST::Expression* expr, Value* outValue)
 {
-	ExpressionEvaluator e(outValue);
+	ExpressionEvaluator e(context, outValue);
 	expr->accept(&e);
 
 	return e.success;

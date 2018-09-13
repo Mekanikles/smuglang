@@ -2,13 +2,13 @@
 string debugName(SymbolSource* o) 
 {
 	return string("Symbol Source, node: " +
-		o->getNode()->toString() + ", order: " + std::to_string(o->getNode()->order));
+		o->getNode()->toString(o->getContext()) + ", order: " + std::to_string(o->getNode()->order));
 	return "Unknown"; 
 }
 
 vector<SymbolDependency*> s_unresolvedDependencies;
 
-SymbolSource* resolveDepdendency(SymbolDependency* dependency, SymbolScope* scope)
+SymbolSource* resolveDependency(SymbolDependency* dependency, SymbolScope* scope)
 {
 	SymbolSource* symbolSource = nullptr;
 	if ((symbolSource = scope->lookUpSymbolSource(dependency->symbolName)))
@@ -37,17 +37,25 @@ struct DependencyResolver : AST::Visitor
 	void visit(AST::SymbolExpression* node) override
 	{
 		SymbolDependency* dependency = createSymbolDepedency(node->symbol);
-		node->dependency = dependency;
+		this->context->setSymbolDependency(node, dependency);
 
-		assert(node->scopeRef);
-		resolveDepdendency(dependency, node->scopeRef);
+		auto scope = this->context->getScope(node);
+		assert(scope);
+		resolveDependency(dependency, scope);
 	}
+
+	DependencyResolver(Context* context)
+		: context(context)
+	{
+	}
+
+	Context* context;
 };
 
-void resolveDependencies(AST::Node* root)
+void resolveDependencies(Context* context, AST::Node* root)
 {
 	//LOG("Resolving dependencies...");
 
-	DependencyResolver dr;
+	DependencyResolver dr(context);
 	root->accept(&dr);
 }

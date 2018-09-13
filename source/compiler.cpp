@@ -18,6 +18,7 @@ const bool DEFAULT_INT_ISSIGNED = true;
 
 #include "types.h"
 #include "symbols.h"
+#include "context.h"
 #include "ast.h"
 #include "functions.h"
 #include "evaluation.h"
@@ -57,10 +58,12 @@ int main(int argc, char** argv)
 	else
 	{
 		LOG("Parse success!");
-		processAST(&ast);
+		Context astContext;
+
+		processAST(&astContext, &ast);
 
 		printLine("AST:");
-		printAST(&ast, 1);
+		printAST(&astContext, &ast, 1);
 
 		// Extract filename without path
 		std::regex filenameRegex(R"((.*[\\\/])?(.+)$))");
@@ -70,7 +73,7 @@ int main(int argc, char** argv)
 		string outFileName = string(".smug/") + matches[2].str();
 
 		std::stringstream llvmOutput;
-		LLVMIRGenerator llvmgenerator(&llvmOutput);
+		LLVMIRGenerator llvmgenerator(&astContext, &llvmOutput);
 		llvmgenerator.run(&ast);
 		{
 			string outLLVMFileName = outFileName + ".ll";

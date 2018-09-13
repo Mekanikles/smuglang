@@ -11,14 +11,14 @@ struct ASTProcessor : AST::Visitor
 		// Make sure function expression is processed
 		node->expr->accept(this);
 
-		Type& functionType = node->expr->getType();
+		Type& functionType = node->expr->getType(this->context);
 		assert(functionType.isFunction());
 		FunctionClass& function = functionType.getFunction();
 
 		FunctionArgumentBinding* argBinding = createFunctionArgumentBinding(node, function);
 		node->argBinding = argBinding;
 
-		unifyArguments(node, argBinding);
+		unifyArguments(this->context, node, argBinding);
 
 		/*
 		auto& inTypes = function.inTypes;
@@ -53,24 +53,27 @@ struct ASTProcessor : AST::Visitor
 		// Process literal
 		node->funcLiteral->accept(this);
 
-		TypeRef& functionType = node->funcLiteral->getType();
+		TypeRef& functionType = node->funcLiteral->getType(this->context);
 
-		Symbol* symbol = node->getSymbol();
+		Symbol* symbol = node->getSymbol(this->context);
 		symbol->firstInitOrder = node->order;
 		symbol->type = functionType;
 	}
 
 	void visit(AST::FunctionSignature* node) override
 	{
+		// Visit subtree of signature
+		AST::Visitor::visit(node);
+
 		// Assign types to inparams
 		for (AST::FunctionInParam* param : node->inParams)
 		{
-			Symbol* symbol = param->getSymbol();
+			Symbol* symbol = param->getSymbol(this->context);
 
 			TypeRef type;
 			if (param->typeExpr)
 			{
-				const TypeRef& exprType = param->typeExpr->getType();
+				const TypeRef& exprType = param->typeExpr->getType(this->context);
 				type = exprType->getTypeVariable().type;
 			}
 
@@ -86,7 +89,7 @@ struct ASTProcessor : AST::Visitor
 				symbol->firstInitOrder = node->order;
 				if (param->initExpr)
 				{
-					TypeRef& exprType = param->initExpr->getType();
+					TypeRef& exprType = param->initExpr->getType(this->context);
 					const auto result = unifyTypes(symbol->getType(), exprType);
 
 					// TODO: Handle implicit casts?
@@ -101,17 +104,49 @@ struct ASTProcessor : AST::Visitor
 		// Assign types to outparams
 		for (AST::FunctionOutParam* param : node->outParams)
 		{
-			Symbol* symbol = param->getSymbol();
+			Symbol* symbol = param->getSymbol(this->context);
 
 			TypeRef type;
 			if (param->typeExpr)
 			{
-				const TypeRef& exprType = param->typeExpr->getType();
+				const TypeRef& exprType = param->typeExpr->getType(this->context);
 				type = exprType->getTypeVariable().type;
 			}
 
 			symbol->type = type;
 		}
+
+		this->context->addTypeLiteral(node, node->createLiteralType(this->context));
+	}
+
+	void visit(AST::StringLiteral* node) override
+	{
+		this->context->addTypeLiteral(node, node->createLiteralType());
+	}
+
+	void visit(AST::IntegerLiteral* node) override
+	{
+		this->context->addTypeLiteral(node, node->createLiteralType());
+	}
+
+	void visit(AST::FloatLiteral* node) override
+	{
+		this->context->addTypeLiteral(node, node->createLiteralType());
+	}
+
+	void visit(AST::TypeLiteral* node) override
+	{
+		this->context->addTypeLiteral(node, node->createLiteralType());
+	}
+
+	void visit(AST::Tuple* node) override
+	{
+		this->context->addTypeLiteral(node, node->createLiteralType(this->context));
+	}
+
+	void visit(AST::UnaryPostfixOp* node) override
+	{
+		this->context->addTypeLiteral(node, node->createLiteralType(this->context));
 	}
 
 	void visit(AST::FunctionLiteral* node) override
@@ -133,7 +168,7 @@ struct ASTProcessor : AST::Visitor
 			return;
 		node->processed = true;
 
-		Symbol* symbol = node->getSymbol();
+		Symbol* symbol = node->getSymbol(this->context);
 
 		// Check explicit type
 		// TODO: How to assign "type" if inner type is always transferred?
@@ -142,7 +177,7 @@ struct ASTProcessor : AST::Visitor
 		if (node->typeExpr)
 		{
 			node->typeExpr->accept(this);
-			const Type& type = node->typeExpr->getType();
+			const Type& type = node->typeExpr->getType(this->context);
 			symbol->type = type.getTypeVariable().type;
 		}
 
@@ -153,7 +188,7 @@ struct ASTProcessor : AST::Visitor
 			if (node->initExpr)
 			{
 				node->initExpr->accept(this);
-				TypeRef& exprType = node->initExpr->getType();
+				TypeRef& exprType = node->initExpr->getType(this->context);
 				const auto result = unifyTypes(symbol->getType(), exprType);
 
 				// TODO: Handle implicit casts?
@@ -179,7 +214,7 @@ struct ASTProcessor : AST::Visitor
 
 		assert(node->symExpr);
 		node->symExpr->accept(this);
-		Symbol* symbol = node->symExpr->getSymbol();
+		Symbol* symbol = node->symExpr->getSymbol(this->context);
 
 		if (symbol->firstInitOrder < node->order)
 			symbol->firstInitOrder = node->order;
@@ -188,7 +223,7 @@ struct ASTProcessor : AST::Visitor
 		assert(node->expr);
 		node->expr->accept(this);
 
-		TypeRef& exprType = node->expr->getType();
+		TypeRef& exprType = node->expr->getType(this->context);
 		const auto result = unifyTypes(symbol->type, exprType);
 
 		// TODO: Handle implicit casts?
@@ -202,24 +237,24 @@ struct ASTProcessor : AST::Visitor
 			return;
 		node->processed = true;
 
-		assert(node->dependency);
-		assert(node->dependency->getSymbolSource());
+		auto* dependency = this->context->getSymbolDependency(node);
+		assert(dependency);
 
 		// Process dependency until we are dependent on a single symbol
 		//	since we are possibly dependent on a placeholder source
-		while(!node->dependency->getSymbolSource()->isSingleSymbolSource())
+		while(!dependency->getSymbolSource()->isSingleSymbolSource())
 		{
-			node->dependency->getSymbolSource()->getNode()->accept(this);
+			dependency->getSymbolSource()->getNode()->accept(this);
 		}
 
 		// Make sure that symbol source is processed
-		node->dependency->getSymbolSource()->getNode()->accept(this);
+		dependency->getSymbolSource()->getNode()->accept(this);
 
 		// TODO: It does not work to use firstInitOrder with evals
 		// 	since they inject code, currently getting wrongly ordered
 		//	Consider doing this at a later pass, in some execution-order
 		//	based traversal.
-		Symbol* symbol = node->getSymbol();
+		Symbol* symbol = node->getSymbol(this->context);
 		if (!node->isPartOfAssignment && symbol->firstInitOrder > node->order)
 		{	
 			// TODO: add line/column
@@ -236,14 +271,20 @@ struct ASTProcessor : AST::Visitor
 
 		//printLine(string("Processing eval: ") + std::to_string(node->order));
 
+		// Make sure dependency is processed
 		assert(node->expr);
+		node->expr->accept(this);
+
 		assert(!node->isGenerated);
-		assert(node->catchAllSource);
 
 		node->isGenerated = true;
 
+		// TODO: This happens too early somehow, at this point we might have a multitype
+		//	string for example. We need to concretizie the type here, or at least handle
+		//	all possible types of strings. Either way we need to know the type first before 
+		//	we can evaluate the data (different data depending on zstrings/arrays etc)
 		Value nodeVal;
-		if (!evaluateExpression(node->expr, &nodeVal))
+		if (!evaluateExpression(this->context, node->expr, &nodeVal))
 		{
 			assert("Cannot evaluate expression" && false);
 		}
@@ -255,14 +296,11 @@ struct ASTProcessor : AST::Visitor
 			assert("Expression is not of string type" && false);
 		}
 
-		assert(node->scopeRef);
-		auto* currentScope = node->scopeRef;
-
 		const char* text = nodeVal.data.data();
 		const uint length = nodeVal.data.size();
 
 		BufferSourceInput bufferInput(text, length);
-		Parser parser(&bufferInput, currentScope);
+		Parser parser(&bufferInput);
 
 		AST::Statement* statement;
 		while (parser.parseStatement(&statement))
@@ -270,6 +308,9 @@ struct ASTProcessor : AST::Visitor
 			node->statements.push_back(statement);
 		}
 
+		auto* currentScope = this->context->getScope(node);
+		assert(currentScope);
+		
 		if (parser.getParserErrors().size() != 0 && parser.getScannerErrors().size() != 0)
 		{
 			// TODO: Print errors etc
@@ -280,20 +321,24 @@ struct ASTProcessor : AST::Visitor
 		// First, add all new declarations to the current scope
 		for (AST::Statement* s : node->statements)
 		{
-			processDeclarations(s, currentScope);
+			processDeclarations(this->context, s, currentScope);
 		}
 
 		//printLine("Eval statement had these dependencies:", 1);
 		//for (auto d : node->catchAllSource->dependencies)
 		//	printLine(d->symbolName, 2);
 
+		auto* catchAllSource = this->context->getCatchAllSymbolSource(node);
+		assert(catchAllSource);
+
 		// Now we can remove the catch-all source that we added earlier
 		//	and hook up all the previously caught dependencies
-		const bool wasRemoved = currentScope->removeSymbolSource(node->catchAllSource);
+		const bool wasRemoved = currentScope->removeSymbolSource(catchAllSource);
 		assert(wasRemoved);
-		for (auto d : node->catchAllSource->dependencies)
+
+		for (auto d : catchAllSource->dependencies)
 		{
-			resolveDepdendency(d, currentScope);
+			resolveDependency(d, currentScope);
 		}
 
 		//printLine(string("Resolving dependencies for ") + std::to_string(node->statements.size()) +
@@ -302,7 +347,7 @@ struct ASTProcessor : AST::Visitor
 		// Resolve dependencies in newly created asts
 		for (AST::Statement* s : node->statements)
 		{
-			resolveDependencies(s);
+			resolveDependencies(this->context, s);
 		}
 
 		//printLine(string("Processing ") + std::to_string(node->statements.size()) +
@@ -317,16 +362,22 @@ struct ASTProcessor : AST::Visitor
 		//printLine(string("Eval: ") + std::to_string(node->order) + " finished processing");
 	}
 
+	ASTProcessor(Context* context)
+		: context(context)
+	{
+	}
+
+	Context* context;
 };
 
-void processAST(AST::Node* root)
+void processAST(Context* context, AST::Node* root)
 {
-	processDeclarations(root);
-	resolveDependencies(root);
+	processDeclarations(context, root);
+	resolveDependencies(context, root);
 
 	LOG("Processing ast...");
 	{
-		ASTProcessor ap;
+		ASTProcessor ap(context);
 		root->accept(&ap);
 	}
 
@@ -340,7 +391,7 @@ void processAST(AST::Node* root)
 		assert(false && "Had unresolved symbols");
 }
 
-void processAST(AST::ASTObject* ast)
+void processAST(Context* context, AST::ASTObject* ast)
 {
-	processAST(ast->root);
+	processAST(context, ast->root);
 }

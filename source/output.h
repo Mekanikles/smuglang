@@ -1,6 +1,6 @@
 #pragma once
 
-void printAST(AST::ASTObject* ast, int indent = 0)
+void printAST(Context* context, AST::ASTObject* ast, int indent = 0)
 {
 	/*
 		Module
@@ -32,7 +32,7 @@ void printAST(AST::ASTObject* ast, int indent = 0)
 			print("|-");
 		}
 
-		printLine(node->toString());
+		printLine(node->toString(context));
 
 		const auto children = node->getChildren();
 		const int childCount = children.size();
