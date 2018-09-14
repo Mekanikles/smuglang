@@ -16,11 +16,24 @@ struct ExpressionEvaluator : AST::Visitor
 		assert(outValue);
 	}
 
+	void visit(AST::SymbolDeclaration* node) override
+	{
+		assert(node->storageQualifier == StorageQualifier::Def);
+		node->initExpr->accept(this);
+	}
+
+	void visit(AST::SymbolExpression* node) override
+	{
+		auto* symbolDep = this->context->getSymbolDependency(node);
+		auto* sourceNode = symbolDep->getSymbolSource()->getNode();
+		sourceNode->accept(this);
+	}
+
 	void visit(AST::StringLiteral* node) override
 	{
 		auto& val = *this->outValue;
 
-		val.type = node->getType(context);
+		val.type = node->getType(this->context);
 
 		string str = processQuotedInputString(node->value);
 

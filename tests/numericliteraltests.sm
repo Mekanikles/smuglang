@@ -54,7 +54,9 @@ func test(arg : cchar*)
 	printf("Hello %s\n", arg);
 };
 
-var s : cchar* = "World";
+def t : cchar* = "var s : cchar* = \"World\";";
+eval(t);
+//var f : cchar* = t;
 test(s);
 
 

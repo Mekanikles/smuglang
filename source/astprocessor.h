@@ -263,6 +263,23 @@ struct ASTProcessor : AST::Visitor
 		}
 	}
 
+	static bool isStringType(const Type& type)
+	{
+		const ArrayClass* ac = type.isArray() ? &type.typeClass->as<ArrayClass>() : nullptr;
+		if (ac && ac->type->isPrimitive() && ac->type->getPrimitive().isChar())
+		{
+			return true;
+		}
+
+		const PointerClass* pc = type.isPointer() ? &type.getPointer() : nullptr;
+		if (pc && pc->type->isPrimitive() && pc->type->getPrimitive().isChar())
+		{
+			return true;
+		}
+
+		return false;
+	}
+
 	void visit(AST::EvalStatement* node) override
 	{
 		if (node->processed)
@@ -289,9 +306,7 @@ struct ASTProcessor : AST::Visitor
 			assert("Cannot evaluate expression" && false);
 		}
 
-		auto& type = nodeVal.type;
-		const ArrayClass* ac = type->isArray() ? &type->typeClass->as<ArrayClass>() : nullptr;
-		if (!ac || !ac->type->isPrimitive() || !ac->type->typeClass->as<PrimitiveClass>().isChar())
+		if (!isStringType(nodeVal.type))
 		{
 			assert("Expression is not of string type" && false);
 		}
