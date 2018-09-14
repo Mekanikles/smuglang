@@ -62,6 +62,10 @@ struct ASTProcessor : AST::Visitor
 
 	void visit(AST::FunctionSignature* node) override
 	{
+		if (node->processed)
+			return;
+		node->processed = true;
+
 		// Visit subtree of signature
 		AST::Visitor::visit(node);
 
@@ -73,8 +77,13 @@ struct ASTProcessor : AST::Visitor
 			TypeRef type;
 			if (param->typeExpr)
 			{
-				const TypeRef& exprType = param->typeExpr->getType(this->context);
-				type = exprType->getTypeVariable().type;
+				Value nodeVal;
+				if (!evaluateExpression(this->context, param->typeExpr, &nodeVal))
+				{
+					assert("Cannot evaluate type expression for in-parameter" && false);
+				}
+				
+				type = nodeVal.type->getTypeVariable().type;
 			}
 
 			const bool isVariadic = param->isVariadic;
@@ -109,8 +118,13 @@ struct ASTProcessor : AST::Visitor
 			TypeRef type;
 			if (param->typeExpr)
 			{
-				const TypeRef& exprType = param->typeExpr->getType(this->context);
-				type = exprType->getTypeVariable().type;
+				Value nodeVal;
+				if (!evaluateExpression(this->context, param->typeExpr, &nodeVal))
+				{
+					assert("Cannot evaluate type expression for out-parameter" && false);
+				}
+				
+				type = nodeVal.type->getTypeVariable().type;
 			}
 
 			symbol->type = type;
@@ -121,32 +135,91 @@ struct ASTProcessor : AST::Visitor
 
 	void visit(AST::StringLiteral* node) override
 	{
+		if (node->processed)
+			return;
+		node->processed = true;
+
 		this->context->addTypeLiteral(node, node->createLiteralType());
 	}
 
 	void visit(AST::IntegerLiteral* node) override
 	{
+		if (node->processed)
+			return;
+		node->processed = true;
+
 		this->context->addTypeLiteral(node, node->createLiteralType());
 	}
 
 	void visit(AST::FloatLiteral* node) override
 	{
+		if (node->processed)
+			return;
+		node->processed = true;
+
 		this->context->addTypeLiteral(node, node->createLiteralType());
 	}
 
 	void visit(AST::TypeLiteral* node) override
 	{
+		if (node->processed)
+			return;
+		node->processed = true;
+
 		this->context->addTypeLiteral(node, node->createLiteralType());
 	}
 
 	void visit(AST::Tuple* node) override
 	{
-		this->context->addTypeLiteral(node, node->createLiteralType(this->context));
+		if (node->processed)
+			return;
+		node->processed = true;
+
+		vector<TypeRef> types;
+		for (auto* e : node->exprs)
+		{
+			e->accept(this);
+
+			Value nodeVal;
+			if (!evaluateExpression(this->context, e, &nodeVal))
+			{
+				assert("Cannot evaluate type expression for tuple" && false);
+			}
+
+			types.push_back(TypeRef(e->getType(context)));
+		}
+
+		this->context->addTypeLiteral(node, createTupleType(std::move(types)));
 	}
 
 	void visit(AST::UnaryPostfixOp* node) override
 	{
-		this->context->addTypeLiteral(node, node->createLiteralType(this->context));
+		if (node->processed)
+			return;
+		node->processed = true;
+		
+		assert(node->expr);
+		node->expr->accept(this);
+
+		Value nodeVal;
+		if (!evaluateExpression(this->context, node->expr, &nodeVal))
+		{
+			assert("Cannot evaluate type expression for post fix operator" && false);
+		}
+
+		// TODO: Bubble up types through ops for now
+		const TypeRef& t = nodeVal.type;
+		TypeRef type;
+		if (node->opType == TokenType::Asterisk)
+		{
+			type = createPointerTypeVariable(TypeRef(t.getType().getTypeVariable().type));
+		}
+		else
+		{
+			type = t;
+		}
+
+		this->context->addTypeLiteral(node, std::move(type));
 	}
 
 	void visit(AST::FunctionLiteral* node) override
@@ -171,14 +244,17 @@ struct ASTProcessor : AST::Visitor
 		Symbol* symbol = node->getSymbol(this->context);
 
 		// Check explicit type
-		// TODO: How to assign "type" if inner type is always transferred?
-		//	i.e var x : type; "type" needs to be a type variable that
-		//	has an inner type of a type variable?
+
 		if (node->typeExpr)
 		{
 			node->typeExpr->accept(this);
-			const Type& type = node->typeExpr->getType(this->context);
-			symbol->type = type.getTypeVariable().type;
+			Value nodeVal;
+			if (!evaluateExpression(this->context, node->typeExpr, &nodeVal))
+			{
+				assert("Cannot evaluate type expression for declaration" && false);
+			}
+
+			symbol->type = nodeVal.type->getTypeVariable().type;
 		}
 
 		// Infer type from init expression
@@ -193,7 +269,7 @@ struct ASTProcessor : AST::Visitor
 
 				// TODO: Handle implicit casts?
 				if (result == CannotUnify)
-					assert("Cannot unify types" && false);
+					assert("Cannot unify types for declaration" && false);
 
 				// TODO: How to apply unification to expression?
 			}
@@ -303,7 +379,7 @@ struct ASTProcessor : AST::Visitor
 		Value nodeVal;
 		if (!evaluateExpression(this->context, node->expr, &nodeVal))
 		{
-			assert("Cannot evaluate expression" && false);
+			assert("Cannot evaluate expression for eval statement" && false);
 		}
 
 		if (!isStringType(nodeVal.type))

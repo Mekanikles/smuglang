@@ -542,15 +542,6 @@ namespace AST
 			return s; 
 		}
 
-		TypeRef createLiteralType(Context* context)
-		{
-			vector<TypeRef> types;
-			for (auto* e : exprs)				
-				types.push_back(TypeRef(e->getType(context)));
-
-			return createTupleType(std::move(types));
-		}
-
 		TypeRef& getType(Context* context) override
 		{
 			return context->getTypeLiteral(this);
@@ -658,20 +649,6 @@ namespace AST
 			ret.reserve(1);
 			ret.push_back(expr);
 			return ret;
-		}
-
-		TypeRef createLiteralType(Context* context)
-		{
-			// TODO: Bubble up types through ops for now
-			const TypeRef& t = expr->getType(context);
-			if (opType == TokenType::Asterisk)
-			{
-				return createPointerTypeVariable(TypeRef(t.getType().getTypeVariable().type));
-			}
-			else
-			{
-				return TypeRef(t);
-			}
 		}
 
 		TypeRef& getType(Context* context) override

@@ -16,6 +16,41 @@ struct ExpressionEvaluator : AST::Visitor
 		assert(outValue);
 	}
 
+	void visit(AST::FunctionSignature* node) override
+	{
+		// TODO: FunctionSignature should be a type literal
+		auto& val = *this->outValue;
+		val.type = node->getType(this->context);
+
+		auto length = sizeof(TypeId);
+		TypeId id = val.type->typeId();
+		val.data.resize(length);
+		memcpy(val.data.data(), &id, length);
+
+		this->success = true;
+	}
+
+	void visit(AST::UnaryPostfixOp* node) override
+	{
+		if (node->opType == TokenType::Asterisk)
+		{
+			// TODO: asterisk postfix op behaves as type literal
+			auto& val = *this->outValue;
+			val.type = node->getType(this->context);
+
+			auto length = sizeof(TypeId);
+			TypeId id = val.type->typeId();
+			val.data.resize(length);
+			memcpy(val.data.data(), &id, length);
+
+			this->success = true;
+		}
+		else
+		{
+			assert(false && "Cannot evaluate postfix ops yet");
+		}
+	}
+
 	void visit(AST::SymbolDeclaration* node) override
 	{
 		assert(node->storageQualifier == StorageQualifier::Def);
@@ -27,6 +62,19 @@ struct ExpressionEvaluator : AST::Visitor
 		auto* symbolDep = this->context->getSymbolDependency(node);
 		auto* sourceNode = symbolDep->getSymbolSource()->getNode();
 		sourceNode->accept(this);
+	}
+
+	void visit(AST::TypeLiteral* node) override
+	{
+		auto& val = *this->outValue;
+		val.type = node->getType(this->context);
+
+		auto length = sizeof(TypeId);
+		TypeId id = val.type->typeId();
+		val.data.resize(length);
+		memcpy(val.data.data(), &id, length);
+
+		this->success = true;
 	}
 
 	void visit(AST::StringLiteral* node) override

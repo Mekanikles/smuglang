@@ -14,6 +14,8 @@ struct MultiTypeClass;
 struct TypeRef;
 bool isSubType(const Type& t, const MultiTypeClass& mtc);
 
+using TypeId = unsigned int;
+
 struct TypeClass
 {
 	enum ClassType
@@ -30,8 +32,8 @@ struct TypeClass
 
 	TypeClass(ClassType type) : type(type)
 	{
-		static unsigned int s_typeId = 0;
-		typeId = s_typeId++;
+		static TypeId s_typeId = 0;
+		typeId = ++s_typeId;
 	}
 
 	TypeClass(const TypeClass& o) = delete;
@@ -42,7 +44,7 @@ struct TypeClass
 	virtual bool isConcrete() const = 0;
 
 	ClassType type = Any;
-	unsigned int typeId;
+	TypeId typeId;
 	// TODO: symbol might not be known at time of unification
 	//	and can be the same "name" but refer to different symbols
 	//	because of variable/symbol shadowing. There can be a situation
@@ -109,6 +111,14 @@ struct Type
 		return Type(kind, typeClass ? typeClass->clone() : nullptr);
 	}
 
+	TypeId typeId() const
+	{
+		if (kind == Any)
+			return 0;
+		assert(typeClass);
+		return typeClass->typeId;
+	}
+
 	string toString() const
 	{
 		string s;
@@ -120,7 +130,7 @@ struct Type
 
 		assert(typeClass);
 		s += typeClass->toString();
-		s += string(" \033[1m#") + std::to_string(typeClass->typeId) + string("\033[22m");
+		s += string(" \033[1m#") + std::to_string(typeId()) + string("\033[22m");
 		return s;
 	}
 
