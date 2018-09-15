@@ -21,13 +21,14 @@ const bool DEFAULT_INT_ISSIGNED = true;
 #include "context.h"
 #include "ast.h"
 #include "functions.h"
-#include "evaluation.h"
 #include "parser.h"
 #include "output.h"
 #include "llvmgenerator.h"
 
 #include "declarationprocessor.h"
 #include "dependencyresolver.h"
+
+#include "evaluation.h"
 #include "astprocessor.h"
 
 ///////////////////////////////////////////////////////////////////////////////

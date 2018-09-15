@@ -366,6 +366,8 @@ public:
 					*outToken = Token(TokenType::Func);
 				else if (w == "eval")
 					*outToken = Token(TokenType::Eval);
+				else if (w == "return")
+					*outToken = Token(TokenType::Return);
 				else if (w == "true")
 					*outToken = Token(TokenType::True);
 				else if (w == "false")

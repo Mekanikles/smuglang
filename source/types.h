@@ -32,8 +32,8 @@ struct TypeClass
 
 	TypeClass(ClassType type) : type(type)
 	{
-		static TypeId s_typeId = 0;
-		typeId = ++s_typeId;
+		static TypeId s_typeId = 2; // Reseve 0 and 1 for Any and Void
+		typeId = s_typeId++;
 	}
 
 	TypeClass(const TypeClass& o) = delete;
@@ -85,6 +85,7 @@ struct Type
 	enum Kind
 	{
 		Any,
+		Void,
 		Value
 	};
 
@@ -92,6 +93,11 @@ struct Type
 	std::unique_ptr<TypeClass> typeClass;
 
 	Type() : kind(Kind::Any) {};
+	Type(Kind kind)
+		: kind(kind)
+	{
+		assert(kind != Kind::Value && "Must supply typeclass for value types");
+	}
 	Type(Kind kind, std::unique_ptr<TypeClass> typeClass)
 		: kind(kind), typeClass(std::move(typeClass))
 	{}
@@ -115,6 +121,8 @@ struct Type
 	{
 		if (kind == Any)
 			return 0;
+		if (kind == Void)
+			return 1;
 		assert(typeClass);
 		return typeClass->typeId;
 	}
@@ -125,6 +133,11 @@ struct Type
 		if (kind == Any)
 		{
 			s = "Any";
+			return s;
+		}
+		if (kind == Void)
+		{
+			s = "Void";
 			return s;
 		}
 
@@ -138,6 +151,8 @@ struct Type
 	{
 		if (kind == Any)
 			return false;
+		else if (kind == Void)
+			return true;
 		else
 			return typeClass->isConcrete();
 	}
@@ -146,6 +161,8 @@ struct Type
 	{
 		if (this->kind == Any)
 			return o.kind == Any;
+		if (this->kind == Void)
+			return o.kind == Void;	
 		return this->kind == o.kind &&
 			*this->typeClass == *o.typeClass;
 	}
@@ -170,6 +187,11 @@ struct Type
 	bool isAny()
 	{
 		return kind == Any;
+	}
+
+	bool isVoid()
+	{
+		return kind == Void;
 	}
 
 	bool isFunction() const
@@ -399,6 +421,9 @@ struct TypeRef
 		}
 	}
 };
+
+
+TypeRef s_voidType(Type::Kind::Void);
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -722,10 +747,12 @@ struct FunctionClass : TypeClass
 
 		string toString() const
 		{
-			if (identifier.empty())
-				return "";
-			string s = identifier;
-			s += " : ";
+			string s;
+			if (!identifier.empty())
+			{
+				s += identifier;
+				s += " : ";
+			}
 			s += type.toString();
 			return s;
 		}

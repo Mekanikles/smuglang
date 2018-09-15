@@ -229,10 +229,48 @@ struct ASTProcessor : AST::Visitor
 		node->processed = true;
 
 		assert(node->signature);
-		assert(node->body);
-
 		node->signature->accept(this);
+
+		if (node->signature->outParams.empty())
+		{
+			m_expectedReturnType = std::optional<TypeRef>();
+		}
+		else
+		{
+			assert(node->signature->outParams.size() == 1);
+			auto* pnode = node->signature->outParams[0];
+			Symbol* symbol = pnode->getSymbol(this->context);
+			m_expectedReturnType = symbol->type;
+		}
+		
+		assert(node->body);		
 		node->body->accept(this);
+	}
+
+	void visit(AST::ReturnStatement* node) override
+	{
+		if (node->processed)
+			return;
+		node->processed = true;
+
+		// TODO: This is super similiar to an assignment, maybe convert
+		if (node->expr)
+		{
+			assert(m_expectedReturnType && "Return expression in void function");
+
+			node->expr->accept(this);
+			TypeRef& exprType = node->expr->getType(this->context);
+			const auto result = unifyTypes(*m_expectedReturnType, exprType);
+
+			// TODO: Handle implicit casts?
+			if (result == CannotUnify)
+				assert("Cannot unify types for return statement" && false);
+		}
+		else
+		{
+			// TODO: Is this true?
+			assert(!m_expectedReturnType && "Missing return expression in non-void function");
+		}
 	}
 
 	void visit(AST::SymbolDeclaration* node) override
@@ -264,8 +302,8 @@ struct ASTProcessor : AST::Visitor
 			if (node->initExpr)
 			{
 				node->initExpr->accept(this);
-				TypeRef& exprType = node->initExpr->getType(this->context);
-				const auto result = unifyTypes(symbol->getType(), exprType);
+				TypeRef& initExprType = node->initExpr->getType(this->context);
+				const auto result = unifyTypes(symbol->getType(), initExprType);
 
 				// TODO: Handle implicit casts?
 				if (result == CannotUnify)
@@ -458,6 +496,7 @@ struct ASTProcessor : AST::Visitor
 	{
 	}
 
+	std::optional<TypeRef> m_expectedReturnType;
 	Context* context;
 };
 

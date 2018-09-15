@@ -29,6 +29,7 @@ namespace AST
 	struct UnaryPostfixOp;
 	struct BinaryOp;
 	struct EvalStatement;
+	struct ReturnStatement;
 
 	//struct FuncLiteralSignature;
 	struct StatementBody;
@@ -72,6 +73,7 @@ namespace AST
 		virtual void visit(UnaryPostfixOp* node) { visit((Expression*)node); }
 		virtual void visit(BinaryOp* node) { visit((Expression*)node); }
 		virtual void visit(EvalStatement* node) { visit((Statement*)node); }
+		virtual void visit(ReturnStatement* node) { visit((Statement*)node); }
 
 		virtual void visit(StatementBody* node) { visit((Statement*)node); }
 		//virtual void visit(FuncLiteralSignature* node) { visit((Node*)node); }
@@ -242,7 +244,27 @@ namespace AST
 				return ret;
 			}
 
+			// Wtf?
 			return StatementBody::getChildren();
+		}
+	};
+
+	struct ReturnStatement : public NodeImpl<ReturnStatement, StatementBody>
+	{
+		Expression* expr = nullptr;
+
+		string toString(Context* context) override
+		{
+			string s = "ReturnStatement";
+			return s;
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			if (expr)
+				ret.push_back(expr);
+			return ret;
 		}
 	};
 
@@ -557,7 +579,7 @@ namespace AST
 
 	// TODO: split functions into calls and call-expression?
 	//	for funcs that can act as an expression/operand
-	struct Call : public NodeImpl<Call, Statement>
+	struct Call : public NodeImpl<Call, Expression>
 	{
 		string function; // TODO: Remove?
 		SymbolExpression* expr = nullptr; // TODO: Can be any expression
@@ -568,7 +590,36 @@ namespace AST
 		string toString(Context* context) override 
 		{ 
 			string s = "Call(" + function + ")";
+			if (hasSymbol(context))
+				s += typeString(getType(context));
 			return s; 
+		}
+
+		bool hasSymbol(Context* context)
+		{
+			return context->getSymbolDependency(this->expr) != nullptr;
+		}
+
+		Symbol* getSymbol(Context* context)
+		{
+			auto* symbolDependency = context->getSymbolDependency(this->expr);
+			assert(symbolDependency);
+			return symbolDependency->getSymbol();
+		}
+
+		TypeRef& getType(Context* context) override
+		{
+			auto& type = getSymbol(context)->getType();
+			FunctionClass& function = type->getFunction();
+			if (function.outParams.empty())
+			{
+				return s_voidType;
+			}
+			else
+			{
+				// TODO: Multiple params :(
+				return function.outParams.back().type;
+			}
 		}
 
 		const vector<Node*> getChildren() override

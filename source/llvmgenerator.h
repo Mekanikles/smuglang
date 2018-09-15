@@ -198,10 +198,12 @@ struct LLVMIRGenerator : AST::Visitor
 			m_variables[arg.getName()] = a;
 		}
 
+		m_foundReturnStatement = false;
 		assert(node->body);
 		node->body->accept(this);
 
-		m_builder.CreateRetVoid();
+		if (!m_foundReturnStatement)
+			m_builder.CreateRetVoid();
 
 		verifyFunction(*func);
 
@@ -279,6 +281,20 @@ struct LLVMIRGenerator : AST::Visitor
 		m_valueStack.pop_back();
 	}
 
+	void visit(AST::ReturnStatement* node) override
+	{
+		llvm::Value* val = nullptr;
+		if (node->expr)
+		{
+			node->expr->accept(this);
+			val = m_valueStack.back(); 
+			m_valueStack.pop_back();
+		}
+
+		m_foundReturnStatement = true;
+		m_builder.CreateRet(val);
+	}
+
 	void visit(AST::SymbolExpression* node) override
 	{
 		Symbol* symbol = node->getSymbol(m_astContext);
@@ -342,7 +358,8 @@ struct LLVMIRGenerator : AST::Visitor
 			}
 		}
 
-		m_builder.CreateCall(func, args);
+		llvm::Value* retVal = m_builder.CreateCall(func, args);
+		m_valueStack.push_back(retVal);
 	}
 
 	void visit(AST::BinaryOp* node) override
@@ -488,10 +505,17 @@ struct LLVMIRGenerator : AST::Visitor
 
 		ast->root->accept(this);
 
-		if (m_valueStack.size() > 0)
+		int foundUnusedValues = 0;
+		for (auto* val : m_valueStack)
+		{
+			// TODO: Check for unused values	
+			if (val)
+				foundUnusedValues++;
+		}
+		if (foundUnusedValues > 0)
 		{
 			print("Warning: found unused values: ");
-			printLine(std::to_string(m_valueStack.size()));
+			printLine(std::to_string(foundUnusedValues));
 		}
 
 		// Main exit code
@@ -516,6 +540,8 @@ struct LLVMIRGenerator : AST::Visitor
 	llvm::IRBuilder<llvm::NoFolder> m_builder;
 	std::vector<llvm::Value*> m_valueStack;
 
+	// TODO: Terrible hack, we need to do flow analysis for return statements
+	bool m_foundReturnStatement;
 
 	std::unordered_map<Symbol*, llvm::Function*> m_functions;
 	std::unordered_map<AST::FunctionLiteral*, llvm::Function*> m_functionLiterals;

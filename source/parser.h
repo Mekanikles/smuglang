@@ -134,7 +134,7 @@ struct Parser
 				toString(this->currentToken.type);	
 		errorOnExpect(errMsg);
 		if (skipOnError)
-			advanceToken();	
+			advanceToken();
 		return false;
 	}
 
@@ -356,12 +356,6 @@ struct Parser
 		return false;
 	}
 
-	bool parsePrimaryExpressionSymbolContinuation(const string& symbolName, AST::Expression** outNode)
-	{
-		// TODO: Parse function call etc
-		return false;
-	}
-
 	bool parsePrimaryExpression(AST::Expression** outNode)
 	{
 		AST::TypeLiteral* typeLiteral;
@@ -421,11 +415,28 @@ struct Parser
 		}
 		else if (accept(TokenType::Symbol))
 		{
-			if (!parsePrimaryExpressionSymbolContinuation(lastToken().symbol, outNode))
+			string symbol = lastToken().symbol;
+			// TODO: Support any primary expression as a call initializer
+			if (accept(TokenType::OpenParenthesis))
+			{	
+				auto node = createNode<AST::Call>();
+				node->function = symbol;
+ 
+				auto* expr = createNode<AST::SymbolExpression>(symbol);
+				node->expr = expr;
+
+				if (!parseCallParameters(node))
+				{
+					errorOnExpect("Call parameter list expected");
+				}
+
+				expect(TokenType::CloseParenthesis);
+				*outNode = node;	
+			}
+			else
 			{
-				// Was simple symbol expression
-				auto* expr = createNode<AST::SymbolExpression>(lastToken().symbol);
-				*outNode = expr;
+				auto* expr = createNode<AST::SymbolExpression>(symbol);
+				*outNode = expr;	
 			}
 		}
 		else if (parseTypeLiteral(&typeLiteral))
@@ -686,50 +697,32 @@ struct Parser
 	{
 		AST::FunctionOutParam* node = nullptr;
 		AST::Expression* firstExpr = nullptr;
-		// See if this is a named output
-		if (accept(TokenType::Symbol))
+
+		if (parseExpression(&firstExpr))
 		{
 			node = createNode<AST::FunctionOutParam>();
 
-			if (!parsePrimaryExpressionSymbolContinuation(lastToken().symbol, &firstExpr))
+			// If we have optional type declaration, first expression must be param name
+			if (accept(TokenType::Colon))
 			{
-				// If we have optional type declaration, we know that symbol was param name
-				if (accept(TokenType::Colon))
+				if (!firstExpr->isSymbolExpression())
 				{
-					node->name = lastToken().symbol;
-					if (!parseExpression(&node->typeExpr))
-					{
-						errorOnExpect("Expected expression");
-					}
+					errorOnAccept("Parameter name before colon must be simple symbol");
 				}
-				else
+
+				// TODO: Here we leave firstExpr object dangling. Problem?
+				auto* symExpr = static_cast<AST::SymbolExpression*>(firstExpr);
+				node->name = symExpr->symbol;
+
+				if (!parseExpression(&node->typeExpr))
 				{
-					node->typeExpr = createNode<AST::SymbolExpression>(lastToken().symbol);
+					errorOnExpect("Expected type expression");
 				}
 			}
 			else
 			{
-				// If we have a non-simple expression followed by a colon, the param is malformed
-				if (peek(TokenType::Colon))
-				{
-					errorOnAccept("Parameter name must be simple symbol");
-				}
-
 				node->typeExpr = firstExpr;
 			}
-		}
-		// Otherwise it is just a type expr
-		else if (parseExpression(&firstExpr))
-		{
-			node = createNode<AST::FunctionOutParam>();
-
-			// If we have a non-simple expression followed by a colon, the param is malformed
-			if (peek(TokenType::Colon))
-			{
-				errorOnAccept("Parameter name must be simple symbol");
-			} 
-
-			node->typeExpr = firstExpr;
 		}
 
 		if (!node)
@@ -1007,7 +1000,7 @@ struct Parser
 				AST::FunctionSignature* signature;
 				if (!parseFunctionSignature(&signature))
 				{
-					errorOnAccept("Expected function signature following function delcaration");
+					errorOnAccept("Expected function signature following function declaration");
 					return true;
 				}
 				
@@ -1071,6 +1064,20 @@ struct Parser
 			if(linkType != AST::Import::LinkType_C)
 				errorOnAccept("Only 'c' type imports are supported");
 			node->linkType = linkType;
+			*outStatement = node;
+		}
+		else if (accept(TokenType::Return))
+		{
+			auto* node = createNode<AST::ReturnStatement>();
+
+			// Optional expression
+			AST::Expression* expr;
+			if (parseExpression(&expr))
+			{
+				node->expr = expr;
+			}
+
+			expect(TokenType::SemiColon, false);
 			*outStatement = node;
 		}
 		// TODO: Parse expression properly

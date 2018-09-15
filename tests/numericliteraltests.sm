@@ -48,15 +48,28 @@ func print() -> ()
 print();
 */
 
-func test(arg : cchar*)
+func sayHello(arg : cchar*)
 {
 	extern printf : func(fmt : cchar*, args : cchar*) -> errCode : cint;
 	printf("Hello %s\n", arg);
 };
 
-def t : cchar* = "var s : cchar* = \"World\";";
+func world() -> cchar*
+{
+	return "World";
+};
+
+/*
+func evalString() -> cchar*
+{
+	return "var s : cchar* = \"World\";";
+};
+
+def t : cchar* = evalString();
 eval(t);
 //var f : cchar* = t;
-test(s);
+sayHello(s);
+*/
 
+sayHello(world());
 
