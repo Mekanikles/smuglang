@@ -31,7 +31,7 @@
 
 static llvm::LLVMContext s_theContext;
 static llvm::IRBuilder<llvm::NoFolder> s_builder(s_theContext);
-static std::unique_ptr<llvm::Module> s_theModule = llvm::make_unique<llvm::Module>("SmugModule", s_theContext);;
+static std::unique_ptr<llvm::Module> s_theModule = llvm::make_unique<llvm::Module>("SmugModule", s_theContext);
 static std::map<string, llvm::Value*> s_namedValues;
 
 struct LLVMIRGenerator : AST::Visitor
@@ -221,15 +221,17 @@ struct LLVMIRGenerator : AST::Visitor
 		assert(funcLiteral);
 		auto func = processFunctionLiteral(funcLiteral, symbol->name);
 
+		m_valueStack.push_back(func);
 		m_functions[symbol] = func;
 	}
 
 	void visit(AST::SymbolDeclaration* node) override
 	{
+		// TODO: process AST into strongly typed AST before IR and get rid of defs
 		// Definitions does not generate any code
 		if (node->isDefine())
 			return;
-
+		
 		Symbol* symbol = node->getSymbol(m_astContext);
 		const Type& type = symbol->type;
 
@@ -295,8 +297,18 @@ struct LLVMIRGenerator : AST::Visitor
 		m_builder.CreateRet(val);
 	}
 
+	// TODO: Generalize into declaration
+	void visit(AST::FunctionInParam* node) override
+	{
+		// TODO: 
+		assert(!node->initExpr);
+	}
+
 	void visit(AST::SymbolExpression* node) override
 	{
+		auto dependencyNode = node->getNodeForDependency(m_astContext);
+		dependencyNode->accept(this);
+
 		Symbol* symbol = node->getSymbol(m_astContext);
 
 		const TypeRef& type = symbol->getType();
@@ -310,18 +322,31 @@ struct LLVMIRGenerator : AST::Visitor
 				id += std::to_string(i);
 
 				auto var = m_variables[id];
-				assert(var && "Could not find declared symbol");
+				assert(var && "Could not find declared symbol variable");
 
 				auto loadInst = m_builder.CreateLoad(var);
 				m_valueStack.push_back(loadInst);
 			}
 		}
+		else if (type->isFunction())
+		{
+			auto func = m_functions[symbol];
+			assert(func && "Could not find declared symbol function");
+
+			//auto loadInst = m_builder.CreateLoad(func);
+
+			// TODO: Here we push a second value on the stack without using the current
+			// 	one pushed by the expr eval
+			//m_valueStack.push_back(loadInst);
+		}
 		else
 		{
 			auto var = m_variables[symbol->name];
-			assert(var && "Could not find declared symbol");
+			assert(var && "Could not find declared symbol variable");
 
 			auto loadInst = m_builder.CreateLoad(var);
+			// TODO: Here we push a second value on the stack without using the current
+			// 	one pushed by the expr eval
 			m_valueStack.push_back(loadInst);
 		}
 	}
@@ -429,12 +454,14 @@ struct LLVMIRGenerator : AST::Visitor
 		AST::Visitor::visit(node);
 	}
 
-	LLVMIRGenerator(Context* context, std::ostream* out)
+	LLVMIRGenerator(Context* context, std::ostream* out, 
+		llvm::Module* llvmModule, llvm::LLVMContext* llvmContext, 
+		llvm::IRBuilder<llvm::NoFolder>* llvmBuilder)
 		: m_astContext(context)
 		, m_out(*out)
-		, m_module(*s_theModule)
-		, m_context(s_theContext)
-		, m_builder(s_builder)		
+		, m_module(*llvmModule)
+		, m_context(*llvmContext)
+		, m_builder(*llvmBuilder)		
 	{
 	}
 
@@ -548,3 +575,10 @@ struct LLVMIRGenerator : AST::Visitor
 
 	std::unordered_map<string, llvm::AllocaInst*> m_variables;
 };
+
+LLVMIRGenerator* createGenerator(Context* context, std::ostream* out)
+{
+	return new LLVMIRGenerator(context, out, s_theModule.get(), &s_theContext, &s_builder);
+}
+
+

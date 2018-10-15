@@ -425,10 +425,20 @@ struct ASTProcessor : AST::Visitor
 			assert("Expression is not of string type" && false);
 		}
 
-		const char* text = nodeVal.data.data();
-		const uint length = nodeVal.data.size();
+		// TODO: handle other strings
+		assert(nodeVal.type.getType().isPointer());
+		auto& type = nodeVal.type.getType().getPointer().type;
+		assert(type->isPrimitive());
+		assert(type->getPrimitive().isChar());
+		assert(type->getSize() == 8);
 
-		BufferSourceInput bufferInput(text, length);
+		const char** text = (const char**)nodeVal.data.data();
+		const uint length = strnlen(*text, 4096);
+		
+		printLine("Parsing eval string: "); 
+		printLine(*text, 1);
+
+		BufferSourceInput bufferInput(*text, length);
 		Parser parser(&bufferInput);
 
 		AST::Statement* statement;
@@ -442,8 +452,11 @@ struct ASTProcessor : AST::Visitor
 		
 		if (parser.getParserErrors().size() != 0 && parser.getScannerErrors().size() != 0)
 		{
-			// TODO: Print errors etc
-			assert("Eval statement contained errors" && false);
+			printLine("Eval statement contained errors:");
+			printScannerErrors(parser);	
+			printParserErrors(parser);
+			// TODO: Handle eval errors
+			assert(false);
 		}
 
 		// TODO: Introduce a single node for statement lists

@@ -18,6 +18,9 @@ void printAST(Context* context, AST::ASTObject* ast, int indent = 0)
 	vector<bool> depthStack;
 	std::function<void(AST::Node*)> rec = [&](AST::Node* node)
 	{
+		char orderStr[8];
+		snprintf(orderStr, 8, "%*u", 4, node->order);
+		print(orderStr);
 		printIndent(indent);
 		const int depth = depthStack.size();
 		if (depth > 0)

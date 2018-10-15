@@ -16,6 +16,8 @@ bool isSubType(const Type& t, const MultiTypeClass& mtc);
 
 using TypeId = unsigned int;
 
+const int POINTER_SIZE_BYTES = 8;
+
 struct TypeClass
 {
 	enum ClassType
@@ -42,6 +44,7 @@ struct TypeClass
 	virtual std::unique_ptr<TypeClass> clone() const = 0;
 	virtual string toString() const = 0;
 	virtual bool isConcrete() const = 0;
+	virtual int getSize() const = 0;
 
 	ClassType type = Any;
 	TypeId typeId;
@@ -115,6 +118,12 @@ struct Type
 	Type clone() const
 	{
 		return Type(kind, typeClass ? typeClass->clone() : nullptr);
+	}
+
+	int getSize() const
+	{
+		assert(isConcrete() && "Cannot take the size of inconcrete type");
+		return typeClass->getSize();
 	}
 
 	TypeId typeId() const
@@ -400,6 +409,11 @@ struct TypeRef
 		return typeWrapper->getType().toString();
 	}
 
+	int getSize() const
+	{
+		return typeWrapper->getType().getSize();
+	}
+
 	bool operator==(const TypeRef& o) const
 	{
 		return getType() == o.getType();
@@ -501,6 +515,12 @@ struct PrimitiveClass : TypeClass
 		return knownSize && signedType != UnknownSign;
 	}
 
+	virtual int getSize() const override
+	{
+		assert(knownSize);
+		return (int)size;
+	}
+
 	bool isInteger() const { return primitiveType == Int; }
 	bool isChar() const { return primitiveType == Char; }
 	bool isSigned() const { return signedType == Signed; }
@@ -579,6 +599,15 @@ struct ArrayClass : TypeClass
 	{
 		return arrayType != AnyArray &&
 			type->isConcrete();
+	}
+
+	virtual int getSize() const override
+	{
+		// TODO: Handle dynamic arrays
+		//	we must know the implementation of dyn arrays here
+		assert(arrayType == Static);
+		// TODO: Handle align?
+		return staticLength * type.getSize();
 	}
 
 	bool operator==(const ArrayClass& o) const
@@ -675,6 +704,13 @@ public:
 				return false;
 		}
 		return true;
+	}
+
+	virtual int getSize() const override
+	{
+		// Hm, can tuples have a size?
+		assert(false);
+		return (int)0;
 	}
 
 	bool operator==(const TupleClass& o) const
@@ -832,6 +868,12 @@ struct FunctionClass : TypeClass
 		}
 
 		return true;
+	}
+
+	virtual int getSize() const override
+	{
+		// Function types is always the size of a pointer
+		return POINTER_SIZE_BYTES;
 	}	
 
 	bool operator==(const FunctionClass& o) const
@@ -872,6 +914,11 @@ struct PointerClass : TypeClass
 		return type->isConcrete();
 	}
 
+	virtual int getSize() const override
+	{
+		return POINTER_SIZE_BYTES;
+	}		
+
 	bool operator==(const PointerClass& o) const
 	{
 		// TODO
@@ -911,6 +958,12 @@ struct TypeVariableClass : TypeClass
 	{
 		return type->isConcrete();
 	}
+
+	virtual int getSize() const override
+	{
+		// Type id is the size of a pointer atm. Should always be 64bit?
+		return POINTER_SIZE_BYTES;
+	}	
 
 	bool operator==(const TypeVariableClass& o) const
 	{
@@ -965,6 +1018,12 @@ struct MultiTypeClass : TypeClass
 	{
 		return false;
 	}
+
+	virtual int getSize() const override
+	{
+		assert(false);
+		return -1;
+	}		
 
 	void appendType(TypeRef&& type)
 	{

@@ -529,6 +529,15 @@ namespace AST
 			return context->getSymbolDependency(this) != nullptr;
 		}
 
+		Node* getNodeForDependency(Context* context)
+		{
+			auto* symbolDependency = context->getSymbolDependency(this);
+			assert(symbolDependency);
+			auto* symbolSource = symbolDependency->getSymbolSource();
+			assert(symbolSource);
+			return symbolSource->getNode();
+		}
+
 		Symbol* getSymbol(Context* context)
 		{
 			auto* symbolDependency = context->getSymbolDependency(this);

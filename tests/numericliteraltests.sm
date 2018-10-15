@@ -54,10 +54,10 @@ func sayHello(arg : cchar*)
 	printf("Hello %s\n", arg);
 };
 
-func world() -> cchar*
+/*func world() -> cchar*
 {
 	return "World";
-};
+};*/
 
 /*
 func evalString() -> cchar*
@@ -71,5 +71,13 @@ eval(t);
 sayHello(s);
 */
 
-sayHello(world());
+//sayHello(world());
+
+func test() -> cchar*
+{
+	return "sayHello(\"Kreti\"); sayHello(\"Pleti\")";
+};
+
+eval(test());
+
 

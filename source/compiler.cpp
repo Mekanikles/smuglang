@@ -61,9 +61,11 @@ int main(int argc, char** argv)
 		LOG("Parse success!");
 		Context astContext;
 
+		assert(initExpressionEvaluator());
+
 		processAST(&astContext, &ast);
 
-		printLine("AST:");
+		printLine("Compiled AST:");
 		printAST(&astContext, &ast, 1);
 
 		// Extract filename without path
@@ -74,8 +76,8 @@ int main(int argc, char** argv)
 		string outFileName = string(".smug/") + matches[2].str();
 
 		std::stringstream llvmOutput;
-		LLVMIRGenerator llvmgenerator(&astContext, &llvmOutput);
-		llvmgenerator.run(&ast);
+		LLVMIRGenerator* llvmgenerator = createGenerator(&astContext, &llvmOutput);
+		llvmgenerator->run(&ast);
 		{
 			string outLLVMFileName = outFileName + ".ll";
 			std::ofstream outFile(outLLVMFileName);
