@@ -356,9 +356,13 @@ struct ASTProcessor : AST::Visitor
 
 		// Process dependency until we are dependent on a single symbol
 		//	since we are possibly dependent on a placeholder source
-		while(!dependency->getSymbolSource()->isSingleSymbolSource())
+		auto depSource = dependency->getSymbolSource();
+		while(!depSource->isSingleSymbolSource())
 		{
-			dependency->getSymbolSource()->getNode()->accept(this);
+			depSource->getNode()->accept(this);
+			auto newDepSource = dependency->getSymbolSource();
+			assert(depSource != newDepSource && "Could not resolve catch-all dependency! (probably a circular dependency on eval)");
+			depSource = newDepSource;
 		}
 
 		// Make sure that symbol source is processed
@@ -375,23 +379,6 @@ struct ASTProcessor : AST::Visitor
 			printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization" + 
 					"(InitOrder: " + std::to_string(symbol->firstInitOrder) + ", RefOrder: " + std::to_string(node->order) + ")");
 		}
-	}
-
-	static bool isStringType(const Type& type)
-	{
-		const ArrayClass* ac = type.isArray() ? &type.typeClass->as<ArrayClass>() : nullptr;
-		if (ac && ac->type->isPrimitive() && ac->type->getPrimitive().isChar())
-		{
-			return true;
-		}
-
-		const PointerClass* pc = type.isPointer() ? &type.getPointer() : nullptr;
-		if (pc && pc->type->isPrimitive() && pc->type->getPrimitive().isChar())
-		{
-			return true;
-		}
-
-		return false;
 	}
 
 	void visit(AST::EvalStatement* node) override
@@ -441,6 +428,7 @@ struct ASTProcessor : AST::Visitor
 		BufferSourceInput bufferInput(*text, length);
 		Parser parser(&bufferInput);
 
+		
 		AST::Statement* statement;
 		while (parser.parseStatement(&statement))
 		{
@@ -470,7 +458,7 @@ struct ASTProcessor : AST::Visitor
 		//for (auto d : node->catchAllSource->dependencies)
 		//	printLine(d->symbolName, 2);
 
-		auto* catchAllSource = this->context->getCatchAllSymbolSource(node);
+		/*auto* catchAllSource = this->context->getCatchAllSymbolSource(node);
 		assert(catchAllSource);
 
 		// Now we can remove the catch-all source that we added earlier
@@ -481,7 +469,7 @@ struct ASTProcessor : AST::Visitor
 		for (auto d : catchAllSource->dependencies)
 		{
 			resolveDependency(d, currentScope);
-		}
+		}*/
 
 		//printLine(string("Resolving dependencies for ") + std::to_string(node->statements.size()) +
 		//	" evaled statements..." , 1);

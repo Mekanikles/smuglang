@@ -1232,6 +1232,27 @@ bool tryUnifyMultiTypes(TypeRef& leftType, TypeRef& rightType)
 	return false;
 }
 
+bool isCharPointer(const Type& type)
+{
+	const PointerClass* pc = type.isPointer() ? &type.getPointer() : nullptr;
+	if (pc && pc->type->isPrimitive() && pc->type->getPrimitive().isChar())
+	{
+		return true;
+	}
+	return false;
+}
+
+bool isStringType(const Type& type)
+{
+	const ArrayClass* ac = type.isArray() ? &type.typeClass->as<ArrayClass>() : nullptr;
+	if (ac && ac->type->isPrimitive() && ac->type->getPrimitive().isChar())
+	{
+		return true;
+	}
+
+	return isCharPointer(type);
+}
+
 
 
 

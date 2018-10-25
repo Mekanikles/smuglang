@@ -70,7 +70,7 @@ struct LLVMIRGenerator : AST::Visitor
 				llvm::ConstantDataArray::getString(m_context, s, true),
 				indexList));*/
 		const string str = processQuotedInputString(node->value);
-		m_valueStack.push_back(m_builder.CreateGlobalStringPtr(str.c_str()));
+		pushValue(m_builder.CreateGlobalStringPtr(str.c_str()));
 	}
 	void visit(AST::IntegerLiteral* node) override 
 	{ 	
@@ -87,11 +87,11 @@ struct LLVMIRGenerator : AST::Visitor
 		auto iType = llvm::IntegerType::get(m_context, size);
 		// TODO: Make sure we don't allow stupid octal syntax
 		auto val = llvm::ConstantInt::get(iType, s, 10);
-		m_valueStack.push_back(val);
+		pushValue(val);
 	}
 	void visit(AST::FloatLiteral* node) override
 	{
-		m_valueStack.push_back(llvm::ConstantFP::get(m_context, 
+		pushValue(llvm::ConstantFP::get(m_context, 
 				llvm::APFloat(llvm::APFloatBase::IEEEsingle(), llvm::StringRef(node->value))));
 	}
 	void visit(AST::TypeLiteral* node) override
@@ -217,12 +217,16 @@ struct LLVMIRGenerator : AST::Visitor
 	{
 		Symbol* symbol = node->getSymbol(m_astContext);
 
-		auto funcLiteral = node->funcLiteral;
-		assert(funcLiteral);
-		auto func = processFunctionLiteral(funcLiteral, symbol->name);
+		auto func = m_functions[symbol];
+		if (func == nullptr)
+		{
+			auto funcLiteral = node->funcLiteral;
+			assert(funcLiteral);			
+			func = processFunctionLiteral(funcLiteral, symbol->name);
+			m_functions[symbol] = func;
+		}
 
-		m_valueStack.push_back(func);
-		m_functions[symbol] = func;
+		pushValue(func);
 	}
 
 	void visit(AST::SymbolDeclaration* node) override
@@ -238,27 +242,39 @@ struct LLVMIRGenerator : AST::Visitor
 		if (type.isFunction())
 		{
 			assert(node->isExternal());
-			m_functions[symbol] = createFunction(type, symbol->name, node->isExternal());
+			auto func = m_functions[symbol];
+			if (func == nullptr)
+			{
+				func = createFunction(type, symbol->name, node->isExternal()); 
+				m_functions[symbol] = func;
+			}
+
+			pushValue(func);
 		}
 		else
 		{
 			// TODO: Prune pure type stuff before generating ir
 			assert(!type.isTypeVariable());
 
-			auto t = resolveType(type);
-			auto a = m_builder.CreateAlloca(t, nullptr, symbol->name.c_str());
-
-			if (node->initExpr)
+			auto variable = m_variables[symbol->name];
+			if (variable == nullptr)
 			{
-				const int valueCount = m_valueStack.size();
-				node->initExpr->accept(this);
-				assert(m_valueStack.size() == valueCount + 1);
+				auto t = resolveType(type);
+				variable = m_builder.CreateAlloca(t, nullptr, symbol->name.c_str());
 
-				m_builder.CreateStore(m_valueStack.back(), a);
-				m_valueStack.pop_back();
+				if (node->initExpr)
+				{
+					const int valueCount = m_valueStack.size();
+					node->initExpr->accept(this);
+					assert(m_valueStack.size() == valueCount + 1);
+
+					//auto loadInst = m_builder.407(popValue());
+					m_builder.CreateStore(popValue(), variable);
+				}
+
+				m_variables[symbol->name] = variable;
 			}
-
-			m_variables[symbol->name] = a;
+			pushValue(variable);
 		}
 	}
 
@@ -279,8 +295,8 @@ struct LLVMIRGenerator : AST::Visitor
 		node->expr->accept(this);
 		assert(m_valueStack.size() == valueCount + 1);
 
-		m_builder.CreateStore(m_valueStack.back(), var);
-		m_valueStack.pop_back();
+		//auto loadInst = m_builder.CreateLoad(popValue());
+		m_builder.CreateStore(popValue(), var);
 	}
 
 	void visit(AST::ReturnStatement* node) override
@@ -289,8 +305,8 @@ struct LLVMIRGenerator : AST::Visitor
 		if (node->expr)
 		{
 			node->expr->accept(this);
-			val = m_valueStack.back(); 
-			m_valueStack.pop_back();
+
+			val = popValue();
 		}
 
 		m_foundReturnStatement = true;
@@ -300,8 +316,13 @@ struct LLVMIRGenerator : AST::Visitor
 	// TODO: Generalize into declaration
 	void visit(AST::FunctionInParam* node) override
 	{
-		// TODO: 
 		assert(!node->initExpr);
+
+		// We have already stored in-args in the function literal
+		auto symbol = node->getSymbol(m_astContext);
+		auto val = m_variables[symbol->name];
+		assert(val);
+		pushValue(val);
 	}
 
 	void visit(AST::SymbolExpression* node) override
@@ -317,21 +338,21 @@ struct LLVMIRGenerator : AST::Visitor
 			auto& tuple = type->getTuple();
 			for (uint i = 0, s = tuple.types.size(); i < s; ++i)
 			{
-				string id = symbol->name;
-				id += ".";
-				id += std::to_string(i);
-
-				auto var = m_variables[id];
+				auto var = popValue();
 				assert(var && "Could not find declared symbol variable");
 
-				auto loadInst = m_builder.CreateLoad(var);
-				m_valueStack.push_back(loadInst);
+				pushValue(var);
+
+				//auto loadInst = m_builder.CreateLoad(var);
+				//m_valueStack.push_back(loadInst);
 			}
 		}
 		else if (type->isFunction())
 		{
-			auto func = m_functions[symbol];
+			auto func = popValue();
 			assert(func && "Could not find declared symbol function");
+
+			pushValue(func);
 
 			//auto loadInst = m_builder.CreateLoad(func);
 
@@ -341,22 +362,30 @@ struct LLVMIRGenerator : AST::Visitor
 		}
 		else
 		{
-			auto var = m_variables[symbol->name];
+			auto var = popValue();
 			assert(var && "Could not find declared symbol variable");
 
 			auto loadInst = m_builder.CreateLoad(var);
-			// TODO: Here we push a second value on the stack without using the current
-			// 	one pushed by the expr eval
-			m_valueStack.push_back(loadInst);
+			pushValue(loadInst);
 		}
 	}
 
 	void visit(AST::Call* node) override
 	{
 		assert(node->expr);
-		Symbol* symbol = node->expr->getSymbol(m_astContext);
-		llvm::Function* func = m_functions[symbol];
-		assert(func);
+		node->expr->accept(this);
+
+		// TODO: SymbolExpession generates too many values
+		assert(m_valueStack.size() > 0);
+		llvm::Value* llvmValue = popValue();
+		// TODO: should probably not allow pointer types for compile-time generated code
+		//	These will point into compiler memory and cannot be treated as constants without
+		//	some kind of transformation first.
+		llvmValue = llvmValue->stripPointerCasts();
+
+		// TODO: How to get inner type of pointer value
+		//assert(llvmValue->getType()->getTypeID() == llvm::Type::FunctionTyID);
+		auto func = static_cast<llvm::Function*>(llvmValue);
 
 		const int prevValCount = m_valueStack.size();
 
@@ -378,13 +407,13 @@ struct LLVMIRGenerator : AST::Visitor
 			assert(m_valueStack.size() == prevValCount + expectedValCount);
 			for (uint i = 0; i < expectedValCount; ++i)
 			{
-				args.push_back(m_valueStack.back());
-				m_valueStack.pop_back();
+				//auto loadInst = m_builder.CreateLoad(popValue());
+				args.push_back(popValue());		
 			}
 		}
 
 		llvm::Value* retVal = m_builder.CreateCall(func, args);
-		m_valueStack.push_back(retVal);
+		pushValue(retVal);
 	}
 
 	void visit(AST::BinaryOp* node) override
@@ -394,12 +423,10 @@ struct LLVMIRGenerator : AST::Visitor
 		const auto& type = node->getType(m_astContext);
 
 		leftExpr->accept(this);
-		auto leftVal = m_valueStack.back(); 
-		m_valueStack.pop_back();
+		auto leftVal = popValue();
 
 		rightExpr->accept(this);
-		auto rightVal = m_valueStack.back(); 
-		m_valueStack.pop_back();
+		auto rightVal = popValue();
 
 		assert(type->isPrimitive());
 		const auto& primitive = type->getPrimitive();
@@ -408,19 +435,19 @@ struct LLVMIRGenerator : AST::Visitor
 			switch (node->opType)
 			{
 				case TokenType::CompareOp:
-					m_valueStack.push_back(m_builder.CreateICmpEQ(leftVal, rightVal, "icmp")); 
+					pushValue(m_builder.CreateICmpEQ(leftVal, rightVal, "icmp")); 
 					break;
 				case TokenType::Plus:
-					m_valueStack.push_back(m_builder.CreateAdd(leftVal, rightVal, "iadd")); 
+					pushValue(m_builder.CreateAdd(leftVal, rightVal, "iadd")); 
 					break;
 				case TokenType::Minus:
-					m_valueStack.push_back(m_builder.CreateSub(leftVal, rightVal, "isub")); 
+					pushValue(m_builder.CreateSub(leftVal, rightVal, "isub")); 
 					break;
 				case TokenType::Asterisk:
-					m_valueStack.push_back(m_builder.CreateMul(leftVal, rightVal, "imul")); 
+					pushValue(m_builder.CreateMul(leftVal, rightVal, "imul")); 
 					break;
 				case TokenType::Slash:
-					m_valueStack.push_back(m_builder.CreateSDiv(leftVal, rightVal, "idiv")); 
+					pushValue(m_builder.CreateSDiv(leftVal, rightVal, "idiv")); 
 					break;
 				default: assert(false);
 			}
@@ -430,19 +457,19 @@ struct LLVMIRGenerator : AST::Visitor
 			switch (node->opType)
 			{
 				case TokenType::CompareOp:
-					m_valueStack.push_back(m_builder.CreateFCmpOEQ(leftVal, rightVal, "fcmp")); 
+					pushValue(m_builder.CreateFCmpOEQ(leftVal, rightVal, "fcmp")); 
 					break;
 				case TokenType::Plus:
-					m_valueStack.push_back(m_builder.CreateFAdd(leftVal, rightVal, "fadd")); 
+					pushValue(m_builder.CreateFAdd(leftVal, rightVal, "fadd")); 
 					break;
 				case TokenType::Minus:
-					m_valueStack.push_back(m_builder.CreateFSub(leftVal, rightVal, "fsub")); 
+					pushValue(m_builder.CreateFSub(leftVal, rightVal, "fsub")); 
 					break;
 				case TokenType::Asterisk:
-					m_valueStack.push_back(m_builder.CreateFMul(leftVal, rightVal, "fmul")); 
+					pushValue(m_builder.CreateFMul(leftVal, rightVal, "fmul")); 
 					break;
 				case TokenType::Slash:
-					m_valueStack.push_back(m_builder.CreateFDiv(leftVal, rightVal, "fdiv")); 
+					pushValue(m_builder.CreateFDiv(leftVal, rightVal, "fdiv")); 
 					break;
 				default: assert(false);
 			}
@@ -451,7 +478,41 @@ struct LLVMIRGenerator : AST::Visitor
 
 	void visit(AST::StatementBody* node) override
 	{
-		AST::Visitor::visit(node);
+		auto prevStackSize = m_valueStack.size();
+
+		for (AST::Statement* statement : node->statements)
+		{
+			statement->accept(this);
+			auto stackSize = m_valueStack.size();
+			assert(stackSize - prevStackSize < 2);
+			// Allow "dangling" values
+			if (stackSize - prevStackSize == 1)
+				popValue();
+		}
+	}
+
+	void printValue(llvm::Value* val, int indent = 0)
+	{
+		std::stringstream llvmOutput;
+		llvm::raw_os_ostream llvmOut(llvmOutput);
+		val->print(llvmOut);
+		printLine(llvmOutput.str(), indent);
+	}
+
+	void pushValue(llvm::Value* val)
+	{
+		m_valueStack.push_back(val);
+		printLine("Pushed value, stack size: " + std::to_string(m_valueStack.size()));
+		printValue(val, 1);
+	}
+
+	llvm::Value* popValue()
+	{
+		assert(m_valueStack.size() > 0);
+		auto retVal = m_valueStack.back();
+		m_valueStack.pop_back();
+		printLine("Popped value, stack size: " + std::to_string(m_valueStack.size()));
+		return retVal;
 	}
 
 	LLVMIRGenerator(Context* context, std::ostream* out, 
@@ -532,7 +593,9 @@ struct LLVMIRGenerator : AST::Visitor
 
 		ast->root->accept(this);
 
-		int foundUnusedValues = 0;
+		// TODO: Hm, I don't think the valuestack can be used like
+		//	this, a statement is allowed to "dangle" values
+		/*int foundUnusedValues = 0;
 		for (auto* val : m_valueStack)
 		{
 			// TODO: Check for unused values	
@@ -543,7 +606,7 @@ struct LLVMIRGenerator : AST::Visitor
 		{
 			print("Warning: found unused values: ");
 			printLine(std::to_string(foundUnusedValues));
-		}
+		}*/
 
 		// Main exit code
 		m_builder.CreateRet(llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_context), 0));

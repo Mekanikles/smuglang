@@ -1,5 +1,7 @@
 #pragma once
 
+#include <unordered_map>
+
 #include "llvm/ExecutionEngine/ExecutionEngine.h"
 #include "llvm/ExecutionEngine/GenericValue.h"
 
@@ -96,11 +98,21 @@ struct ExpressionEvaluator : AST::Visitor
 
 		val.type = node->getType(this->context);
 
-		string str = processQuotedInputString(node->value);
+		// TODO: Handle other types of strings
+		assert(isCharPointer(val.type));
 
-		auto length = str.length();
-		val.data.resize(length);
-		memcpy(val.data.data(), str.c_str(), length);
+		static std::unordered_map<AST::StringLiteral*, string> stringStore;
+		auto it = stringStore.find(node);
+		if (it == stringStore.end())
+		{
+			stringStore[node] = processQuotedInputString(node->value);
+			it = stringStore.find(node);
+		}
+		string& str = it->second;
+		const char* cstr = str.c_str();
+
+		val.data.resize(sizeof(cstr));
+		memcpy(val.data.data(), &cstr, sizeof(cstr));
 
 		this->success = true;
 	}
@@ -126,7 +138,7 @@ struct ExpressionEvaluator : AST::Visitor
 
 		node->expr->accept(&llvmGenerator);
 		// TODO: SymbolExpession generates too many values
-		assert(llvmGenerator.m_valueStack.size() >= 1);
+		assert(llvmGenerator.m_valueStack.size() == 1);
 		llvm::Value* llvmValue = llvmGenerator.m_valueStack.back();
 
 		// TODO: should probably not allow pointer types for compile-time generated code

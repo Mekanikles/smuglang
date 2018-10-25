@@ -1,51 +1,12 @@
-
 def cchar = #primitives.c.char;
 def cint = #primitives.c.int;
 
 /*
-def s64 = #primitives.int(64, true);
-def u64 = #primitives.int(64, false);
-def s32 = #primitives.int(32, true);
-def u32 = #primitives.int(32, false);
-
-func testExternalUnification()
-{
-	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
-	printf("Test 1\n", ());
-	var p : cchar* = "2";
-	printf("Test %s\n", (p));
-};
-
-testExternalUnification();
-
-var text = "Let's count to 5: %i, %i, %i, %i, %i\n";
-var n1 : s32 = 1;
-var n2 : s32 = 2;
-var n3 : s32 = 3;
-var n4 : s32 = 4;
-var n5 : s32 = 5;
-print(text, (n1, n2, n3, n4, n5));
-*/
-
-/*
-var text1 = "Hello %s";
-var text2 : cchar* = "World";
-print(text1, text2);
-
 func print(fmt : cchar*, args...) -> () 
 {
 	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
 	printf(fmt, args);
 };
-*/
-/*
-func print() -> () 
-{
-	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
-	printf("Hello %s\n", "World");
-};
-
-print();
 */
 
 func sayHello(arg : cchar*)
@@ -54,30 +15,14 @@ func sayHello(arg : cchar*)
 	printf("Hello %s\n", arg);
 };
 
-/*func world() -> cchar*
-{
-	return "World";
-};*/
-
-/*
-func evalString() -> cchar*
-{
-	return "var s : cchar* = \"World\";";
-};
-
-def t : cchar* = evalString();
-eval(t);
-//var f : cchar* = t;
-sayHello(s);
-*/
-
-//sayHello(world());
-
-func test() -> cchar*
+func innerValue() -> cchar*
 {
 	return "sayHello(\"Kreti\"); sayHello(\"Pleti\")";
 };
 
-eval(test());
+func chainedReturnValue() -> cchar*
+{
+	return innerValue();
+};
 
-
+eval(chainedReturnValue());

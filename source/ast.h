@@ -72,7 +72,7 @@ namespace AST
 		virtual void visit(UnaryOp* node) { visit((Expression*)node); }
 		virtual void visit(UnaryPostfixOp* node) { visit((Expression*)node); }
 		virtual void visit(BinaryOp* node) { visit((Expression*)node); }
-		virtual void visit(EvalStatement* node) { visit((Statement*)node); }
+		virtual void visit(EvalStatement* node) { visit((StatementBody*)node); }
 		virtual void visit(ReturnStatement* node) { visit((Statement*)node); }
 
 		virtual void visit(StatementBody* node) { visit((Statement*)node); }

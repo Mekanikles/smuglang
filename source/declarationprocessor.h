@@ -123,14 +123,19 @@ struct DeclarationProcessor : public AST::Visitor
 
 	void visit(AST::EvalStatement* node) override
 	{
+		// TODO: This might not be relevant if evals have their own scope
 		// Eval statments can potentially provide any symbol declaration
 		//	so we add a catch-all symbol source and deal with them later
 		// 	when we are able to eval the expression
-		auto* catchAllSource = createCatchAllSymbolSource(this->context, node);
-		this->currentScope->addSymbolSource(catchAllSource);
-		context->setCatchAllSymbolSource(node, catchAllSource);
+		//auto* catchAllSource = createCatchAllSymbolSource(this->context, node);
+		//this->context->setCatchAllSymbolSource(node, catchAllSource);
 
-		AST::Visitor::visit(node);
+		// Hack: to avoid circular dependencies by default, we don't want to 
+		//	include the expression in the eval scope, again for circular deps.
+		AST::Visitor::visit(node->expr);
+		auto innerScope = context->createScope(this->currentScope);
+		this->context->setScope(node, innerScope);
+		//innerScope->addSymbolSource(catchAllSource);
 	}
 };
 
