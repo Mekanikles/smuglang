@@ -1,3 +1,4 @@
+#pragma once
 
 #include <memory>
 #include <initializer_list>

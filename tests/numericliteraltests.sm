@@ -8,7 +8,7 @@ func print(fmt : cchar*, args...) -> ()
 	printf(fmt, args);
 };
 */
-
+/*
 func sayHello(arg : cchar*)
 {
 	extern printf : func(fmt : cchar*, args : cchar*) -> errCode : cint;
@@ -26,3 +26,22 @@ func chainedReturnValue() -> cchar*
 };
 
 eval(chainedReturnValue());
+*/
+
+/*func test(fmt : cchar*, args...)
+{
+	//extern printf : func(fmt : cchar*, args...) -> errCode : cint;
+	//printf(fmt, args);	
+};
+
+test("Hello %s", ("World"));
+*/
+
+func test(e : #primitives.int)
+{
+};
+
+var i : cint = 5;
+test(i);
+
+

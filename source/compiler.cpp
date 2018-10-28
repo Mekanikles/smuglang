@@ -22,7 +22,10 @@ const bool DEFAULT_INT_ISSIGNED = true;
 #include "ast.h"
 #include "functions.h"
 #include "parser.h"
+#include "backend.h"
+#include "ir.h"
 #include "output.h"
+#include "concretization.h"
 #include "llvmgenerator.h"
 
 #include "declarationprocessor.h"
@@ -30,6 +33,8 @@ const bool DEFAULT_INT_ISSIGNED = true;
 
 #include "evaluation.h"
 #include "astprocessor.h"
+
+
 
 ///////////////////////////////////////////////////////////////////////////////
 
@@ -61,13 +66,20 @@ int main(int argc, char** argv)
 		LOG("Parse success!");
 		Context astContext;
 
+		Backend backend;
+
 		assert(initExpressionEvaluator());
 
+		printLine("Processing AST:");
 		processAST(&astContext, &ast);
 
-		printLine("Compiled AST:");
+		printLine("Resulting AST:");
 		printAST(&astContext, &ast, 1);
 
+		printLine("Concretizing AST:");
+		IR::Module irModule = concretizeAST(&backend, &astContext, &ast);
+		printIRModule(&irModule);
+	
 		// Extract filename without path
 		std::regex filenameRegex(R"((.*[\\\/])?(.+)$))");
 		std::smatch matches;

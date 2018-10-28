@@ -15,6 +15,8 @@ namespace std
 template<typename T>
 using vector = std::vector<T>;
 using string = std::string;
+template<typename T>
+using unique = std::unique_ptr<T>;
 
 using uint = unsigned int;
 

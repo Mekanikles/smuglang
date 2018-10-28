@@ -502,8 +502,8 @@ struct LLVMIRGenerator : AST::Visitor
 	void pushValue(llvm::Value* val)
 	{
 		m_valueStack.push_back(val);
-		printLine("Pushed value, stack size: " + std::to_string(m_valueStack.size()));
-		printValue(val, 1);
+		//printLine("Pushed value, stack size: " + std::to_string(m_valueStack.size()));
+		//printValue(val, 1);
 	}
 
 	llvm::Value* popValue()
@@ -511,7 +511,7 @@ struct LLVMIRGenerator : AST::Visitor
 		assert(m_valueStack.size() > 0);
 		auto retVal = m_valueStack.back();
 		m_valueStack.pop_back();
-		printLine("Popped value, stack size: " + std::to_string(m_valueStack.size()));
+		//printLine("Popped value, stack size: " + std::to_string(m_valueStack.size()));
 		return retVal;
 	}
 

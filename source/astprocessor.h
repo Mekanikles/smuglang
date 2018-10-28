@@ -1,3 +1,4 @@
+#pragma once
 
 // Processing is done through dependency chain, rather than AST order
 struct ASTProcessor : AST::Visitor
@@ -11,6 +12,11 @@ struct ASTProcessor : AST::Visitor
 		// Make sure function expression is processed
 		node->expr->accept(this);
 
+		for (auto arg : node->args)
+		{
+			arg->accept(this);
+		}
+
 		Type& functionType = node->expr->getType(this->context);
 		assert(functionType.isFunction());
 		FunctionClass& function = functionType.getFunction();
@@ -18,7 +24,15 @@ struct ASTProcessor : AST::Visitor
 		FunctionArgumentBinding* argBinding = createFunctionArgumentBinding(node, function);
 		node->argBinding = argBinding;
 
-		unifyArguments(this->context, node, argBinding);
+		// Here we differentiate between generic and concrete functions
+		if (function.isConcrete())
+		{
+			unifyArguments(this->context, node, argBinding);
+		}
+		else
+		{
+			unifyArguments(this->context, node, argBinding);
+		}
 
 		/*
 		auto& inTypes = function.inTypes;
@@ -179,12 +193,6 @@ struct ASTProcessor : AST::Visitor
 		for (auto* e : node->exprs)
 		{
 			e->accept(this);
-
-			Value nodeVal;
-			if (!evaluateExpression(this->context, e, &nodeVal))
-			{
-				assert("Cannot evaluate type expression for tuple" && false);
-			}
 
 			types.push_back(TypeRef(e->getType(context)));
 		}

@@ -1,6 +1,5 @@
 #pragma once
 
-
 class MemoryBuffer : public std::streambuf 
 {
 public:
