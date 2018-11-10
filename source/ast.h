@@ -859,7 +859,7 @@ namespace AST
 
 	struct ASTObject
 	{
-		Node* root = nullptr;
+		Module* module = nullptr;
 	};
 }
 

@@ -1175,7 +1175,7 @@ struct Parser
 	}
 
 	// TODO: Rename parseModule
-	bool parseTopLevel(AST::Module* module)
+	bool parseModule(AST::Module* module)
 	{
 		auto* body = createNode<AST::StatementBody>();
 		module->body = body;
@@ -1199,13 +1199,13 @@ struct Parser
 
 	bool parse(AST::ASTObject* ast)
 	{
-		assert(!ast->root);		
+		assert(!ast->module);		
 		auto* node = createNode<AST::Module>();
 	
-		parseTopLevel(node);
+		parseModule(node);
 		expect(TokenType::EndOfScan);
 
-		ast->root = node;
+		ast->module = node;
 		return getParserErrors().size() == 0 && getScannerErrors().size() == 0;
 	}
 

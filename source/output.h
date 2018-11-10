@@ -52,10 +52,10 @@ void printAST(Context* context, AST::ASTObject* ast, int indent = 0)
 		}
 	};
 
-	rec(ast->root);
+	rec(ast->module);
 }
 
-void printIRExpression(IR::Expression* expression, int indent = 0)
+void printIRExpression(IR::Expression& expression, int indent = 0)
 {
 	/*
 		Expr
@@ -66,14 +66,17 @@ void printIRExpression(IR::Expression* expression, int indent = 0)
 
 	auto typeString = [](const TypeRef& t)
 	{
+		FGTextColor color;
 		if (t->isConcrete())
-			return string(", \033[35;1mType: \033[0m\033[35m") + t.toString() + string("\033[0m");
+			color = FGTextColor::Magenta;
 		else
-			return string(", \033[91;1mType: \033[0m\033[91m") + t.toString() + string("\033[0m");
+			color = FGTextColor::BrightRed;
+			
+		return prettyString(", Type: ", color, true) + prettyString(t.toString(), color);
 	};
 
 	vector<bool> depthStack;
-	std::function<void(IR::Expression*)> printRec = [&](IR::Expression* expr)
+	std::function<void(IR::Expression&)> printRec = [&](IR::Expression& expr)
 	{
 		printIndent(indent);
 		const int depth = depthStack.size();
@@ -89,10 +92,10 @@ void printIRExpression(IR::Expression* expression, int indent = 0)
 			print("|-");
 		}
 
-		print(expr->toString());
-		printLine(typeString(expr->getType()));
+		print(expr.toString());
+		printLine(typeString(expr.getType()));
 
-		const auto& subExprs = expr->getSubExpressions();
+		const auto& subExprs = expr.getSubExpressions();
 		if (!subExprs.empty())
 		{
 			const int exprCount = subExprs.size();
@@ -100,10 +103,10 @@ void printIRExpression(IR::Expression* expression, int indent = 0)
 			depthStack.push_back(true);
 			for (int i = 0; i < exprCount - 1; ++i)
 			{
-				printRec(subExprs[i]);
+				printRec(*subExprs[i]);
 			}
 			depthStack.back() = false;
-			printRec(subExprs.back());
+			printRec(*subExprs.back());
 			depthStack.pop_back();		
 		}
 	};
@@ -111,17 +114,26 @@ void printIRExpression(IR::Expression* expression, int indent = 0)
 	printRec(expression);
 }
 
+void printIRScope(IR::Scope* scope, int indent = 0);
+
 void printIRStatement(IR::Statement* statement, int indent = 0)
 {
 	switch (statement->statementType)
 	{
+	case IR::Statement::Scope:
+	{
+		auto* scope = static_cast<IR::Scope*>(statement);
+		printIRScope(scope, indent);
+		break;
+	}
+
 	case IR::Statement::Assignment:
 	{
 		auto* assignment = static_cast<IR::Assignment*>(statement);
 		printLine("Assign", indent);
 		printLine("<var>", indent + 1);
 		printLine("  to:");
-		printIRExpression(assignment->expression.get(), indent + 1);
+		printIRExpression(*assignment->expression, indent + 1);
 		break;
 	}
 
@@ -129,6 +141,11 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 	{
 		auto* call = static_cast<IR::Call*>(statement);
 		printLine("Call", indent);
+		printLine("  callable:", indent);
+		printIRExpression(*call->callable, indent + 1);
+		printLine("  args:", indent);
+		for (auto& arg : call->args)
+			printIRExpression(*arg, indent + 1);
 		break;
 	}
 
@@ -141,46 +158,47 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 	}
 }
 
+void printIRVariable(IR::Variable* variable, int indent = 0)
+{
+	print("var ", indent); printLine(prettyString(variable->name, FGTextColor::Blue, true));
+}
+
 void printIRBlock(IR::Block* block, int indent = 0)
 {
 	for (auto& s : block->statements)
-	{
-		printLine("  block:", indent);
-		printIRStatement(&*s, indent + 1);
-	}	
+		printIRStatement(&*s, indent);
 }
 
-void printIRVariable(IR::Variable* variable, int indent = 0)
+void printIRScope(IR::Scope* scope, int indent)
 {
-	printLine("Variable", indent);
+	printLine("{", indent);
+
+	for (auto& v : scope->variables)
+		printIRVariable(&v, indent + 1);
+
+	for (auto& b : scope->blocks)
+	{
+		printLine(prettyString(string("// Block ") + std::to_string((*b).id), FGTextColor::Green), indent + 1);
+		printIRBlock(&*b, indent + 1);
+	}	
+
+	printLine("}", indent);
 }
 
 void printIRFunction(IR::Function* function, int indent = 0)
 {
-	printLine(function->name, indent);
-	printLine("  variables:", indent);
-	for (auto& v : function->variables)
-		printIRVariable(&v, indent + 1);
+	print("func ", indent); printLine(prettyString(function->name, FGTextColor::Blue, true));
 
-	for (auto& b : function->blocks)
-	{
-		if (function->entryBlock == &b)
-			printLine("  entry:", indent);
-		else
-			printLine("  block:", indent);
-		printIRBlock(&b, indent + 1);
-	}	
+	printIRScope(&function->scope, indent);
 }
 
 void printIRModule(IR::Module* module, int indent = 0)
 {
 	printLine("Module:", indent);
-	printLine("  Functions:", indent);
 	for (auto& f : module->functions)
 	{
-		printIRFunction(&f, indent + 1);
+		printIRFunction(&*f, indent + 1);
 	}
-	printIRFunction(&module->mainFunction, indent + 1);
 }
 
 void printTokens(const vector<Token>& tokens)

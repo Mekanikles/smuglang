@@ -532,5 +532,5 @@ void processAST(Context* context, AST::Node* root)
 
 void processAST(Context* context, AST::ASTObject* ast)
 {
-	processAST(context, ast->root);
+	processAST(context, ast->module);
 }

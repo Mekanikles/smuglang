@@ -77,7 +77,7 @@ int main(int argc, char** argv)
 		printAST(&astContext, &ast, 1);
 
 		printLine("Concretizing AST:");
-		IR::Module irModule = concretizeAST(&backend, &astContext, &ast);
+		IR::Module irModule = concretizeASTModule(&backend, &astContext, ast.module);
 		printIRModule(&irModule);
 	
 		// Extract filename without path

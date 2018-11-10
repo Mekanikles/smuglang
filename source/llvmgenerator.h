@@ -591,7 +591,7 @@ struct LLVMIRGenerator : AST::Visitor
 		auto basicBlock = llvm::BasicBlock::Create(m_context, "entry", mainFunc);
 		m_builder.SetInsertPoint(basicBlock);
 
-		ast->root->accept(this);
+		ast->module->accept(this);
 
 		// TODO: Hm, I don't think the valuestack can be used like
 		//	this, a statement is allowed to "dangle" values
