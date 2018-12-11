@@ -437,8 +437,20 @@ struct TypeRef
 	}
 };
 
-
 TypeRef s_voidType(Type::Kind::Void);
+
+////////////////////////////////////////////////////////////////////////////////
+
+string typeString(const TypeRef& t)
+{
+	FGTextColor color;
+	if (t->isConcrete())
+		color = FGTextColor::Magenta;
+	else
+		color = FGTextColor::BrightRed;
+		
+	return prettyString(", Type: ", color, true) + prettyString(t.toString(), color);
+};
 
 ////////////////////////////////////////////////////////////////////////////////
 
@@ -1253,6 +1265,7 @@ bool isStringType(const Type& type)
 
 	return isCharPointer(type);
 }
+
 
 
 

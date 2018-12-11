@@ -86,7 +86,7 @@ struct SymbolSource
 	virtual bool providesSymbolName(const string& s) = 0;
 	virtual void hookDependency(SymbolDependency* dependency) = 0;
 	virtual bool isSingleSymbolSource() = 0;
-	virtual Symbol* getSymbol() = 0;
+	virtual Symbol* getSymbol() const = 0;
 	virtual AST::Node* getNode() = 0;
 	virtual Context* getContext() = 0;
 	virtual bool isExternal() { return false; }
@@ -102,7 +102,7 @@ struct DeclarationSymbolSource : SymbolSource
 	bool providesSymbolName(const string& s) override { return s == symbol->name; }
 	void hookDependency(SymbolDependency* dependency) override;
 	bool isSingleSymbolSource() override { return true; }
-	Symbol* getSymbol() override { assert(symbol); return symbol; }
+	Symbol* getSymbol() const override { assert(symbol); return symbol; }
 	AST::Node* getNode() override { assert(node); return node; }
 	Context* getContext() override { assert(context); return context; }
 	bool isExternal() override { return storageQualifier == StorageQualifier::Extern; }
@@ -118,7 +118,7 @@ struct CatchAllSymbolSource : SymbolSource
 	bool providesSymbolName(const string& s) override { return true; }
 	void hookDependency(SymbolDependency* dependency) override;
 	bool isSingleSymbolSource() override { return false; }
-	Symbol* getSymbol() override { assert(false && "Cannot resolve a single symbol from catch-all source"); return nullptr; }
+	Symbol* getSymbol() const override { assert(false && "Cannot resolve a single symbol from catch-all source"); return nullptr; }
 	AST::Node* getNode() override { assert(node); return node; }
 	Context* getContext() override { assert(context); return context; }
 };
@@ -134,7 +134,7 @@ struct SymbolDependency
 		return source;
 	}
 
-	Symbol* getSymbol()
+	Symbol* getSymbol() const
 	{
 		assert(source);
 		return source->getSymbol();
@@ -212,6 +212,11 @@ struct SymbolScope
 	}
 
 	vector<DeclarationSymbolSource*>& getDeclarations() 
+	{
+		return declarationSymbolSources;
+	}
+
+	const vector<DeclarationSymbolSource*>& getDeclarations() const
 	{
 		return declarationSymbolSources;
 	}

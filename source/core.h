@@ -1,5 +1,13 @@
 #pragma once
 
+#include <iostream>
+#include <sstream>
+#include <regex>
+#include <limits>
+
+#include <fstream>
+#include <cctype>
+
 #include <cassert>
 #include <cstdlib>
 #include <vector>

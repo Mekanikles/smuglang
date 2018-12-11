@@ -1,12 +1,3 @@
-
-#include <iostream>
-#include <sstream>
-#include <regex>
-#include <limits>
-
-#include <fstream>
-#include <cctype>
-
 #include "core.h"
 #include "utils.h"
 #include "input.h"
@@ -22,7 +13,7 @@ const bool DEFAULT_INT_ISSIGNED = true;
 #include "ast.h"
 #include "functions.h"
 #include "parser.h"
-#include "backend.h"
+#include "backend/backend.h"
 #include "ir.h"
 #include "output.h"
 #include "concretization.h"
@@ -66,7 +57,7 @@ int main(int argc, char** argv)
 		LOG("Parse success!");
 		Context astContext;
 
-		Backend backend;
+		Backend::Context backend;
 
 		assert(initExpressionEvaluator());
 
@@ -76,10 +67,26 @@ int main(int argc, char** argv)
 		printLine("Resulting AST:");
 		printAST(&astContext, &ast, 1);
 
-		printLine("Concretizing AST:");
+		printLine("Generating concrete MIR from AST...");
 		IR::Module irModule = concretizeASTModule(&backend, &astContext, ast.module);
+		printLine("Generated MIR:");
 		printIRModule(&irModule);
 	
+		printLine("Generating IR from MIR...");
+		{
+			Backend::Generator generator(backend);
+			generator.generateModule(irModule);
+			std::stringstream backendOutput;
+			backend.printIR(backendOutput);
+
+			printLine("Generated IR:");
+			string l;
+			while (getline(backendOutput, l))
+			{
+				printLine(l, 1);
+			}
+		}
+
 		// Extract filename without path
 		std::regex filenameRegex(R"((.*[\\\/])?(.+)$))");
 		std::smatch matches;
@@ -87,6 +94,7 @@ int main(int argc, char** argv)
 
 		string outFileName = string(".smug/") + matches[2].str();
 
+		printLine("Generating LLVM IR from AST...");
 		std::stringstream llvmOutput;
 		LLVMIRGenerator* llvmgenerator = createGenerator(&astContext, &llvmOutput);
 		llvmgenerator->run(&ast);

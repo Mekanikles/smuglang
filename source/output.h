@@ -64,17 +64,6 @@ void printIRExpression(IR::Expression& expression, int indent = 0)
 		|-SubExpr2
 	*/
 
-	auto typeString = [](const TypeRef& t)
-	{
-		FGTextColor color;
-		if (t->isConcrete())
-			color = FGTextColor::Magenta;
-		else
-			color = FGTextColor::BrightRed;
-			
-		return prettyString(", Type: ", color, true) + prettyString(t.toString(), color);
-	};
-
 	vector<bool> depthStack;
 	std::function<void(IR::Expression&)> printRec = [&](IR::Expression& expr)
 	{
@@ -140,7 +129,7 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 	case IR::Statement::Call:
 	{
 		auto* call = static_cast<IR::Call*>(statement);
-		printLine("Call", indent);
+		printLine("call", indent);
 		printLine("  callable:", indent);
 		printIRExpression(*call->callable, indent + 1);
 		printLine("  args:", indent);
@@ -151,16 +140,11 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 
 	case IR::Statement::Conditional:
 	{
-		auto* conditional = static_cast<IR::Conditional*>(statement);
+		//auto* conditional = static_cast<IR::Conditional*>(statement);
 		printLine("Conditional", indent);		
 		break;
 	}
 	}
-}
-
-void printIRVariable(IR::Variable* variable, int indent = 0)
-{
-	print("var ", indent); printLine(prettyString(variable->name, FGTextColor::Blue, true));
 }
 
 void printIRBlock(IR::Block* block, int indent = 0)
@@ -169,12 +153,41 @@ void printIRBlock(IR::Block* block, int indent = 0)
 		printIRStatement(&*s, indent);
 }
 
+void printIRFunction(IR::Function* function, int indent = 0);
+
 void printIRScope(IR::Scope* scope, int indent)
 {
 	printLine("{", indent);
 
-	for (auto& v : scope->variables)
-		printIRVariable(&v, indent + 1);
+	printLine(prettyString(string("// Referenceables"), FGTextColor::Green), indent + 1);
+	for (auto& ref : scope->referenceables)
+	{	
+		auto& val = ref->value;
+		assert(val);
+		switch (val->valueType)
+		{
+			case IR::Value::Variable:
+			{
+				print("var ", indent + 1); 
+				print(prettyString(ref->name, FGTextColor::Blue, true));
+				printLine(typeString(ref->getType()));
+				break;
+			}
+			case IR::Value::Function:
+			{
+				auto* func = static_cast<IR::Function*>(ref->value.get());
+				printIRFunction(func, indent + 1);
+				break;
+			}
+			// TODO: Why can this be here? Rename referenceables to declarations?
+			//	reffables can be unnamed expressions/lambdas etc.
+			case IR::Value::Expression:
+			{
+				assert(false && "Hm, why can we have expressions in scope referenceables?");
+				break;
+			}
+		}
+	}
 
 	for (auto& b : scope->blocks)
 	{
@@ -185,20 +198,25 @@ void printIRScope(IR::Scope* scope, int indent)
 	printLine("}", indent);
 }
 
-void printIRFunction(IR::Function* function, int indent = 0)
+void printIRFunction(IR::Function* function, int indent)
 {
-	print("func ", indent); printLine(prettyString(function->name, FGTextColor::Blue, true));
+	const bool isExternal = function->external;
+	if (isExternal)
+		print("external func ", indent); 
+	else
+		print("func ", indent); 
+	print(prettyString(function->name, FGTextColor::Blue, true));
+	printLine(typeString(function->getType()));
 
-	printIRScope(&function->scope, indent);
+	if (!isExternal)
+		printIRScope(&function->scope, indent);
 }
 
 void printIRModule(IR::Module* module, int indent = 0)
 {
-	printLine("Module:", indent);
-	for (auto& f : module->functions)
-	{
-		printIRFunction(&*f, indent + 1);
-	}
+	printLine("module:", indent);
+	printIRFunction(&*module->mainFunction, indent + 1);
+	printLine("");
 }
 
 void printTokens(const vector<Token>& tokens)

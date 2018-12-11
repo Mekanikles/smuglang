@@ -2,58 +2,97 @@
 
 #include "core.h"
 #include "types.h"
-#include "backend.h"
+#include "backend/value.h"
 
 // TODO: Rename to "MIR"? Mid-level intermediate representation
 namespace IR
 {
-	struct Variable
+	struct Value
 	{
-		const TypeRef type;
-		string name;
+		enum ValueType
+		{
+			Variable,
+			Expression,
+			Function, // TODO: Technically an expression literal?
+		};
 
-		// TODO: :(
-		DeclarationSymbolSource* symbolSource;
+		ValueType valueType;
+		Backend::Value* backendValue = nullptr;
 
-		Variable(const TypeRef& type, string name, DeclarationSymbolSource* symbolSource) 
-			: type(type)
-			, name(name)
-			, symbolSource(symbolSource)
+		Value(ValueType valueType)
+			: valueType(valueType)
 		{}
+		virtual const TypeRef& getType() const = 0;
 	};
 
-	struct Expression
+	struct Referenceable
+	{
+		string name;
+
+		// TODO: Need this for mapping to sources, for now
+		const SymbolSource* symbolSource;
+
+		Referenceable(string name, const SymbolSource* symbolSource, unique<Value> value)
+			: name(name)
+			, symbolSource(symbolSource)
+			, value(std::move(value))
+		{}
+		
+		unique<Value> value;
+
+		const string getName() const { return name; }
+		const TypeRef& getType()  const { return value->getType(); }
+	};
+
+	struct Variable : Value
+	{
+		const TypeRef type;	
+
+		Variable(const TypeRef& type) 
+			: Value(Value::Variable)
+			, type(type)
+		{}
+
+		Variable(Variable&& var)
+			: Value(std::move(var))
+			, type(std::move(var.type))
+		{
+		}
+
+		virtual const TypeRef& getType() const override { return type; }
+	};
+
+	struct Expression : Value
 	{
 		enum ExpressionType
 		{
-			VariableRef,
+			Reference,
 			Call,
-			Value,
+			Literal,
 		};
 
 		ExpressionType exprType;
 
 		Expression(ExpressionType exprType) 
-			: exprType(exprType) 
+			: Value(Value::Expression)
+			, exprType(exprType) 
 		{}
 	
 		virtual ~Expression() = default;
-
 		virtual string toString() = 0;
-		virtual const TypeRef& getType() = 0;
 		virtual const vector<Expression*> getSubExpressions() { return {}; }
 	};
 
-	struct Value : Expression
+	struct Literal : Expression
 	{
 		const TypeRef type;
-		BackendValue* value;
 
-		Value(const TypeRef type, BackendValue* value)
-			: Expression(Expression::Value)
+		Literal(const TypeRef type, Backend::Value* backendValue)
+			: Expression(Expression::Literal)
 			, type(type)
-			, value(value)
-		{}
+		{
+			this->backendValue = backendValue;
+		}
 
 		virtual string toString() override
 		{
@@ -61,30 +100,24 @@ namespace IR
 			return s;
 		}
 
-		virtual const TypeRef& getType() override
-		{
-			return type;
-		}
+		virtual const TypeRef& getType() const override { return this->type; }		
 	};
 
-	struct VariableRef : Expression
+	struct Reference : Expression
 	{
-		const Variable* variable;
+		const Referenceable* referenceable;
 
-		VariableRef(const Variable* variable) 
-			: Expression(Expression::VariableRef) 
-			, variable(variable)
+		Reference(const Referenceable* referenceable) 
+			: Expression(Expression::Reference) 
+			, referenceable(referenceable)
 		{}
 
 		virtual string toString() override
 		{
-			return prettyString(variable->name, FGTextColor::Blue, true);
+			return prettyString(referenceable->getName(), FGTextColor::Blue, true);
 		}
 
-		virtual const TypeRef& getType() override
-		{
-			return variable->type;
-		}
+		virtual const TypeRef& getType() const override { return referenceable->getType(); }			
 	};
 
 	struct Call;
@@ -149,10 +182,7 @@ namespace IR
 			return s;
 		}		
 
-		virtual const TypeRef& getType() override
-		{
-			return type;
-		}
+		virtual const TypeRef& getType() const override { return this->type; }
 
 		void setCallable(std::unique_ptr<Expression> expr)
 		{
@@ -167,7 +197,7 @@ namespace IR
 
 	struct Assignment : Statement
 	{
-		unique<VariableRef> var;
+		unique<Reference> ref;
 		unique<Expression> expression;
 
 		Assignment() 
@@ -189,7 +219,7 @@ namespace IR
 	struct Scope : Statement
 	{
 		uint id;	
-		vector<Variable> variables;
+		vector<unique<Referenceable>> referenceables;
 		vector<unique<Block>> blocks;
 
 		Scope()
@@ -205,48 +235,89 @@ namespace IR
 			return this->blocks.back().get();
 		}
 
-		Variable* addVariable(const TypeRef& type, string name, DeclarationSymbolSource* symbolSource)
+		Referenceable* addReferenceable(string name, const SymbolSource* symbolSource, unique<Value> value)
 		{
-			this->variables.push_back(IR::Variable(type, name, symbolSource));
-			Variable& var = this->variables.back();
-			return &var;
+			this->referenceables.push_back(std::make_unique<Referenceable>(name, symbolSource, std::move(value)));
+			return this->referenceables.back().get();
 		}
 	};
 
-	struct Function
+	// TODO: Param can only be of Variable type
+	//	Should maybe inherit from Variable instead, but that means that
+	//	referenceable probably cannot uniquely own their value, replace with pointer
+	struct Param : Referenceable
+	{
+		int index = -1;
+		using Referenceable::Referenceable;
+	};
+
+	struct Signature
+	{
+		vector<Param> inParams;
+		vector<Param> outParams;
+
+		Param* addInParam(const TypeRef& type, string name, SymbolSource* symbolSource)
+		{
+			auto var = std::make_unique<Variable>(type);
+			this->inParams.push_back(Param(name, symbolSource, std::move(var)));
+			Param& param = this->inParams.back();
+			param.index = this->inParams.size() - 1;
+			return &param;
+		}
+
+		Param* addOutParam(const TypeRef& type, string name, SymbolSource* symbolSource)
+		{
+			auto var = std::make_unique<Variable>(type);
+			this->outParams.push_back(Param(name, symbolSource, std::move(var)));
+			Param& param = this->outParams.back();
+			param.index = this->outParams.size() - 1;
+			return &param;
+		}	
+	};
+
+	struct Function : Value
 	{
 		uint id;
 		const TypeRef type;	
 		string name;
+		bool external;
+		Signature signature;
 		Scope scope;
+		bool isVariadic = false;
 
-		Function(const TypeRef& type, string name) 
-			: type(type)
+		Function(const TypeRef& type, string name, bool external = false) 
+			: Value(Value::Function)
+			, type(type)
 			, name(name)
+			, external(external)
 		{
 			static uint functionId = 0;
 			this->id = ++functionId;
 		}
+
+		virtual const TypeRef& getType() const override
+		{
+			return type;
+		}		
 	};
 
 	struct Module
 	{
-		vector<unique<Function>> functions;
-		Function* mainFunction = nullptr;
+		unique<Function> mainFunction; 
 
-		// TODO: Build the correct scopes directly from AST to avoid searching for vars
-		std::unordered_map<SymbolSource*, Variable*> variableMap;
+		// TODO: Build the correct scopes directly from AST to avoid searching for symbols
+		std::unordered_map<const SymbolSource*, Referenceable*> refMap;
 
-		void cacheVariable(Variable* var)
+		void cacheReferenceable(Referenceable* ref)
 		{
-			this->variableMap[var->symbolSource] = var;
+			this->refMap[ref->symbolSource] = ref;
 		}
 
-		Variable* getVariable(SymbolSource* symbolSource)
+		Referenceable* getReferenceable(SymbolSource* symbolSource)
 		{
-			auto* var = this->variableMap[symbolSource];
-			assert(var);
-			return var;
+			auto* ref = this->refMap[symbolSource];
+			assert(ref);
+			return ref;
 		}
 	};
 };

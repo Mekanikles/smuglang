@@ -245,7 +245,7 @@ bool initExpressionEvaluator()
 	llvm::EngineBuilder engineBuilder(std::move(s_llvmModule));
 	engineBuilder.setEngineKind(llvm::EngineKind::Interpreter);
 
-	printLine("Creating evalutor engine");
+	printLine("Creating evaluation engine");
 	string errorStr;
 	engineBuilder.setErrorStr(&errorStr);
 	s_engine = engineBuilder.create();

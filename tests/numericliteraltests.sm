@@ -8,13 +8,16 @@ func print(fmt : cchar*, args...) -> ()
 	printf(fmt, args);
 };
 */
-/*
+
+sayHello("World");
+
 func sayHello(arg : cchar*)
 {
-	extern printf : func(fmt : cchar*, args : cchar*) -> errCode : cint;
 	printf("Hello %s\n", arg);
+	extern printf : func(fmt : cchar*, args : cchar*) -> errCode : cint;	
 };
 
+/*
 func innerValue() -> cchar*
 {
 	return "sayHello(\"Kreti\"); sayHello(\"Pleti\")";
@@ -28,6 +31,7 @@ func chainedReturnValue() -> cchar*
 eval(chainedReturnValue());
 */
 
+/*
 func test(fmt : cchar*, args...)
 {
 	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
@@ -35,6 +39,7 @@ func test(fmt : cchar*, args...)
 };
 
 test("Hello %s", ("World"));
+*/
 
 /*
 func test(e : #primitives.int)
