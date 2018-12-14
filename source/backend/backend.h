@@ -48,12 +48,42 @@ void ensureBackendIsInitialized()
 
 struct Context
 {
-	Value* createIntegerValueFromText(string text, int size, bool isSigned)
+	Value* createIntegerConstant(uint64_t value, int size, bool isSigned)
+	{
+		auto iType = llvm::IntegerType::get(m_llvmContext, size);
+		return llvm::ConstantInt::get(iType, value, isSigned);
+	}
+
+	Value* createIntegerConstantFromText(string text, int size, bool isSigned)
 	{
 		auto iType = llvm::IntegerType::get(m_llvmContext, size);
 		// TODO: Make sure we don't allow stupid octal syntax
 		auto val = llvm::ConstantInt::get(iType, llvm::StringRef(text), 10);
 		return val;
+	}
+
+	Value* createStringConstantFromText(string text, bool nullTerminated = true)
+	{
+		// TODO: Should we always terminate string constants?
+		/*
+		auto zero = llvm::ConstantInt::get(llvm::Type::getInt8Ty(m_context), 0);
+		llvm::Value* indexList[2] = {zero, zero};
+
+		m_valueStack.push_back(m_builder.CreateGEP(
+				llvm::ConstantDataArray::getString(m_context, s, true),
+				indexList));*/
+
+		//auto val = m_llvmBuilder.CreateGlobalStringPtr(text.c_str());
+
+		auto constant = llvm::ConstantDataArray::getString(m_llvmContext, text.c_str(), nullTerminated);
+		auto globData = new llvm::GlobalVariable(*m_llvmModule,
+				constant->getType(),
+				true,
+				llvm::GlobalValue::PrivateLinkage,
+				constant);
+		globData->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+
+		return globData;
 	}
 
 	llvm::Type* resolveType(const Type& type)
@@ -79,31 +109,101 @@ struct Context
 		return nullptr;
 	}
 
+	void createReturn(IR::Return& ret)
+	{
+		auto* val = createValueFromExpression(*ret.expr);
+		m_llvmBuilder.CreateRet(val);
+	}
+
+	llvm::Value* createValueFromCall(IR::Call& call)
+	{
+		auto* val = createValueFromExpression(*call.callable);
+
+		// TODO: This is not very pretty, can we strongly type callable to function?
+		val = val->stripPointerCasts();
+		auto func = llvm::dyn_cast<llvm::Function>(val);
+		assert(func);
+
+		std::vector<llvm::Value*> args;
+		for (auto& arg : call.args)
+		{
+			auto* val = createValueFromExpression(*arg);
+			args.push_back(val);
+		}
+
+		return m_llvmBuilder.CreateCall(func, args);
+	}
+
+	llvm::Value* createValuePtr(llvm::Value* val)
+	{
+    	llvm::Value *zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_llvmContext), 0);
+    	llvm::Value *Args[] = { zero, zero };
+    	return m_llvmBuilder.CreateInBoundsGEP(nullptr, val, Args);
+	}
+
+	llvm::Value* createValueFromExpression(IR::Expression& expr)
+	{
+		switch (expr.exprType)
+		{
+			case IR::Expression::Reference:
+			{
+				auto* ref = static_cast<IR::Reference*>(&expr);
+
+				assert(ref->referenceable);
+				auto& val = *ref->referenceable->value;
+
+				// We should have generated values for all referenceables already
+				assert(val.backendValue);
+
+				// Hm, constants does not have storage, so use the value directly
+				if (llvm::isa<llvm::Constant>(val.backendValue))	
+					return val.backendValue;
+				else
+					return m_llvmBuilder.CreateLoad(val.backendValue);
+				break;
+			}
+			case IR::Expression::Literal:
+			{
+				auto* literal = static_cast<IR::Literal*>(&expr);
+				// All literals are generated at concretization
+				assert(expr.backendValue);
+				if (literal->isPointerType)
+					return createValuePtr(expr.backendValue);
+				return expr.backendValue;
+				break;
+			}
+			case IR::Expression::Call:
+			{
+				auto* call = static_cast<IR::Call*>(&expr);
+				return createValueFromCall(*call);
+				break;
+			}			
+		}
+
+		assert(false);
+		return nullptr;
+	}
+
 	llvm::Function* createFunction(IR::Function& irfunction)
 	{
-		assert(irfunction.getType()->isConcrete() && "Inconcrete types are not allowed in ir generation");
+		const TypeRef& funcType = irfunction.getType();
+		assert(funcType->isConcrete() && "Inconcrete types are not allowed in ir generation");
 
 		vector<string> paramNames;
 		std::vector<llvm::Type*> args;
 
-		for (IR::Param& param : irfunction.signature.inParams)
+		for (const FunctionClass::Param& p : funcType->getFunction().inParams)
 		{
-			const TypeRef& type = param.getType();
-
-			int paramIndex = args.size();
-			args.push_back(resolveType(type.getType()));
-			paramNames.push_back(param.getName());
-
-			// Hm, why is this assigned here AND when creating the param?
-			param.index = paramIndex;
+			args.push_back(resolveType(p.type.getType()));
+			paramNames.push_back(p.identifier);
 		}
 
 		// TODO: multiple return values
 		llvm::Type* returnType = m_llvmBuilder.getVoidTy();
-		if (!irfunction.signature.outParams.empty())
+		if (!funcType->getFunction().outParams.empty())
 		{
-			assert(irfunction.signature.outParams.size() == 1);
-			returnType = resolveType(irfunction.signature.outParams[0].getType());
+			assert(funcType->getFunction().outParams.size() == 1);
+			returnType = resolveType(funcType->getFunction().outParams[0].type.getType());
 		}
 
 		auto functionType = llvm::FunctionType::get(
@@ -129,7 +229,7 @@ struct Context
 
 	Context()
 		: m_llvmBuilder(m_llvmContext)
-		, m_llvmModule(llvm::make_unique<llvm::Module>("TheModule", m_llvmContext))
+		, m_llvmModule(llvm::make_unique<llvm::Module>("SmugModule", m_llvmContext))
 	{
 		ensureBackendIsInitialized();
 
@@ -188,14 +288,21 @@ struct Generator
 
 		case IR::Statement::Call:
 		{
-			//auto* call = static_cast<IR::Call*>(&irstatement);
-			//for (auto& arg : call->args)	
+			auto* call = static_cast<IR::Call*>(&irstatement);
+			m_context.createValueFromCall(*call);
 			break;
 		}
 
 		case IR::Statement::Conditional:
 		{
 			//auto* conditional = static_cast<IR::Conditional*>(&irstatement);	
+			break;
+		}
+
+		case IR::Statement::Return:
+		{
+			auto* ret = static_cast<IR::Return*>(&irstatement);
+			m_context.createReturn(*ret);
 			break;
 		}
 		}
@@ -255,11 +362,17 @@ struct Generator
 			}
 		}
 
+		// TODO: Generate all functions up front, so we don't have to track basic blocks?
+		auto* oldBlock = m_context.m_llvmBuilder.GetInsertBlock();
+
 		// Generate all function bodies
 		for (auto* func : funcs)
 		{	
 			generateFunctionBody(*func);
 		}
+
+		// Restore block
+		m_context.m_llvmBuilder.SetInsertPoint(oldBlock);
 
 		// Generate all blocks
 		for (auto& block : irscope.blocks)
@@ -302,13 +415,19 @@ struct Generator
 				}
 			}
 
+			// This parameter did not have a matching signature param in the ast, ignore it
+			//	(This is currently used for main args for example)
+			if (!paramPtr)
+				continue;
+
 			// TODO: Point const params to argument directly
 			auto a = m_context.m_llvmBuilder.CreateAlloca(arg.getType(), nullptr, arg.getName());
 
 			// TODO: This is not pretty, params should only be variables 
 			//	(constants should not be allowed for a concretized function, right?)
 			assert(paramPtr->value->valueType == IR::Value::Variable);
-			paramPtr->value->backendValue = m_context.m_llvmBuilder.CreateStore(&arg, a);
+			m_context.m_llvmBuilder.CreateStore(&arg, a);
+			paramPtr->value->backendValue = a;
 
 			argIndex++;
 		}
@@ -320,13 +439,35 @@ struct Generator
 		if (functionClass.outParams.empty())
 			m_context.m_llvmBuilder.CreateRetVoid();
 
-		verifyFunction(*func);
+		std::stringstream error;
+		llvm::raw_os_ostream ostr(error);
+		if (llvm::verifyFunction(*func, &ostr))
+		{
+			printLine("Error generating function: ");
+			string l;
+			while (getline(error, l))
+			{
+				printLine(l, 1);
+			}
+		}
 	}
 
 	void generateModule(IR::Module& irmodule)
 	{
 		generateFunctionHead(*irmodule.mainFunction);
 		generateFunctionBody(*irmodule.mainFunction);
+
+		std::stringstream error;
+		llvm::raw_os_ostream ostr(error);
+		if (llvm::verifyModule(*m_context.m_llvmModule, &ostr))
+		{
+			printLine("Error generating module: ");
+			string l;
+			while (getline(error, l))
+			{
+				printLine(l, 1);
+			}
+		}	
 	}
 
 	Generator(Context& context)

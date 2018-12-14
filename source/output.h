@@ -132,9 +132,12 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 		printLine("call", indent);
 		printLine("  callable:", indent);
 		printIRExpression(*call->callable, indent + 1);
-		printLine("  args:", indent);
-		for (auto& arg : call->args)
-			printIRExpression(*arg, indent + 1);
+		if (!call->args.empty())
+		{
+			printLine("  args:", indent);
+			for (auto& arg : call->args)
+				printIRExpression(*arg, indent + 1);
+		}
 		break;
 	}
 
@@ -142,6 +145,15 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 	{
 		//auto* conditional = static_cast<IR::Conditional*>(statement);
 		printLine("Conditional", indent);		
+		break;
+	}
+	
+	case IR::Statement::Return:
+	{
+		auto* ret = static_cast<IR::Return*>(statement);
+		printLine("return", indent);
+		printLine("  expression:", indent);
+		printIRExpression(*ret->expr, indent + 1);
 		break;
 	}
 	}

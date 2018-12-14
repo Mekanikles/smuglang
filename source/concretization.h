@@ -48,10 +48,25 @@ struct ExpressionConcretizer : AST::Visitor
 		assert(primitive.primitiveType == PrimitiveClass::Int);
 
 		// Might as well create the value here directly
-		auto* value = this->context->backend->createIntegerValueFromText(node->value, primitive.size, primitive.signedType == PrimitiveClass::Signed);
+		auto* value = this->context->backend->createIntegerConstantFromText(node->value, primitive.size, primitive.signedType == PrimitiveClass::Signed);
 		expressionStack.push_back(createExpression<IR::Literal>(type, value));
 	}
-		
+
+	virtual void visit(AST::StringLiteral* node) 
+	{
+		TypeRef& type = node->getType(this->astContext);
+		// TODO: Does support for default types go here?
+		assert(type->isConcrete());
+		assert(isStringType(type));
+
+		// Might as well create the value here directly
+		const string str = processQuotedInputString(node->value);
+		const bool isCString = type->isPointer();
+
+		auto* value = this->context->backend->createStringConstantFromText(str);
+		expressionStack.push_back(createExpression<IR::Literal>(type, value, isCString));
+	}
+
 	ExpressionConcretizer(ConcretizerContext* context, Context* astContext, IR::Function* function, IR::Block* block)
 		: context(context)
 		, function(function)
@@ -170,7 +185,8 @@ struct FunctionConcretizer : AST::Visitor
 			Symbol* symbol = symbolSource->getSymbol();
 			assert(symbol);
 
-			func.signature.addInParam(symbol->type, symbol->name, symbolSource);
+			auto param = func.signature.addInParam(symbol->type, symbol->name, symbolSource);
+			this->context->module->cacheReferenceable(param);
 		}
 
 		for (AST::FunctionOutParam* outParam : signature->outParams)
@@ -180,14 +196,9 @@ struct FunctionConcretizer : AST::Visitor
 			Symbol* symbol = symbolSource->getSymbol();
 			assert(symbol);
 
-			func.signature.addInParam(symbol->type, symbol->name, symbolSource);
-		}
-
-		// Record signature for lookup later
-		for (IR::Param& param : func.signature.inParams)
-			this->context->module->cacheReferenceable(&param);
-		for (IR::Param& param : func.signature.outParams)
-			this->context->module->cacheReferenceable(&param);				
+			auto param = func.signature.addInParam(symbol->type, symbol->name, symbolSource);
+			this->context->module->cacheReferenceable(param);
+		}			
 	}
 
 	IR::Function* generateConcreteFunction(IR::Function& func, AST::FunctionLiteral* funcLiteral)
@@ -238,11 +249,17 @@ IR::Module concretizeASTModule(Backend::Context* backend, Context* astContext, A
 	IR::Module module;
 	ConcretizerContext context { backend, &module };
 
-	module.mainFunction = std::make_unique<IR::Function>(createMainType(), "main", false);
+	auto mainType = createMainType();
+	module.mainFunction = std::make_unique<IR::Function>(mainType, "main", false);
 
 	FunctionConcretizer c(&context, astContext, &*module.mainFunction);
 	c.generateConcreteStatementBody(&module.mainFunction->scope, astModule->body);
  
+	// Add return instruction
+	auto* val = backend->createIntegerConstant(0, 32, true);
+	module.mainFunction->scope.blocks.back()->addStatement(
+		std::make_unique<IR::Return>(createExpression<IR::Literal>(mainType->getFunction().outParams.back().type, val)));
+
 	return module;
 }
 

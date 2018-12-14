@@ -87,16 +87,22 @@ namespace IR
 	{
 		const TypeRef type;
 
-		Literal(const TypeRef type, Backend::Value* backendValue)
+		// Hack: c-strings are not literals, since they are a pointer to
+		//	data that cannot be a constant. Use this to indicate that we 
+		//	need to fetch the correct address at compile time
+		bool isPointerType;
+
+		Literal(const TypeRef type, Backend::Value* backendValue, bool isPointerType = false)
 			: Expression(Expression::Literal)
 			, type(type)
+			, isPointerType(isPointerType)
 		{
 			this->backendValue = backendValue;
 		}
 
 		virtual string toString() override
 		{
-			string s = "Value";
+			string s = "Literal";
 			return s;
 		}
 
@@ -132,6 +138,7 @@ namespace IR
 			Assignment,
 			Call,
 			Conditional,
+			Return
 		};
 
 		StatementType statementType;
@@ -213,6 +220,15 @@ namespace IR
 
 		Conditional() 
 			: Statement(Statement::Conditional)
+		{}
+	};
+
+	struct Return : Statement
+	{
+		unique<Expression> expr;
+		Return(unique<Expression> expr)
+			: Statement(Statement::Return)
+			, expr(std::move(expr))
 		{}
 	};
 
