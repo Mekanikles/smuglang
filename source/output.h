@@ -147,7 +147,7 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 		printLine("Conditional", indent);		
 		break;
 	}
-	
+
 	case IR::Statement::Return:
 	{
 		auto* ret = static_cast<IR::Return*>(statement);

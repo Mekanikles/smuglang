@@ -25,10 +25,6 @@ const bool DEFAULT_INT_ISSIGNED = true;
 #include "evaluation.h"
 #include "astprocessor.h"
 
-
-
-///////////////////////////////////////////////////////////////////////////////
-
 ///////////////////////////////////////////////////////////////////////////////
 
 int main(int argc, char** argv)
@@ -72,6 +68,12 @@ int main(int argc, char** argv)
 		printLine("Generated MIR:");
 		printIRModule(&irModule);
 	
+		// Extract filename without path
+		std::regex filenameRegex(R"((.*[\\\/])?(.+)$))");
+		std::smatch matches;
+		assert(std::regex_search(args[0], matches, filenameRegex));
+		string outFileName = string(".smug/") + matches[2].str();
+
 		printLine("Generating IR from MIR...");
 		{
 			Backend::Generator generator(backend);
@@ -79,35 +81,33 @@ int main(int argc, char** argv)
 			std::stringstream backendOutput;
 			backend.printIR(backendOutput);
 
+			string outLLVMFileName = outFileName + ".ll";
+			std::ofstream outFile(outLLVMFileName);		
+
 			printLine("Generated IR:");
 			string l;
 			while (getline(backendOutput, l))
 			{
 				printLine(l, 1);
+				outFile << l << std::endl;
 			}
 		}
 
-		// Extract filename without path
-		std::regex filenameRegex(R"((.*[\\\/])?(.+)$))");
-		std::smatch matches;
-		assert(std::regex_search(args[0], matches, filenameRegex));
-
-		string outFileName = string(".smug/") + matches[2].str();
-
 		printLine("Generating LLVM IR from AST...");
-		std::stringstream llvmOutput;
-		LLVMIRGenerator* llvmgenerator = createGenerator(&astContext, &llvmOutput);
-		llvmgenerator->run(&ast);
 		{
-			string outLLVMFileName = outFileName + ".ll";
-			std::ofstream outFile(outLLVMFileName);
+			std::stringstream llvmOutput;
+			LLVMIRGenerator* llvmgenerator = createGenerator(&astContext, &llvmOutput);
+			llvmgenerator->run(&ast);
+
+			//string outLLVMFileName = outFileName + ".ll";
+			//std::ofstream outFile(outLLVMFileName);
 
 			printLine("Generated LLVM IR:");
 			string l;
 			while (getline(llvmOutput, l))
 			{
 				printLine(l, 1);
-				outFile << l << std::endl;
+				//outFile << l << std::endl;
 			}
 		}
 

@@ -337,6 +337,26 @@ struct Parser
 					sign = PrimitiveClass::Unsigned;
 					size = 8;
 				}
+				else if (lastToken().symbol == "f128")
+				{
+					type = PrimitiveClass::Float;
+					size = 128;
+				}
+				else if (lastToken().symbol == "f64")
+				{
+					type = PrimitiveClass::Float;
+					size = 64;
+				}
+				else if (lastToken().symbol == "f32")
+				{
+					type = PrimitiveClass::Float;
+					size = 32;
+				}
+				else if (lastToken().symbol == "f16")
+				{
+					type = PrimitiveClass::Float;
+					size = 16;
+				}
 				else
 				{
 					errorOnAccept("Unknown primitive type");

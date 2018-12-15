@@ -1,5 +1,6 @@
 def cchar = #primitives.c.char;
 def cint = #primitives.c.int;
+def f64 = #primitives.f64;
 
 /*
 func print(fmt : cchar*, args...) -> () 
@@ -9,12 +10,19 @@ func print(fmt : cchar*, args...) -> ()
 };
 */
 
-sayHello("World");
-
+//sayHello("World");
+printFloat(7.0 * 5.6 + 6.35 / 45.0 - 19.0 * 0.56 + 4.7);
+/*
 func sayHello(arg : cchar*)
 {
 	printf("Hello %s\n", arg);
 	extern printf : func(fmt : cchar*, args : cchar*) -> errCode : cint;	
+};
+*/
+func printFloat(arg : f64)
+{
+	printf("A float %f\n", arg);
+	extern printf : func(fmt : cchar*, args : f64) -> errCode : cint;	
 };
 
 /*

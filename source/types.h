@@ -525,7 +525,7 @@ struct PrimitiveClass : TypeClass
 
 	virtual bool isConcrete() const override
 	{
-		return knownSize && signedType != UnknownSign;
+		return knownSize && (signedType != UnknownSign || primitiveType == Float);
 	}
 
 	virtual int getSize() const override

@@ -337,7 +337,7 @@ namespace AST
 		string toString(Context* context) override 
 		{ 
 			string s = "FloatLiteral(" + value + ")";
-			s += string(", Type: ") + getType(context).toString();
+			s += typeString(getType(context));
 			return s;
 		}
 

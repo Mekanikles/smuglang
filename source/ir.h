@@ -69,6 +69,7 @@ namespace IR
 			Reference,
 			Call,
 			Literal,
+			BinaryOp,
 		};
 
 		ExpressionType exprType;
@@ -81,6 +82,53 @@ namespace IR
 		virtual ~Expression() = default;
 		virtual string toString() = 0;
 		virtual const vector<Expression*> getSubExpressions() { return {}; }
+	};
+
+	struct BinaryOp : Expression
+	{
+		enum OpType
+		{
+			Add,
+			Sub,
+			Mul,
+			Div,
+			Eq,
+		};
+
+		const TypeRef type;
+
+		OpType opType;
+		unique<Expression> leftExpr;
+		unique<Expression> rightExpr;
+
+		BinaryOp(const TypeRef type, OpType opType, unique<Expression> leftExpr, unique<Expression> rightExpr) 
+			: Expression(Expression::BinaryOp)
+			, type(type)
+			, opType(opType)
+			, leftExpr(std::move(leftExpr))
+			, rightExpr(std::move(rightExpr))
+		{
+		}
+
+		virtual string toString() override
+		{
+			switch (opType)
+			{
+				case Add: return "Add";
+				case Sub: return "Sub";
+				case Mul: return "Mul";
+				case Div: return "Div";
+				case Eq: return "Eq";
+			}
+			return "Unknown op";
+		}
+
+		virtual const vector<Expression*> getSubExpressions() override
+		{ 
+			return { &*leftExpr, &*rightExpr }; 
+		}
+
+		virtual const TypeRef& getType() const override { return this->type; }
 	};
 
 	struct Literal : Expression
@@ -106,7 +154,7 @@ namespace IR
 			return s;
 		}
 
-		virtual const TypeRef& getType() const override { return this->type; }		
+		virtual const TypeRef& getType() const override { return this->type; }
 	};
 
 	struct Reference : Expression

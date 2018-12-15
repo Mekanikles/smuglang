@@ -27,7 +27,7 @@ struct ConcretizerContext
 
 struct ExpressionConcretizer : AST::Visitor
 {
-	virtual void visit(AST::SymbolExpression* node) 
+	virtual void visit(AST::SymbolExpression* node) override
 	{
 		SymbolDependency* symDep = this->astContext->getSymbolDependency(node);
 		auto* source = symDep->source;
@@ -38,7 +38,7 @@ struct ExpressionConcretizer : AST::Visitor
 		expressionStack.push_back(createExpression<IR::Reference>(ref));
 	}
 
-	virtual void visit(AST::IntegerLiteral* node) 
+	virtual void visit(AST::IntegerLiteral* node) override
 	{
 		TypeRef& type = node->getType(this->astContext);
 		// TODO: Does support for default types go here?
@@ -52,7 +52,20 @@ struct ExpressionConcretizer : AST::Visitor
 		expressionStack.push_back(createExpression<IR::Literal>(type, value));
 	}
 
-	virtual void visit(AST::StringLiteral* node) 
+	void visit(AST::FloatLiteral* node) override
+	{
+		TypeRef& type = node->getType(this->astContext);
+
+		assert(type.getType().isConcrete());
+		assert(type.getType().isPrimitive());
+		const PrimitiveClass& primitive = type.getType().getPrimitive();
+		assert(primitive.primitiveType == PrimitiveClass::Float);
+
+		auto* value = this->context->backend->createFloatConstantFromText(node->value, primitive.size);
+		expressionStack.push_back(createExpression<IR::Literal>(type, value));
+	}	
+
+	virtual void visit(AST::StringLiteral* node) override
 	{
 		TypeRef& type = node->getType(this->astContext);
 		// TODO: Does support for default types go here?
@@ -65,6 +78,39 @@ struct ExpressionConcretizer : AST::Visitor
 
 		auto* value = this->context->backend->createStringConstantFromText(str);
 		expressionStack.push_back(createExpression<IR::Literal>(type, value, isCString));
+	}
+
+	virtual void visit(AST::BinaryOp* node) override
+	{
+		node->left->accept(this);
+		// TODO: How to handle multiple value expressions?
+		assert(expressionStack.size() == 1);
+		auto leftEpxr = std::move(expressionStack.back());
+		expressionStack.pop_back();
+
+		node->right->accept(this);
+		// TODO: How to handle multiple value expressions?
+		assert(expressionStack.size() == 1);
+		auto rightEpxr = std::move(expressionStack.back());
+		expressionStack.pop_back();
+
+		IR::BinaryOp::OpType opType;
+		switch (node->opType)
+		{
+			case TokenType::Plus: opType = IR::BinaryOp::Add; break;
+			case TokenType::Minus: opType = IR::BinaryOp::Sub; break;
+			case TokenType::Asterisk: opType = IR::BinaryOp::Mul; break;
+			case TokenType::Slash: opType = IR::BinaryOp::Div; break;
+			case TokenType::CompareOp: opType = IR::BinaryOp::Eq; break;
+			default: assert(false && "Invalid op type");
+		}
+
+		expressionStack.push_back(createExpression<IR::BinaryOp>(
+				node->getType(this->astContext),
+				opType,
+				std::move(leftEpxr),
+				std::move(rightEpxr)
+			));
 	}
 
 	ExpressionConcretizer(ConcretizerContext* context, Context* astContext, IR::Function* function, IR::Block* block)
@@ -85,7 +131,7 @@ struct ExpressionConcretizer : AST::Visitor
 // TODO: StatementConcretizer?
 struct FunctionConcretizer : AST::Visitor
 {
-	virtual void visit(AST::FunctionDeclaration* node) 
+	virtual void visit(AST::FunctionDeclaration* node) override
 	{
 		auto* ss = astContext->getSymbolSource(node);
 		assert(ss);
@@ -97,14 +143,24 @@ struct FunctionConcretizer : AST::Visitor
 		generateConcreteFunction(*func, node->funcLiteral);
 	}
 
-	virtual void visit(AST::StatementBody* node) 
+	virtual void visit(AST::StatementBody* node) override
 	{
 		auto* scope = this->currentBlock->addStatement(std::make_unique<IR::Scope>());
 		
 		generateConcreteStatementBody(scope, node);
 	}
 
-	virtual void visit(AST::Call* node) 
+	virtual void visit(AST::ReturnStatement* node) override
+	{
+		auto exprs = generateConcreteExpression(node->expr);
+
+		// TODO: How to handle multiple return values?
+		assert(exprs.size() == 1);
+
+		this->currentBlock->addStatement(std::make_unique<IR::Return>(std::move(exprs.back())));
+	}
+
+	virtual void visit(AST::Call* node) override
 	{
 		IR::Call* call = new IR::Call(node->getType(this->astContext));
 

@@ -31,6 +31,28 @@
 namespace Backend
 {
 
+static const llvm::fltSemantics* getFloatStandard(int size)
+{
+	switch (size)
+	{
+		case 16:
+			return &llvm::APFloatBase::IEEEhalf();
+			break;
+		case 32:
+			return &llvm::APFloatBase::IEEEsingle();
+			break;
+		case 64:
+			return &llvm::APFloatBase::IEEEdouble();
+			break;
+		case 128:
+			return &llvm::APFloatBase::IEEEquad();
+			break;
+		default:
+			assert(false && "Bad float size");							
+	}
+	return nullptr;
+}
+
 bool g_backendInitialized = false;
 void ensureBackendIsInitialized()
 {
@@ -48,6 +70,28 @@ void ensureBackendIsInitialized()
 
 struct Context
 {
+	llvm::Type* getFloatType(int size)
+	{
+		switch (size)
+		{
+			case 16:
+				return llvm::Type::getHalfTy(m_llvmContext);
+				break;
+			case 32:
+				return llvm::Type::getFloatTy(m_llvmContext);
+				break;
+			case 64:
+				return llvm::Type::getDoubleTy(m_llvmContext);
+				break;
+			case 128:
+				return llvm::Type::getFP128Ty(m_llvmContext);
+				break;
+			default:
+				assert(false && "Bad float size");							
+		}
+		return nullptr;
+	}
+
 	Value* createIntegerConstant(uint64_t value, int size, bool isSigned)
 	{
 		auto iType = llvm::IntegerType::get(m_llvmContext, size);
@@ -86,8 +130,15 @@ struct Context
 		return globData;
 	}
 
+	Value* createFloatConstantFromText(string text, int size)
+	{
+		auto val = llvm::ConstantFP::get(m_llvmContext, llvm::APFloat(*getFloatStandard(size), llvm::StringRef(text)));	
+		return val;
+	}
+
 	llvm::Type* resolveType(const Type& type)
 	{
+		assert(type.isConcrete());
 		if (type.isPointer())
 		{
 			const auto& pointer = type.getPointer();
@@ -102,6 +153,11 @@ struct Context
 				auto size = primitive.knowsSize() ? primitive.size : DEFAULT_INT_SIZE;
 				auto iType = llvm::IntegerType::get(m_llvmContext, size);
 				return iType;
+			}
+			else
+			{
+				auto size = primitive.knowsSize() ? primitive.size : DEFAULT_INT_SIZE;
+				return getFloatType(size);
 			}
 		}
 
@@ -141,6 +197,36 @@ struct Context
     	return m_llvmBuilder.CreateInBoundsGEP(nullptr, val, Args);
 	}
 
+	llvm::Value* createBinaryOp(const TypeRef& type, IR::BinaryOp::OpType opType, llvm::Value* leftVal, llvm::Value* rightVal)
+	{
+		assert(type->isPrimitive());
+		const auto& primitive = type->getPrimitive();
+		if (primitive.isInteger() || primitive.isChar())
+		{
+			switch (opType)
+			{
+				case IR::BinaryOp::Eq: return m_llvmBuilder.CreateICmpEQ(leftVal, rightVal, "icmp"); 
+				case IR::BinaryOp::Add: return m_llvmBuilder.CreateAdd(leftVal, rightVal, "iadd"); 
+				case IR::BinaryOp::Sub: return m_llvmBuilder.CreateSub(leftVal, rightVal, "isub"); 
+				case IR::BinaryOp::Mul: return m_llvmBuilder.CreateMul(leftVal, rightVal, "imul"); 
+				case IR::BinaryOp::Div: return m_llvmBuilder.CreateSDiv(leftVal, rightVal, "idiv"); 
+				default: assert(false);
+			}
+		}
+		else
+		{
+			switch (opType)
+			{
+				case IR::BinaryOp::Eq: return m_llvmBuilder.CreateFCmpOEQ(leftVal, rightVal, "icmp"); 
+				case IR::BinaryOp::Add: return m_llvmBuilder.CreateFAdd(leftVal, rightVal, "iadd"); 
+				case IR::BinaryOp::Sub: return m_llvmBuilder.CreateFSub(leftVal, rightVal, "isub"); 
+				case IR::BinaryOp::Mul: return m_llvmBuilder.CreateFMul(leftVal, rightVal, "imul"); 
+				case IR::BinaryOp::Div: return m_llvmBuilder.CreateFDiv(leftVal, rightVal, "idiv"); 
+				default: assert(false);
+			}
+		}
+	}
+
 	llvm::Value* createValueFromExpression(IR::Expression& expr)
 	{
 		switch (expr.exprType)
@@ -177,7 +263,16 @@ struct Context
 				auto* call = static_cast<IR::Call*>(&expr);
 				return createValueFromCall(*call);
 				break;
-			}			
+			}
+			case IR::Expression::BinaryOp:
+			{
+				auto* binaryOp = static_cast<IR::BinaryOp*>(&expr);
+				auto* leftVal = createValueFromExpression(*binaryOp->leftExpr);
+				auto* rightVal = createValueFromExpression(*binaryOp->rightExpr);
+
+				return createBinaryOp(binaryOp->getType(), binaryOp->opType, leftVal, rightVal);
+				break;
+			}
 		}
 
 		assert(false);

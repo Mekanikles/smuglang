@@ -36,6 +36,28 @@ static std::map<string, llvm::Value*> s_namedValues;
 
 struct LLVMIRGenerator : AST::Visitor
 {
+	llvm::Type* getFloatType(int size)
+	{
+		switch (size)
+		{
+			case 16:
+				return llvm::Type::getHalfTy(m_context);
+				break;
+			case 32:
+				return llvm::Type::getFloatTy(m_context);
+				break;
+			case 64:
+				return llvm::Type::getDoubleTy(m_context);
+				break;
+			case 128:
+				return llvm::Type::getFP128Ty(m_context);
+				break;
+			default:
+				assert(false && "Bad float size");							
+		}
+		return nullptr;
+	}
+
 	llvm::Type* resolveType(const Type& type)
 	{
 		if (type.isPointer())
@@ -52,6 +74,11 @@ struct LLVMIRGenerator : AST::Visitor
 				auto size = primitive.knowsSize() ? primitive.size : DEFAULT_INT_SIZE;
 				auto iType = llvm::IntegerType::get(m_context, size);
 				return iType;
+			}
+			else
+			{
+				auto size = primitive.knowsSize() ? primitive.size : DEFAULT_INT_SIZE;
+				return getFloatType(size);
 			}
 		}
 
