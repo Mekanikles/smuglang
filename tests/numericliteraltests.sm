@@ -11,7 +11,9 @@ func print(fmt : cchar*, args...) -> ()
 */
 
 //sayHello("World");
-printFloat(7.0 * 5.6 + 6.35 / 45.0 - 19.0 * 0.56 + 4.7);
+var theFloat = 10.0;
+theFloat = theFloat * 7.0 * 5.6 + 6.35 / 45.0 - 19.0 * 0.56 + 4.7;
+printFloat(theFloat);
 /*
 func sayHello(arg : cchar*)
 {

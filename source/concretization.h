@@ -143,6 +143,42 @@ struct FunctionConcretizer : AST::Visitor
 		generateConcreteFunction(*func, node->funcLiteral);
 	}
 
+	virtual void visit(AST::SymbolDeclaration* node) override
+	{
+		if (node->storageQualifier == StorageQualifier::Def ||
+			node->storageQualifier == StorageQualifier::Extern)
+			return; 
+
+		if (node->initExpr)
+		{
+			auto exprs = generateConcreteExpression(node->initExpr);
+
+			// TODO: How to handle multiple return values?
+			assert(exprs.size() == 1);
+
+			SymbolSource* source = this->astContext->getSymbolSource(node);
+			assert(source);
+
+			IR::Referenceable* ref = this->context->module->getReferenceable(source);
+			assert(ref);		
+
+			// Create new ref expression, since we know that we want to reference the declared symbol here
+			auto refExpr = createExpression<IR::Reference>(ref);
+			this->currentBlock->addStatement(std::make_unique<IR::Assignment>(std::move(refExpr), std::move(exprs.back())));
+		}
+	}
+
+	virtual void visit(AST::Assignment* node) override
+	{
+		auto assExprs = generateConcreteExpression(node->symExpr);
+		assert(assExprs.size() == 1);
+
+		auto valExprs = generateConcreteExpression(node->expr);
+		assert(valExprs.size() == 1);		
+
+		this->currentBlock->addStatement(std::make_unique<IR::Assignment>(std::move(assExprs.back()), std::move(valExprs.back())));		
+	}	
+
 	virtual void visit(AST::StatementBody* node) override
 	{
 		auto* scope = this->currentBlock->addStatement(std::make_unique<IR::Scope>());
@@ -204,7 +240,7 @@ struct FunctionConcretizer : AST::Visitor
 			}
 			else
 			{
-				auto val = std::make_unique<IR::Variable>(type);
+				val = std::make_unique<IR::Variable>(type);
 			}
 
 			auto* ref = scope.addReferenceable(symbol->name, symbolSource, std::move(val));

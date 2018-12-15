@@ -120,8 +120,8 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 	{
 		auto* assignment = static_cast<IR::Assignment*>(statement);
 		printLine("Assign", indent);
-		printLine("<var>", indent + 1);
-		printLine("  to:");
+		printIRExpression(*assignment->assignable, indent + 1);
+		printLine("  to:", indent);
 		printIRExpression(*assignment->expression, indent + 1);
 		break;
 	}

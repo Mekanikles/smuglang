@@ -165,6 +165,14 @@ struct Context
 		return nullptr;
 	}
 
+	void createAssignment(IR::Assignment& assignment)
+	{
+		auto* val = createValueFromExpression(*assignment.expression);
+		auto* store = createPtrFromExpression(*assignment.assignable);
+
+		m_llvmBuilder.CreateStore(val, store);
+	}
+
 	void createReturn(IR::Return& ret)
 	{
 		auto* val = createValueFromExpression(*ret.expr);
@@ -225,6 +233,33 @@ struct Context
 				default: assert(false);
 			}
 		}
+	}
+
+	llvm::Value* createPtrFromExpression(IR::Expression& expr)
+	{
+		switch (expr.exprType)
+		{
+			case IR::Expression::Reference:
+			{
+				auto* ref = static_cast<IR::Reference*>(&expr);
+
+				assert(ref->referenceable);
+				auto& val = *ref->referenceable->value;
+
+				// We should have generated values for all referenceables already
+				assert(val.backendValue);
+				const llvm::Type* valType = val.backendValue->getType();
+				assert(valType->isPointerTy() && "Can only get ptr from ptr type");
+				return val.backendValue;
+			}
+			case IR::Expression::Literal:
+			case IR::Expression::Call:
+			case IR::Expression::BinaryOp:
+				assert(false && "Only variable pointers, for now");
+		}
+
+		assert(false);
+		return nullptr;
 	}
 
 	llvm::Value* createValueFromExpression(IR::Expression& expr)
@@ -377,7 +412,8 @@ struct Generator
 
 		case IR::Statement::Assignment:
 		{
-			//auto* assignment = static_cast<IR::Assignment*>(&irstatement);
+			auto* assignment = static_cast<IR::Assignment*>(&irstatement);
+			m_context.createAssignment(*assignment);
 			break;
 		}
 
@@ -401,14 +437,6 @@ struct Generator
 			break;
 		}
 		}
-
-		/*auto previousBlock = m_context.m_llvmBuilder.GetInsertBlock();
-		auto entryBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "entry", func);
-		m_context.m_llvmBuilder.SetInsertPoint(entryBlock);
-		*/
-
-		//assert(node->body);
-		//node->body->accept(this);
 	}
 
 	void generateBlock(IR::Block& irblock)

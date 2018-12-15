@@ -252,11 +252,13 @@ namespace IR
 
 	struct Assignment : Statement
 	{
-		unique<Reference> ref;
+		unique<Expression> assignable;
 		unique<Expression> expression;
 
-		Assignment() 
+		Assignment(unique<Expression> assignable, unique<Expression> expression) 
 			: Statement(Statement::Assignment)
+			, assignable(std::move(assignable))
+			, expression(std::move(expression))
 		{}	
 	};
 
