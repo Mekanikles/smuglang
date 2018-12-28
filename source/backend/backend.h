@@ -529,8 +529,9 @@ struct Generator
 		{
 			// Ugh, search for param with this index
 			IR::Param* paramPtr = nullptr;
-			for (IR::Param& param : signature.inParams)
+			for (auto& p : signature.inParams)
 			{
+				IR::Param& param = *p;
 				if (param.index == argIndex)
 				{
 					paramPtr = &param;

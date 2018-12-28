@@ -11,7 +11,7 @@ namespace IR
 	{
 		enum ValueType
 		{
-			Variable,
+			Variable,	
 			Expression,
 			Function, // TODO: Technically an expression literal?
 		};
@@ -235,7 +235,7 @@ namespace IR
 		{
 			string s = "Call";
 			return s;
-		}		
+		}
 
 		virtual const TypeRef& getType() const override { return this->type; }
 
@@ -247,7 +247,15 @@ namespace IR
 		void addArgument(std::unique_ptr<Expression> expr)
 		{
 			this->args.push_back(std::move(expr));
-		}			
+		}
+
+		virtual const vector<Expression*> getSubExpressions() override
+		{ 
+			vector<Expression*> retVec = { &*callable };
+			for (auto& a : args)
+				retVec.push_back(&*a);
+			return retVec; 
+		}
 	};
 
 	struct Assignment : Statement
@@ -319,14 +327,14 @@ namespace IR
 
 	struct Signature
 	{
-		vector<Param> inParams;
-		vector<Param> outParams;
+		vector<unique<Param>> inParams;
+		vector<unique<Param>> outParams;
 
 		Param* addInParam(const TypeRef& type, string name, SymbolSource* symbolSource)
 		{
 			auto var = std::make_unique<Variable>(type);
-			this->inParams.push_back(Param(name, symbolSource, std::move(var)));
-			Param& param = this->inParams.back();
+			this->inParams.push_back(std::make_unique<Param>(name, symbolSource, std::move(var)));
+			Param& param = *this->inParams.back();
 			param.index = this->inParams.size() - 1;
 			return &param;
 		}
@@ -334,8 +342,8 @@ namespace IR
 		Param* addOutParam(const TypeRef& type, string name, SymbolSource* symbolSource)
 		{
 			auto var = std::make_unique<Variable>(type);
-			this->outParams.push_back(Param(name, symbolSource, std::move(var)));
-			Param& param = this->outParams.back();
+			this->outParams.push_back(std::make_unique<Param>(name, symbolSource, std::move(var)));
+			Param& param = *this->outParams.back();
 			param.index = this->outParams.size() - 1;
 			return &param;
 		}	

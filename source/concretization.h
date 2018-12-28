@@ -27,6 +27,28 @@ struct ConcretizerContext
 
 struct ExpressionConcretizer : AST::Visitor
 {
+	virtual void visit(AST::Call* node) override
+	{
+		IR::Call* call = new IR::Call(node->getType(this->astContext));
+
+		node->expr->accept(this);
+		// TODO: How to handle multiple value expressions?
+		assert(expressionStack.size() == 1);
+		call->setCallable(std::move(expressionStack.back()));
+		expressionStack.pop_back();
+
+		for (auto* arg : node->args)
+		{
+			arg->accept(this);
+			// TODO: How to handle multiple value expressions?
+			assert(expressionStack.size() == 1);
+			call->addArgument(std::move(expressionStack.back()));
+			expressionStack.pop_back();
+		}
+
+		expressionStack.push_back(std::unique_ptr<IR::Call>(call));
+	}
+
 	virtual void visit(AST::SymbolExpression* node) override
 	{
 		SymbolDependency* symDep = this->astContext->getSymbolDependency(node);
@@ -288,7 +310,7 @@ struct FunctionConcretizer : AST::Visitor
 			Symbol* symbol = symbolSource->getSymbol();
 			assert(symbol);
 
-			auto param = func.signature.addInParam(symbol->type, symbol->name, symbolSource);
+			auto param = func.signature.addOutParam(symbol->type, symbol->name, symbolSource);
 			this->context->module->cacheReferenceable(param);
 		}			
 	}

@@ -415,6 +415,8 @@ struct ASTProcessor : AST::Visitor
 			assert("Cannot evaluate expression for eval statement" && false);
 		}
 
+		
+
 		if (!isStringType(nodeVal.type))
 		{
 			assert("Expression is not of string type" && false);
