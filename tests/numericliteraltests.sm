@@ -9,8 +9,7 @@ func print(fmt : cchar*, args...) -> ()
 	printf(fmt, args);
 };
 */
-
-//sayHello("World");
+/*
 printFloat(getFloat(10.0));
 
 func getFloat(floatArg1 : f64) -> f64
@@ -18,18 +17,23 @@ func getFloat(floatArg1 : f64) -> f64
 	return floatArg1 * 7.0 * 5.6 + 6.35 / 45.0 - 19.0 * 0.56 + 4.7;
 };
 
-/*func sayHello(arg : cchar*)
-{
-	printf("Hello %s\n", arg);
-	extern printf : func(fmt : cchar*, args : cchar*) -> errCode : cint;	
-};*/
 
 func printFloat(arg : f64)
 {
 	printf("A float %f\n", arg);
 	extern printf : func(fmt : cchar*, args : f64) -> errCode : cint;	
 };
+*/
 
+
+func sayHello(arg : cchar*)
+{
+	printf("Hello %s\n", arg);
+	extern printf : func(fmt : cchar*, args : cchar*) -> errCode : cint;	
+};
+
+def evalStr : cchar* = "sayHello(\"World\")";
+eval(evalStr);
 
 /*eval(innerValue());
 

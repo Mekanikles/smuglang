@@ -18,15 +18,15 @@ namespace ExpressionContext
 	static llvm::ExecutionEngine* s_engine = nullptr;
 	static llvm::LLVMContext s_llvmContext;
 	static llvm::IRBuilder<llvm::NoFolder> s_llvmBuilder(s_llvmContext);
-	static std::unique_ptr<llvm::Module> s_llvmModule = llvm::make_unique<llvm::Module>("EvalutaionModule", s_llvmContext);
+	static std::unique_ptr<llvm::Module> s_llvmModule = std::make_unique<llvm::Module>("EvalutaionModule", s_llvmContext);
 	static llvm::Module* moduleRawPtr = s_llvmModule.get();
 }
 
 struct ExpressionEvaluator : AST::Visitor
 {
-	ExpressionEvaluator(Context* context, Value* outValue)
+	ExpressionEvaluator(ASTContext* astcontext, Value* outValue)
 		: outValue(outValue)
-		, context(context)
+		, astcontext(astcontext)
 	{
 		assert(outValue);
 	}
@@ -35,7 +35,7 @@ struct ExpressionEvaluator : AST::Visitor
 	{
 		// TODO: FunctionSignature should be a type literal
 		auto& val = *this->outValue;
-		val.type = node->getType(this->context);
+		val.type = node->getType(this->astcontext);
 
 		auto length = sizeof(TypeId);
 		TypeId id = val.type->typeId();
@@ -51,7 +51,7 @@ struct ExpressionEvaluator : AST::Visitor
 		{
 			// TODO: asterisk postfix op behaves as type literal
 			auto& val = *this->outValue;
-			val.type = node->getType(this->context);
+			val.type = node->getType(this->astcontext);
 
 			auto length = sizeof(TypeId);
 			TypeId id = val.type->typeId();
@@ -74,7 +74,7 @@ struct ExpressionEvaluator : AST::Visitor
 
 	void visit(AST::SymbolExpression* node) override
 	{
-		auto* symbolDep = this->context->getSymbolDependency(node);
+		auto* symbolDep = this->astcontext->getSymbolDependency(node);
 		auto* sourceNode = symbolDep->getSymbolSource()->getNode();
 		sourceNode->accept(this);
 	}
@@ -82,7 +82,7 @@ struct ExpressionEvaluator : AST::Visitor
 	void visit(AST::TypeLiteral* node) override
 	{
 		auto& val = *this->outValue;
-		val.type = node->getType(this->context);
+		val.type = node->getType(this->astcontext);
 
 		auto length = sizeof(TypeId);
 		TypeId id = val.type->typeId();
@@ -96,7 +96,7 @@ struct ExpressionEvaluator : AST::Visitor
 	{
 		auto& val = *this->outValue;
 
-		val.type = node->getType(this->context);
+		val.type = node->getType(this->astcontext);
 
 		// TODO: Handle other types of strings
 		assert(isCharPointer(val.type));
@@ -123,7 +123,7 @@ struct ExpressionEvaluator : AST::Visitor
 
 		printLine("Evaluating Call...");
 		auto& val = *this->outValue;
-		val.type = node->getType(this->context);
+		val.type = node->getType(this->astcontext);
 
 		assert(s_engine);
 
@@ -134,7 +134,7 @@ struct ExpressionEvaluator : AST::Visitor
 		}
 
 		std::stringstream llvmOutput;
-		LLVMIRGenerator llvmGenerator(context, &llvmOutput, s_llvmModule.get(), &s_llvmContext, &s_llvmBuilder);
+		LLVMIRGenerator llvmGenerator(astcontext, &llvmOutput, s_llvmModule.get(), &s_llvmContext, &s_llvmBuilder);
 
 		node->expr->accept(&llvmGenerator);
 		// TODO: SymbolExpession generates too many values
@@ -196,7 +196,7 @@ struct ExpressionEvaluator : AST::Visitor
 
 	bool success = false;
 	Value* outValue = nullptr;
-	Context* context;	
+	ASTContext* astcontext;	
 };
 
 bool initExpressionEvaluator()
@@ -258,9 +258,9 @@ bool initExpressionEvaluator()
 	return true;
 }
 
-bool evaluateExpression(Context* context, AST::Expression* expr, Value* outValue)
+bool evaluateExpression(ASTContext* astcontext, AST::Expression* expr, Value* outValue)
 {
-	ExpressionEvaluator e(context, outValue);
+	ExpressionEvaluator e(astcontext, outValue);
 	expr->accept(&e);
 
 	return e.success;

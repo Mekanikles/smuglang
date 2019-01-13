@@ -45,15 +45,15 @@ struct DependencyResolver : AST::Visitor
 		resolveDependency(dependency, scope);
 	}
 
-	DependencyResolver(Context* context)
+	DependencyResolver(ASTContext* context)
 		: context(context)
 	{
 	}
 
-	Context* context;
+	ASTContext* context;
 };
 
-void resolveDependencies(Context* context, AST::Node* root)
+void resolveDependencies(ASTContext* context, AST::Node* root)
 {
 	//LOG("Resolving dependencies...");
 

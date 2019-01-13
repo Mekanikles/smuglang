@@ -325,7 +325,19 @@ struct ASTProcessor : AST::Visitor
 			symbol->firstInitOrder = node->order;
 		}
 
-		// TODO: Resolve any type requests within this and underlying scopes
+		// Evaluate defines and store as constant in IR env
+		// 	This allows dependants to look them up
+		if (node->isDefine())
+		{
+			// TODO: Hm, we probably want to store a value for types as well, a hash maybe?
+			if (!symbol->getType()->isTypeVariable())
+			{
+				auto source = context->getSymbolSource(node);
+				assert(source);
+				assert(node->initExpr);
+				Evaluation::storeConstantFromExpression(econtext, *context, *node->initExpr, *source);	
+			}
+		}  
 	}
 
 	void visit(AST::Assignment* node) override
@@ -415,8 +427,6 @@ struct ASTProcessor : AST::Visitor
 			assert("Cannot evaluate expression for eval statement" && false);
 		}
 
-		
-
 		if (!isStringType(nodeVal.type))
 		{
 			assert("Expression is not of string type" && false);
@@ -432,9 +442,13 @@ struct ASTProcessor : AST::Visitor
 		const char** text = (const char**)nodeVal.data.data();
 		const uint length = strnlen(*text, 4096);
 		
+		// TODO: Compare with previous nodeVal
+		string str = Evaluation::evaluateExpressionAsString(econtext, *context, *node->expr);
+		assert(!str.compare(*text));
+
 		printLine("Parsing eval string: "); 
 		printLine(*text, 1);
-
+ 
 		BufferSourceInput bufferInput(*text, length);
 		Parser parser(&bufferInput);
 
@@ -502,23 +516,25 @@ struct ASTProcessor : AST::Visitor
 		//printLine(string("Eval: ") + std::to_string(node->order) + " finished processing");
 	}
 
-	ASTProcessor(Context* context)
-		: context(context)
+	ASTProcessor(EvaluationContext& econtext, ASTContext* context)
+		: econtext(econtext)
+		, context(context)
 	{
 	}
 
 	std::optional<TypeRef> m_expectedReturnType;
-	Context* context;
+	EvaluationContext& econtext;
+	ASTContext* context;
 };
 
-void processAST(Context* context, AST::Node* root)
+void processAST(EvaluationContext& econtext, ASTContext* context, AST::Node* root)
 {
 	processDeclarations(context, root);
 	resolveDependencies(context, root);
 
 	LOG("Processing ast...");
 	{
-		ASTProcessor ap(context);
+		ASTProcessor ap(econtext, context);
 		root->accept(&ap);
 	}
 
@@ -532,7 +548,7 @@ void processAST(Context* context, AST::Node* root)
 		assert(false && "Had unresolved symbols");
 }
 
-void processAST(Context* context, AST::ASTObject* ast)
+void processAST(EvaluationContext& econtext, ASTContext* context, AST::ASTObject* ast)
 {
-	processAST(context, ast->module);
+	processAST(econtext, context, ast->module);
 }

@@ -11,7 +11,7 @@ namespace AST
 	struct SymbolExpression;
 }
 
-struct Context;
+struct ASTContext;
 
 enum class StorageQualifier
 {
@@ -88,14 +88,14 @@ struct SymbolSource
 	virtual bool isSingleSymbolSource() = 0;
 	virtual Symbol* getSymbol() const = 0;
 	virtual AST::Node* getNode() = 0;
-	virtual Context* getContext() = 0;
+	virtual ASTContext* getContext() = 0;
 	virtual bool isExternal() { return false; }
 };
 
 struct DeclarationSymbolSource : SymbolSource
 {
 	AST::Node* node;
-	Context* context;
+	ASTContext* context;
 	Symbol* symbol = nullptr;
 	StorageQualifier storageQualifier;
 
@@ -104,14 +104,14 @@ struct DeclarationSymbolSource : SymbolSource
 	bool isSingleSymbolSource() override { return true; }
 	Symbol* getSymbol() const override { assert(symbol); return symbol; }
 	AST::Node* getNode() override { assert(node); return node; }
-	Context* getContext() override { assert(context); return context; }
+	ASTContext* getContext() override { assert(context); return context; }
 	bool isExternal() override { return storageQualifier == StorageQualifier::Extern; }
 };
 
 struct CatchAllSymbolSource : SymbolSource
 {
 	AST::Node* node;
-	Context* context;
+	ASTContext* context;
 	vector<SymbolDependency*> dependencies;
 
 	// Catch all symbol requgests
@@ -120,7 +120,7 @@ struct CatchAllSymbolSource : SymbolSource
 	bool isSingleSymbolSource() override { return false; }
 	Symbol* getSymbol() const override { assert(false && "Cannot resolve a single symbol from catch-all source"); return nullptr; }
 	AST::Node* getNode() override { assert(node); return node; }
-	Context* getContext() override { assert(context); return context; }
+	ASTContext* getContext() override { assert(context); return context; }
 };
 
 struct SymbolDependency
@@ -155,7 +155,7 @@ void CatchAllSymbolSource::hookDependency(SymbolDependency* dependency)
 
 vector<SymbolSource*> s_symbolSources;
 
-DeclarationSymbolSource* createDeclarationSymbolSource(Context* context, Symbol* symbol, AST::Node* node, StorageQualifier storageQualifier)
+DeclarationSymbolSource* createDeclarationSymbolSource(ASTContext* context, Symbol* symbol, AST::Node* node, StorageQualifier storageQualifier)
 {
 	auto s = new DeclarationSymbolSource();
 	s->node = node;
@@ -166,7 +166,7 @@ DeclarationSymbolSource* createDeclarationSymbolSource(Context* context, Symbol*
 	return s;
 }
 
-CatchAllSymbolSource* createCatchAllSymbolSource(Context* context, AST::Node* node)
+CatchAllSymbolSource* createCatchAllSymbolSource(ASTContext* context, AST::Node* node)
 {
 	auto s = new CatchAllSymbolSource();
 	s->node = node;

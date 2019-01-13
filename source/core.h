@@ -12,6 +12,7 @@
 #include <cstdlib>
 #include <vector>
 #include <string>
+#include <utility>
 
 #include <experimental/optional>
 namespace std
@@ -27,6 +28,8 @@ template<typename T>
 using unique = std::unique_ptr<T>;
 
 using uint = unsigned int;
+using u8 = unsigned char;
+using u64 = unsigned long;
 
 class Indenter
 {

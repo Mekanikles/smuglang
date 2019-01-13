@@ -29,6 +29,9 @@
 
 #include "llvm/Support/raw_ostream.h"
 
+const uint DEFAULT_INT_SIZE = 32;
+const bool DEFAULT_INT_ISSIGNED = true;
+
 static llvm::LLVMContext s_theContext;
 static llvm::IRBuilder<llvm::NoFolder> s_builder(s_theContext);
 static std::unique_ptr<llvm::Module> s_theModule = llvm::make_unique<llvm::Module>("SmugModule", s_theContext);
@@ -542,7 +545,7 @@ struct LLVMIRGenerator : AST::Visitor
 		return retVal;
 	}
 
-	LLVMIRGenerator(Context* context, std::ostream* out, 
+	LLVMIRGenerator(ASTContext* context, std::ostream* out, 
 		llvm::Module* llvmModule, llvm::LLVMContext* llvmContext, 
 		llvm::IRBuilder<llvm::NoFolder>* llvmBuilder)
 		: m_astContext(context)
@@ -649,7 +652,7 @@ struct LLVMIRGenerator : AST::Visitor
 		passManager.run(m_module);
 	}
 
-	Context* m_astContext;
+	ASTContext* m_astContext;
 
 	llvm::raw_os_ostream m_out;
 	llvm::Module& m_module;
@@ -666,9 +669,9 @@ struct LLVMIRGenerator : AST::Visitor
 	std::unordered_map<string, llvm::AllocaInst*> m_variables;
 };
 
-LLVMIRGenerator* createGenerator(Context* context, std::ostream* out)
+LLVMIRGenerator* createGenerator(ASTContext* astcontext, std::ostream* out)
 {
-	return new LLVMIRGenerator(context, out, s_theModule.get(), &s_theContext, &s_builder);
+	return new LLVMIRGenerator(astcontext, out, s_theModule.get(), &s_theContext, &s_builder);
 }
 
 

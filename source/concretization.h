@@ -25,6 +25,15 @@ struct ConcretizerContext
 	IR::Module* module;
 };
 
+unique<IR::Literal> createIntegerLiteral(const TypeRef& type, long long l)
+{
+	vector<u8> data;
+	data.resize(sizeof(l));
+	memcpy(data.data(), &l, sizeof(l));
+
+	return createExpression<IR::Literal>(type, std::move(data));
+}
+
 struct ExpressionConcretizer : AST::Visitor
 {
 	virtual void visit(AST::Call* node) override
@@ -70,8 +79,13 @@ struct ExpressionConcretizer : AST::Visitor
 		assert(primitive.primitiveType == PrimitiveClass::Int);
 
 		// Might as well create the value here directly
-		auto* value = this->context->backend->createIntegerConstantFromText(node->value, primitive.size, primitive.signedType == PrimitiveClass::Signed);
-		expressionStack.push_back(createExpression<IR::Literal>(type, value));
+		//auto* value = this->context->backend->createIntegerConstantFromText(node->value, primitive.size, primitive.signedType == PrimitiveClass::Signed);
+
+		std::istringstream os(node->value);
+    	long long l;
+    	os >> l;
+
+		expressionStack.push_back(createIntegerLiteral(type, l));
 	}
 
 	void visit(AST::FloatLiteral* node) override
@@ -83,8 +97,17 @@ struct ExpressionConcretizer : AST::Visitor
 		const PrimitiveClass& primitive = type.getType().getPrimitive();
 		assert(primitive.primitiveType == PrimitiveClass::Float);
 
-		auto* value = this->context->backend->createFloatConstantFromText(node->value, primitive.size);
-		expressionStack.push_back(createExpression<IR::Literal>(type, value));
+		//auto* value = this->context->backend->createFloatConstantFromText(node->value, primitive.size);
+
+		std::istringstream os(node->value);
+    	double d;
+    	os >> d;
+
+		vector<u8> data;
+		data.resize(sizeof(d));
+		memcpy(data.data(), &d, sizeof(d));
+	
+		expressionStack.push_back(createExpression<IR::Literal>(type, std::move(data)));
 	}	
 
 	virtual void visit(AST::StringLiteral* node) override
@@ -96,10 +119,17 @@ struct ExpressionConcretizer : AST::Visitor
 
 		// Might as well create the value here directly
 		const string str = processQuotedInputString(node->value);
-		const bool isCString = type->isPointer();
+		//const bool isCString = type->isPointer();
 
-		auto* value = this->context->backend->createStringConstantFromText(str);
-		expressionStack.push_back(createExpression<IR::Literal>(type, value, isCString));
+		//auto* value = this->context->backend->createStringConstantFromText(str);
+
+		vector<u8> data;
+		const char* cstr = str.c_str();
+		uint length = str.length() + 1;
+		data.resize(length);
+		memcpy(data.data(), cstr, length);
+
+		expressionStack.push_back(createExpression<IR::Literal>(type, std::move(data)));
 	}
 
 	virtual void visit(AST::BinaryOp* node) override
@@ -135,18 +165,14 @@ struct ExpressionConcretizer : AST::Visitor
 			));
 	}
 
-	ExpressionConcretizer(ConcretizerContext* context, Context* astContext, IR::Function* function, IR::Block* block)
+	ExpressionConcretizer(ConcretizerContext* context, ASTContext* astContext)
 		: context(context)
-		, function(function)
 		, astContext(astContext)
 	{
-		this->currentBlock = block;
 	}
 
 	ConcretizerContext* context;
-	IR::Function* function;
-	IR::Block* currentBlock;
-	Context* astContext;
+	ASTContext* astContext;
 	vector<std::unique_ptr<IR::Expression>> expressionStack;
 };
 
@@ -160,16 +186,19 @@ struct FunctionConcretizer : AST::Visitor
 		auto* ref = this->context->module->getReferenceable(ss);
 		// TODO: :(
 		assert(ref);
-		auto* func = static_cast<IR::Function*>(ref->value.get());
-		assert(func);
+		auto* constant = static_cast<IR::Constant*>(ref);
+		assert(constant->literal->getType()->isFunction());
+		auto* func = static_cast<IR::Function*>(constant->literal.get());
 		generateConcreteFunction(*func, node->funcLiteral);
 	}
 
 	virtual void visit(AST::SymbolDeclaration* node) override
 	{
-		if (node->storageQualifier == StorageQualifier::Def ||
-			node->storageQualifier == StorageQualifier::Extern)
-			return; 
+		if (node->storageQualifier == StorageQualifier::Extern)
+			return;
+
+		if (node->getType(this->astContext)->isTypeVariable())
+			return;
 
 		if (node->initExpr)
 		{
@@ -246,27 +275,38 @@ struct FunctionConcretizer : AST::Visitor
 		// 
 		for (DeclarationSymbolSource* symbolSource : symbolScope.getDeclarations())
 		{
-			unique<IR::Value> val;
-
 			Symbol* symbol = symbolSource->symbol;
 			assert(symbol);
 			TypeRef& type = symbol->getType();
 			if (type->isTypeVariable())
-			{
-				// ignore type variables
 				continue;
-			}
-			else if (type->isFunction())
+
+			if (symbolSource->storageQualifier == StorageQualifier::Extern)
 			{
-				val = std::make_unique<IR::Function>(type, symbol->name, symbolSource->storageQualifier == StorageQualifier::Extern);
+				auto external = std::make_unique<IR::External>(type, symbol->name, symbolSource);
+				this->context->module->addExternal(std::move(external));
+			}
+			else if (symbolSource->storageQualifier == StorageQualifier::Def)
+			{
+				if (type->isFunction())
+				{
+					auto func = std::make_unique<IR::Function>(type, symbol->name);
+					this->context->module->addFunction(std::move(func), symbolSource);
+				}
+				else
+				{
+					// TODO: For now, treat defs as variables, until we enfore conversion to literals for all defs
+					auto variable = std::make_unique<IR::Variable>(type, symbol->name, symbolSource);
+					auto* ref = scope.addVariable(std::move(variable));
+					this->context->module->cacheReferenceable(ref);	
+				}	
 			}
 			else
 			{
-				val = std::make_unique<IR::Variable>(type);
-			}
-
-			auto* ref = scope.addReferenceable(symbol->name, symbolSource, std::move(val));
-			this->context->module->cacheReferenceable(ref);			
+				auto variable = std::make_unique<IR::Variable>(type, symbol->name, symbolSource);
+				auto* ref = scope.addVariable(std::move(variable));
+				this->context->module->cacheReferenceable(ref);	
+			}	
 		}
 	}
 
@@ -284,7 +324,7 @@ struct FunctionConcretizer : AST::Visitor
 
 	vector<std::unique_ptr<IR::Expression>> generateConcreteExpression(AST::Expression* expression)
 	{
-		ExpressionConcretizer c(this->context, this->astContext, this->function, this->currentBlock); 
+		ExpressionConcretizer c(this->context, this->astContext); 
 		expression->accept(&c);
 		return std::move(c.expressionStack);
 	}
@@ -299,7 +339,7 @@ struct FunctionConcretizer : AST::Visitor
 			Symbol* symbol = symbolSource->getSymbol();
 			assert(symbol);
 
-			auto param = func.signature.addInParam(symbol->type, symbol->name, symbolSource);
+			auto param = func.getSignature().addInParam(symbol->type, symbol->name, symbolSource);
 			this->context->module->cacheReferenceable(param);
 		}
 
@@ -310,34 +350,32 @@ struct FunctionConcretizer : AST::Visitor
 			Symbol* symbol = symbolSource->getSymbol();
 			assert(symbol);
 
-			auto param = func.signature.addOutParam(symbol->type, symbol->name, symbolSource);
+			auto param = func.getSignature().addOutParam(symbol->type, symbol->name, symbolSource);
 			this->context->module->cacheReferenceable(param);
 		}			
 	}
 
 	IR::Function* generateConcreteFunction(IR::Function& func, AST::FunctionLiteral* funcLiteral)
 	{
-		FunctionConcretizer c(this->context, this->astContext, &func); 
+		FunctionConcretizer c(this->context, this->astContext); 
 
 		// Handle signature
 		handleSignature(func, *funcLiteral);
 		
 		// Handle body
-		c.generateConcreteStatementBody(&func.scope, funcLiteral->body);
+		c.generateConcreteStatementBody(&func.getScope(), funcLiteral->body);
 		return &func;
 	}
 
-	FunctionConcretizer(ConcretizerContext* context, Context* astContext, IR::Function* function)
+	FunctionConcretizer(ConcretizerContext* context, ASTContext* astContext)
 		: context(context)
-		, function(function)
 		, astContext(astContext)
 	{
 	}
 
 	ConcretizerContext* context = nullptr;
-	IR::Function* function = nullptr;
 	IR::Block* currentBlock = nullptr;
-	Context* astContext = nullptr;
+	ASTContext* astContext = nullptr;
 };
 
 TypeRef createMainType()
@@ -357,22 +395,22 @@ TypeRef createMainType()
 	return TypeRef(std::move(funcType));
 }
 
-IR::Module concretizeASTModule(Backend::Context* backend, Context* astContext, AST::Module* astModule)
+IR::Module concretizeASTModule(Backend::Context* backend, ASTContext* astContext, AST::Module* astModule)
 {
 	assert(astModule);
 	IR::Module module;
 	ConcretizerContext context { backend, &module };
 
 	auto mainType = createMainType();
-	module.mainFunction = std::make_unique<IR::Function>(mainType, "main", false);
+	module.main = std::make_unique<IR::Function>(mainType, "main");
 
-	FunctionConcretizer c(&context, astContext, &*module.mainFunction);
-	c.generateConcreteStatementBody(&module.mainFunction->scope, astModule->body);
+	FunctionConcretizer c(&context, astContext);
+	c.generateConcreteStatementBody(&module.main->scope, astModule->body);
  
 	// Add return instruction
-	auto* val = backend->createIntegerConstant(0, 32, true);
-	module.mainFunction->scope.blocks.back()->addStatement(
-		std::make_unique<IR::Return>(createExpression<IR::Literal>(mainType->getFunction().outParams.back().type, val)));
+	auto& returnType = mainType->getFunction().outParams.back().type;
+	module.main->scope.blocks.back()->addStatement(
+		std::make_unique<IR::Return>(createIntegerLiteral(returnType, 0)));
 
 	return module;
 }

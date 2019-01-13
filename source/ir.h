@@ -1,22 +1,27 @@
 #pragma once
 
+#include <unordered_map>
 #include "core.h"
 #include "types.h"
 #include "backend/value.h"
+#include "symbols.h"
 
 // TODO: Rename to "MIR"? Mid-level intermediate representation
 namespace IR
 {
 	struct Value
 	{
-		enum ValueType
+		enum class ValueType
 		{
-			Variable,	
+			Referenceable,
 			Expression,
-			Function, // TODO: Technically an expression literal?
 		};
 
 		ValueType valueType;
+
+		// TODO: Necessary? Can we generate backend without having to cache values?
+		// Also, expressions probably does not need backendValue, maybe only on referenceables?
+		//	Is Value used somewhere if we move down backendvalue then?
 		Backend::Value* backendValue = nullptr;
 
 		Value(ValueType valueType)
@@ -25,57 +30,20 @@ namespace IR
 		virtual const TypeRef& getType() const = 0;
 	};
 
-	struct Referenceable
-	{
-		string name;
-
-		// TODO: Need this for mapping to sources, for now
-		const SymbolSource* symbolSource;
-
-		Referenceable(string name, const SymbolSource* symbolSource, unique<Value> value)
-			: name(name)
-			, symbolSource(symbolSource)
-			, value(std::move(value))
-		{}
-		
-		unique<Value> value;
-
-		const string getName() const { return name; }
-		const TypeRef& getType()  const { return value->getType(); }
-	};
-
-	struct Variable : Value
-	{
-		const TypeRef type;	
-
-		Variable(const TypeRef& type) 
-			: Value(Value::Variable)
-			, type(type)
-		{}
-
-		Variable(Variable&& var)
-			: Value(std::move(var))
-			, type(std::move(var.type))
-		{
-		}
-
-		virtual const TypeRef& getType() const override { return type; }
-	};
-
 	struct Expression : Value
 	{
 		enum ExpressionType
 		{
-			Reference,
-			Call,
 			Literal,
+			Reference,
 			BinaryOp,
+			Call,
 		};
 
 		ExpressionType exprType;
 
 		Expression(ExpressionType exprType) 
-			: Value(Value::Expression)
+			: Value(Value::ValueType::Expression)
 			, exprType(exprType) 
 		{}
 	
@@ -138,12 +106,17 @@ namespace IR
 		// Hack: c-strings are not literals, since they are a pointer to
 		//	data that cannot be a constant. Use this to indicate that we 
 		//	need to fetch the correct address at compile time
+		// TODO: Can we replace these literals with references instead?
+		//	also, this is derived from the type, so don't store it like this
 		bool isPointerType;
 
-		Literal(const TypeRef type, Backend::Value* backendValue, bool isPointerType = false)
+		vector<u8> data;
+
+		Literal(const TypeRef type, vector<u8> data)
 			: Expression(Expression::Literal)
 			, type(type)
-			, isPointerType(isPointerType)
+			, isPointerType(type->isPointer())
+			, data(std::move(data))
 		{
 			this->backendValue = backendValue;
 		}
@@ -157,6 +130,38 @@ namespace IR
 		virtual const TypeRef& getType() const override { return this->type; }
 	};
 
+	struct Referenceable : Value
+	{
+		enum class Type
+		{
+			Variable,
+			External,
+			Constant
+		};
+
+		Type type;
+		string name;
+
+		// TODO: Need this for mapping to sources, for now
+		const SymbolSource* symbolSource;
+
+		Referenceable(Type type, string name, const SymbolSource* symbolSource)
+			: Value(Value::ValueType::Referenceable)
+			, type(type)
+			, name(name)
+			, symbolSource(symbolSource)
+		{}
+
+		const string getName() const { return name; }
+		virtual const TypeRef& getType() const = 0;
+
+		const struct Constant& asConstant() const
+		{
+			assert(type == Type::Constant);
+			return *(const struct Constant*)(this);
+		}
+	};
+
 	struct Reference : Expression
 	{
 		const Referenceable* referenceable;
@@ -166,12 +171,61 @@ namespace IR
 			, referenceable(referenceable)
 		{}
 
+		virtual const Referenceable* getReferenceable() { return referenceable; }
+
 		virtual string toString() override
 		{
 			return prettyString(referenceable->getName(), FGTextColor::Blue, true);
 		}
 
 		virtual const TypeRef& getType() const override { return referenceable->getType(); }			
+	};
+
+	struct Variable : Referenceable
+	{
+		const TypeRef type;	
+
+		Variable(const TypeRef& type, string name, const SymbolSource* symbolSource) 
+			: Referenceable(Referenceable::Type::Variable, name, symbolSource)
+			, type(type)
+		{}
+
+		Variable(Variable&& var)
+			: Referenceable(Referenceable::Type::Variable, std::move(var.name), var.symbolSource)
+			, type(std::move(var.type))
+		{
+		}
+
+		virtual const TypeRef& getType() const override { return type; }
+	};
+
+	struct External : Referenceable
+	{
+		const TypeRef type;
+
+		External(const TypeRef type, string name, const SymbolSource* symbolSource)
+			: Referenceable(Referenceable::Type::External, std::move(name), symbolSource)
+			, type(type)
+		{}
+
+		virtual const TypeRef& getType() const override { return type; }	
+	};
+
+	struct Constant : Referenceable
+	{
+		unique<Literal> literal;
+
+		Constant(unique<Literal> literal, string name, const SymbolSource* symbolSource) 
+			: Referenceable(Referenceable::Type::Constant, std::move(name), symbolSource) 
+			, literal(std::move(literal))
+		{}
+
+		Constant(Constant&& con)
+			: Referenceable(Referenceable::Type::Constant, std::move(con.name), con.symbolSource)
+			, literal(std::move(con.literal))
+		{}
+
+		virtual const TypeRef& getType() const override { return literal->getType(); }
 	};
 
 	struct Call;
@@ -293,7 +347,7 @@ namespace IR
 	struct Scope : Statement
 	{
 		uint id;	
-		vector<unique<Referenceable>> referenceables;
+		vector<unique<Variable>> variables;
 		vector<unique<Block>> blocks;
 
 		Scope()
@@ -309,20 +363,20 @@ namespace IR
 			return this->blocks.back().get();
 		}
 
-		Referenceable* addReferenceable(string name, const SymbolSource* symbolSource, unique<Value> value)
+		Variable* addVariable(unique<Variable> variable)
 		{
-			this->referenceables.push_back(std::make_unique<Referenceable>(name, symbolSource, std::move(value)));
-			return this->referenceables.back().get();
+			this->variables.push_back(std::move(variable));
+			return this->variables.back().get();
 		}
 	};
 
 	// TODO: Param can only be of Variable type
 	//	Should maybe inherit from Variable instead, but that means that
 	//	referenceable probably cannot uniquely own their value, replace with pointer
-	struct Param : Referenceable
+	struct Param : Variable
 	{
 		int index = -1;
-		using Referenceable::Referenceable;
+		using Variable::Variable;
 	};
 
 	struct Signature
@@ -332,8 +386,7 @@ namespace IR
 
 		Param* addInParam(const TypeRef& type, string name, SymbolSource* symbolSource)
 		{
-			auto var = std::make_unique<Variable>(type);
-			this->inParams.push_back(std::make_unique<Param>(name, symbolSource, std::move(var)));
+			this->inParams.push_back(std::make_unique<Param>(type, name, symbolSource));
 			Param& param = *this->inParams.back();
 			param.index = this->inParams.size() - 1;
 			return &param;
@@ -341,43 +394,51 @@ namespace IR
 
 		Param* addOutParam(const TypeRef& type, string name, SymbolSource* symbolSource)
 		{
-			auto var = std::make_unique<Variable>(type);
-			this->outParams.push_back(std::make_unique<Param>(name, symbolSource, std::move(var)));
+			this->outParams.push_back(std::make_unique<Param>(type, name, symbolSource));
 			Param& param = *this->outParams.back();
 			param.index = this->outParams.size() - 1;
 			return &param;
 		}	
 	};
 
-	struct Function : Value
+	static u64 functionId = 0;
+	struct Function : Literal
 	{
-		uint id;
-		const TypeRef type;	
-		string name;
-		bool external;
+		u64 id;
+		string name; // Duplicate of constant name for non-main/lambdas
 		Signature signature;
 		Scope scope;
-		bool isVariadic = false;
 
-		Function(const TypeRef& type, string name, bool external = false) 
-			: Value(Value::Function)
-			, type(type)
+		Function(const TypeRef type, string name)
+			: Literal(type, vector<u8> { (u8*)&id, ((u8*)&id) + sizeof(id) })
+			, id(++functionId)
 			, name(name)
-			, external(external)
-		{
-			static uint functionId = 0;
-			this->id = ++functionId;
+		{	
 		}
 
-		virtual const TypeRef& getType() const override
+		Signature& getSignature()
 		{
-			return type;
-		}		
+			return signature;
+		}
+
+		Scope& getScope()
+		{
+			return scope;
+		}
+
+		u64 getId() const
+		{
+			return *(u64*)(data.data());
+		}
 	};
 
 	struct Module
 	{
-		unique<Function> mainFunction; 
+		// Main is a "lambda" since it cannot be recerenced :)
+		unique<Function> main;
+		vector<unique<External>> externals;
+		vector<unique<Constant>> constants;
+		vector<Function*> functions;
 
 		// TODO: Build the correct scopes directly from AST to avoid searching for symbols
 		std::unordered_map<const SymbolSource*, Referenceable*> refMap;
@@ -392,6 +453,28 @@ namespace IR
 			auto* ref = this->refMap[symbolSource];
 			assert(ref);
 			return ref;
+		}
+
+		Constant* addFunction(unique<Function> func, SymbolSource* symbolSource)
+		{
+			functions.push_back(func.get());
+			auto constant = std::make_unique<IR::Constant>(std::move(func), func->name, symbolSource);
+			addConstant(std::move(constant));
+			return &*constants.back();
+		}
+
+		Constant* addConstant(unique<Constant> constant)
+		{
+			constants.push_back(std::move(constant));
+			cacheReferenceable(&*constants.back());
+			return &*constants.back();
+		}
+
+		External* addExternal(unique<External> external)
+		{
+			externals.push_back(std::move(external));
+			cacheReferenceable(&*externals.back());
+			return &*externals.back();
 		}
 	};
 };

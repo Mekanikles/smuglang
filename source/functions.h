@@ -45,7 +45,7 @@ FunctionArgumentBinding* createFunctionArgumentBinding(const AST::Call* callNode
 	return binding;
 }
 
-bool unifyArguments(Context* context, AST::Call* callNode, FunctionArgumentBinding* argBinding)
+bool unifyArguments(ASTContext* context, AST::Call* callNode, FunctionArgumentBinding* argBinding)
 {
 	auto& args = callNode->args;
 	for (auto& p : argBinding->params)

@@ -31,6 +31,9 @@
 namespace Backend
 {
 
+const uint DEFAULT_INT_SIZE = 32;
+const bool DEFAULT_INT_ISSIGNED = true;
+
 static const llvm::fltSemantics* getFloatStandard(int size)
 {
 	switch (size)
@@ -165,6 +168,14 @@ struct Context
 		return nullptr;
 	}
 
+	void createAndSetBlock(string name)
+	{
+		auto block = llvm::BasicBlock::Create(m_llvmContext, name.c_str());
+		m_llvmBuilder.SetInsertPoint(block);
+
+		// TODO: Dangling block. Need to expose blocks in backend api?
+	}
+
 	void createAssignment(IR::Assignment& assignment)
 	{
 		auto* val = createValueFromExpression(*assignment.expression);
@@ -244,7 +255,7 @@ struct Context
 				auto* ref = static_cast<IR::Reference*>(&expr);
 
 				assert(ref->referenceable);
-				auto& val = *ref->referenceable->value;
+				auto& val = *ref->referenceable;
 
 				// We should have generated values for all referenceables already
 				assert(val.backendValue);
@@ -262,6 +273,53 @@ struct Context
 		return nullptr;
 	}
 
+	llvm::Value* createValueFromTypeAndDataBlock(const TypeRef& type, vector<u8>& data)
+	{
+		if (type->isPointer())
+		{
+			auto& innerType = type->getPointer().type;
+			auto* val = createValueFromTypeAndDataBlock(innerType, data);
+			return createValuePtr(val);
+		}
+		else
+		{
+			const uint8_t* rawdata = reinterpret_cast<const uint8_t*>(data.data());
+			auto constant = llvm::ConstantDataArray::get(m_llvmContext, llvm::makeArrayRef(rawdata, data.size()));
+			auto globData = new llvm::GlobalVariable(*m_llvmModule,
+				constant->getType(),
+				true,
+				llvm::GlobalValue::PrivateLinkage,
+				constant);
+			globData->setUnnamedAddr(llvm::GlobalValue::UnnamedAddr::Global);
+			return globData;
+		}
+	}
+
+	llvm::Value* createValueFromLiteral(IR::Literal& literal)
+	{
+		auto& type = literal.getType();
+		assert(type->isConcrete());
+		assert(!type->isFunction());
+
+		assert(!literal.backendValue);
+
+		if (type->isPrimitive())
+		{
+			auto& p = type->getPrimitive();
+			if (p.isInteger())
+			{
+				long long l = *(long long*)literal.data.data();
+				literal.backendValue = createIntegerConstant((uint64_t)l, p.size, p.isSigned());
+			}
+		}
+		else
+		{
+			literal.backendValue = createValueFromTypeAndDataBlock(literal.getType(), literal.data);
+		}
+
+		return literal.backendValue;
+	}
+
 	llvm::Value* createValueFromExpression(IR::Expression& expr)
 	{
 		switch (expr.exprType)
@@ -271,7 +329,7 @@ struct Context
 				auto* ref = static_cast<IR::Reference*>(&expr);
 
 				assert(ref->referenceable);
-				auto& val = *ref->referenceable->value;
+				auto& val = *ref->referenceable;
 
 				// We should have generated values for all referenceables already
 				assert(val.backendValue);
@@ -286,11 +344,7 @@ struct Context
 			case IR::Expression::Literal:
 			{
 				auto* literal = static_cast<IR::Literal*>(&expr);
-				// All literals are generated at concretization
-				assert(expr.backendValue);
-				if (literal->isPointerType)
-					return createValuePtr(expr.backendValue);
-				return expr.backendValue;
+				return createValueFromLiteral(*literal);
 				break;
 			}
 			case IR::Expression::Call:
@@ -314,15 +368,12 @@ struct Context
 		return nullptr;
 	}
 
-	llvm::Function* createFunction(IR::Function& irfunction)
+	llvm::Function* createFunction(const FunctionClass& function, string name)
 	{
-		const TypeRef& funcType = irfunction.getType();
-		assert(funcType->isConcrete() && "Inconcrete types are not allowed in ir generation");
-
 		vector<string> paramNames;
 		std::vector<llvm::Type*> args;
 
-		for (const FunctionClass::Param& p : funcType->getFunction().inParams)
+		for (const FunctionClass::Param& p : function.inParams)
 		{
 			args.push_back(resolveType(p.type.getType()));
 			paramNames.push_back(p.identifier);
@@ -330,16 +381,16 @@ struct Context
 
 		// TODO: multiple return values
 		llvm::Type* returnType = m_llvmBuilder.getVoidTy();
-		if (!funcType->getFunction().outParams.empty())
+		if (!function.outParams.empty())
 		{
-			assert(funcType->getFunction().outParams.size() == 1);
-			returnType = resolveType(funcType->getFunction().outParams[0].type.getType());
+			assert(function.outParams.size() == 1);
+			returnType = resolveType(function.outParams[0].type.getType());
 		}
 
 		auto functionType = llvm::FunctionType::get(
-				returnType, args, irfunction.isVariadic);
+				returnType, args, function.isCVariadic);
 
-		auto func = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, irfunction.name, &*m_llvmModule);
+		auto func = llvm::Function::Create(functionType, llvm::Function::ExternalLinkage, name, &*m_llvmModule);
 
 		// Assign parameter names
 		uint i = 0;
@@ -452,50 +503,12 @@ struct Generator
 		vector<IR::Function*> funcs;
 
 		// Generate referenceables
-		for (auto& ref : irscope.referenceables)
+		for (auto& var : irscope.variables)
 		{	
-			auto& val = ref->value;
-			assert(val);
-			switch (val->valueType)
-			{
-				case IR::Value::Variable:
-				{
-					auto* var = static_cast<IR::Variable*>(ref->value.get());
-					
-					auto* type = m_context.resolveType(var->getType());
-					assert(!var->backendValue);
-					var->backendValue = m_context.m_llvmBuilder.CreateAlloca(type, nullptr, ref->getName());
-					break;
-				}
-				case IR::Value::Function:
-				{
-					auto* func = static_cast<IR::Function*>(ref->value.get());
-					// Only generate heads now, will allow for cross-referencing functions
-					generateFunctionHead(*func);
-					funcs.push_back(func);
-					break;
-				}
-				// TODO: Why can this be here? Rename referenceables to declarations?
-				//	reffables can be unnamed expressions/lambdas etc.
-				case IR::Value::Expression:
-				{
-					assert(false && "Hm, why can we have expressions in scope referenceables?");
-					break;
-				}
-			}
+			auto* type = m_context.resolveType(var->getType());
+			assert(!var->backendValue);
+			var->backendValue = m_context.m_llvmBuilder.CreateAlloca(type, nullptr, var->getName());
 		}
-
-		// TODO: Generate all functions up front, so we don't have to track basic blocks?
-		auto* oldBlock = m_context.m_llvmBuilder.GetInsertBlock();
-
-		// Generate all function bodies
-		for (auto* func : funcs)
-		{	
-			generateFunctionBody(*func);
-		}
-
-		// Restore block
-		m_context.m_llvmBuilder.SetInsertPoint(oldBlock);
 
 		// Generate all blocks
 		for (auto& block : irscope.blocks)
@@ -506,16 +519,17 @@ struct Generator
 
 	void generateFunctionHead(IR::Function& irfunction)
 	{
-		auto* func = m_context.createFunction(irfunction);
+		const TypeRef& funcType = irfunction.getType();
+		assert(funcType->isConcrete() && "Inconcrete types are not allowed in ir generation");
+		assert(funcType->isFunction());
+
+		auto* func = m_context.createFunction(funcType->getFunction(), irfunction.name);
 		assert(!irfunction.backendValue);
 		irfunction.backendValue = func;
 	}
 
 	void generateFunctionBody(IR::Function& irfunction)
 	{
-		if (irfunction.external)
-			return;
-
 		assert(irfunction.backendValue);
 		auto* func = static_cast<llvm::Function*>(irfunction.backendValue);
 
@@ -523,7 +537,7 @@ struct Generator
 		m_context.m_llvmBuilder.SetInsertPoint(entryBlock);
 
 		// Link signature variables to function argument value
-		auto& signature = irfunction.signature;
+		auto& signature = irfunction.getSignature();
 		uint argIndex = 0;
 		for (auto& arg : func->args())
 		{
@@ -547,16 +561,13 @@ struct Generator
 			// TODO: Point const params to argument directly
 			auto a = m_context.m_llvmBuilder.CreateAlloca(arg.getType(), nullptr, arg.getName());
 
-			// TODO: This is not pretty, params should only be variables 
-			//	(constants should not be allowed for a concretized function, right?)
-			assert(paramPtr->value->valueType == IR::Value::Variable);
 			m_context.m_llvmBuilder.CreateStore(&arg, a);
-			paramPtr->value->backendValue = a;
+			paramPtr->backendValue = a;
 
 			argIndex++;
 		}
 
-		generateScope(irfunction.scope);
+		generateScope(irfunction.getScope());
 
 		// HACK: Append emtpy ret on void functions to make llvm happy
 		auto& functionClass = irfunction.getType()->getFunction();		
@@ -575,11 +586,65 @@ struct Generator
 			}
 		}
 	}
+	void generateConstant(IR::Constant& constant)
+	{
+		assert(!constant.backendValue);
+		constant.backendValue = m_context.createValueFromLiteral(*constant.literal);
+	}
+
+	void generateExternal(IR::External& external)
+	{
+		assert(external.getType()->isFunction() && "Only supports external functions for now");
+		
+		auto* func = m_context.createFunction(external.getType()->getFunction(), external.getName());
+		assert(!external.backendValue);
+		external.backendValue = func;
+	}
+
+	void generateMain(IR::Module& irmodule)
+	{
+		generateFunctionHead(*irmodule.main);
+		generateFunctionBody(*irmodule.main);
+	}
 
 	void generateModule(IR::Module& irmodule)
 	{
-		generateFunctionHead(*irmodule.mainFunction);
-		generateFunctionBody(*irmodule.mainFunction);
+		vector<IR::Function*> funcs;
+
+		// Take care of external symbols
+		for (auto& external : irmodule.externals)
+		{
+			generateExternal(*external);
+		}
+
+		// Generate all constants and function headers, so we can generate function bodies freely
+		for (auto& constant : irmodule.constants)
+		{
+			if (constant->getType()->isFunction())
+			{
+				// TODO: Generalize literal generation to include functions
+				auto* func = static_cast<IR::Function*>(constant->literal.get());
+				generateFunctionHead(*func);
+				assert(func->backendValue);
+				constant->backendValue = func->backendValue;
+				funcs.push_back(&*func);
+			}
+			else
+			{
+				generateConstant(*constant);
+			}
+		}
+
+		// Generate all function bodies
+		for (auto* func : funcs)
+		{	
+			generateFunctionBody(*func);
+		}
+
+		// Generate all constants
+
+		// No-one can reference main, so generate it last
+		generateMain(irmodule);
 
 		std::stringstream error;
 		llvm::raw_os_ostream ostr(error);

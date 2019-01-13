@@ -1,7 +1,7 @@
 #pragma once
 #include <unordered_map>
 
-struct Context
+struct ASTContext
 {
 	vector<SymbolScope*> symbolScopes;
 

@@ -1,6 +1,6 @@
 #pragma once
 
-void printAST(Context* context, AST::ASTObject* ast, int indent = 0)
+void printAST(ASTContext* context, AST::ASTObject* ast, int indent = 0)
 {
 	/*
 		Module
@@ -165,40 +165,20 @@ void printIRBlock(IR::Block* block, int indent = 0)
 		printIRStatement(&*s, indent);
 }
 
-void printIRFunction(IR::Function* function, int indent = 0);
+void printIRFunction(IR::Function& function, int indent = 0);
 
 void printIRScope(IR::Scope* scope, int indent)
 {
 	printLine("{", indent);
 
-	printLine(prettyString(string("// Referenceables"), FGTextColor::Green), indent + 1);
-	for (auto& ref : scope->referenceables)
-	{	
-		auto& val = ref->value;
-		assert(val);
-		switch (val->valueType)
-		{
-			case IR::Value::Variable:
-			{
-				print("var ", indent + 1); 
-				print(prettyString(ref->name, FGTextColor::Blue, true));
-				printLine(typeString(ref->getType()));
-				break;
-			}
-			case IR::Value::Function:
-			{
-				auto* func = static_cast<IR::Function*>(ref->value.get());
-				printIRFunction(func, indent + 1);
-				break;
-			}
-			// TODO: Why can this be here? Rename referenceables to declarations?
-			//	reffables can be unnamed expressions/lambdas etc.
-			case IR::Value::Expression:
-			{
-				assert(false && "Hm, why can we have expressions in scope referenceables?");
-				break;
-			}
-		}
+	if (!scope->variables.empty())
+		printLine(prettyString(string("// Referenceables"), FGTextColor::Green), indent + 1);
+	for (auto& var : scope->variables)
+	{			
+		print("var ", indent + 1); 
+		print(prettyString(var->getName(), FGTextColor::Blue, true));
+		printLine(typeString(var->getType()));
+		break;
 	}
 
 	for (auto& b : scope->blocks)
@@ -210,24 +190,43 @@ void printIRScope(IR::Scope* scope, int indent)
 	printLine("}", indent);
 }
 
-void printIRFunction(IR::Function* function, int indent)
+void printIRFunction(IR::Function& function, int indent)
 {
-	const bool isExternal = function->external;
-	if (isExternal)
-		print("external func ", indent); 
-	else
-		print("func ", indent); 
-	print(prettyString(function->name, FGTextColor::Blue, true));
-	printLine(typeString(function->getType()));
+	print("func ", indent); 
+	print(prettyString(function.name, FGTextColor::Blue, true));
+	printLine(typeString(function.getType()));
 
-	if (!isExternal)
-		printIRScope(&function->scope, indent);
+	printIRScope(&function.getScope(), indent);
+}
+
+void printIRConstant(IR::Constant& constant, int indent)
+{
+	print("def ", indent); 
+	print(prettyString(constant.getName(), FGTextColor::Blue, true));
+	printLine(typeString(constant.getType()));
 }
 
 void printIRModule(IR::Module* module, int indent = 0)
 {
 	printLine("module:", indent);
-	printIRFunction(&*module->mainFunction, indent + 1);
+
+	for (auto& constant : module->constants)
+	{
+		if (constant->getType()->isFunction())
+			continue;
+			
+		printIRConstant(*constant, indent + 1);
+		printLine("");
+	}
+
+	printIRFunction(*module->main, indent + 1);
+
+	for (auto& func : module->functions)
+	{
+		printLine("");
+		printIRFunction(*func, indent + 1);
+	}
+
 	printLine("");
 }
 

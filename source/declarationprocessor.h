@@ -2,10 +2,10 @@
 
 struct DeclarationProcessor : public AST::Visitor
 {
-	Context* context;
+	ASTContext* context;
 	SymbolScope* currentScope;
 
-	DeclarationProcessor(Context* context, SymbolScope* initialScope)
+	DeclarationProcessor(ASTContext* context, SymbolScope* initialScope)
 		: context(context)
 		, currentScope(initialScope)
 	{
@@ -141,7 +141,7 @@ struct DeclarationProcessor : public AST::Visitor
 	}
 };
 
-void processDeclarations(Context* context, AST::Node* root, SymbolScope* initialScope = nullptr)
+void processDeclarations(ASTContext* context, AST::Node* root, SymbolScope* initialScope = nullptr)
 {
 	//LOG("Processing declarations...");
 	DeclarationProcessor dp(context, initialScope);

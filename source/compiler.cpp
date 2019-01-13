@@ -4,9 +4,6 @@
 #include "token.h"
 #include "scanner.h"
 
-const uint DEFAULT_INT_SIZE = 32;
-const bool DEFAULT_INT_ISSIGNED = true;
-
 #include "types.h"
 #include "symbols.h"
 #include "context.h"
@@ -23,6 +20,7 @@ const bool DEFAULT_INT_ISSIGNED = true;
 #include "dependencyresolver.h"
 
 #include "evaluation.h"
+#include "evaluation/evaluation.h"
 #include "astprocessor.h"
 
 ///////////////////////////////////////////////////////////////////////////////
@@ -51,14 +49,20 @@ int main(int argc, char** argv)
 	else
 	{
 		LOG("Parse success!");
-		Context astContext;
+		ASTContext astContext;
 
 		Backend::Context backend;
 
+		Backend::Context evaluationBackend;
+		IR::Module evaluationIrModule;
+		EvaluationContext econtext { &evaluationBackend, &evaluationIrModule };
+
+		// TODO: Remove old eval engine
 		assert(initExpressionEvaluator());
+		assert(Evaluation::init(econtext));
 
 		printLine("Processing AST:");
-		processAST(&astContext, &ast);
+		processAST(econtext, &astContext, &ast);
 
 		printLine("Resulting AST:");
 		printAST(&astContext, &ast, 1);

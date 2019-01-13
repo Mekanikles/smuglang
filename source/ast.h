@@ -87,7 +87,7 @@ namespace AST
 
 		virtual const vector<Node*> getChildren() { return vector<Node*>(); }
 		virtual void accept(Visitor* v) = 0;
-		virtual string toString(Context* context) = 0;
+		virtual string toString(ASTContext* context) = 0;
 
 		uint order = s_nodeCount++;
 
@@ -124,7 +124,7 @@ namespace AST
 
 	struct Expression : Statement
 	{
-		virtual TypeRef& getType(Context* context) = 0;
+		virtual TypeRef& getType(ASTContext* context) = 0;
 
 		virtual bool isSymbolExpression() { return false; }
 	};
@@ -145,7 +145,7 @@ namespace AST
 	{
 		vector<Statement*> statements;
 
-		string toString(Context* context) override { return "StatementBody"; }
+		string toString(ASTContext* context) override { return "StatementBody"; }
 		const vector<Node*> getChildren() override
 		{
 			return vector<Node*>(statements.begin(), statements.end());
@@ -163,7 +163,7 @@ namespace AST
 	{
 		StatementBody* body;
 
-		string toString(Context* context) override { return "Module"; }
+		string toString(ASTContext* context) override { return "Module"; }
 		const vector<Node*> getChildren() override
 		{
 			assert(body);
@@ -181,7 +181,7 @@ namespace AST
 		Statement* statement;
 		Statement* elseStatement;
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "IfStatement";
 			return s; 
@@ -213,7 +213,7 @@ namespace AST
 		LinkType linkType;
 
 		string file;
-		string toString(Context* context) override { return string("Import(file:") + file + ")"; }	
+		string toString(ASTContext* context) override { return string("Import(file:") + file + ")"; }	
 	};
 
 	struct EvalStatement : public NodeImpl<EvalStatement, StatementBody>
@@ -221,7 +221,7 @@ namespace AST
 		Expression* expr = nullptr;
 		bool isGenerated = false;
 
-		string toString(Context* context) override
+		string toString(ASTContext* context) override
 		{
 			string s = "EvalStatement";
 			return s;
@@ -245,7 +245,7 @@ namespace AST
 	{
 		Expression* expr = nullptr;
 
-		string toString(Context* context) override
+		string toString(ASTContext* context) override
 		{
 			string s = "ReturnStatement";
 			return s;
@@ -278,7 +278,7 @@ namespace AST
 			return type;
 		}
 
-		string toString(Context* context) override
+		string toString(ASTContext* context) override
 		{
 			string val = processQuotedInputString(value);
 			string str = processStringForOutput(val);
@@ -287,7 +287,7 @@ namespace AST
 			return s;
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			return context->getTypeLiteral(this);
 		}
@@ -307,14 +307,14 @@ namespace AST
 			return createPrimitiveType(PrimitiveClass::Int);
 		}
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "IntegerLiteral(" + value + ")";
 			s += typeString(getType(context));
 			return s;
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			return context->getTypeLiteral(this);
 		}
@@ -334,14 +334,14 @@ namespace AST
 			return createPrimitiveType(PrimitiveClass::Float);
 		}		
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "FloatLiteral(" + value + ")";
 			s += typeString(getType(context));
 			return s;
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			return context->getTypeLiteral(this);
 		}
@@ -361,14 +361,14 @@ namespace AST
 			return createTypeVariable(std::move(type));
 		}
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "TypeLiteral";
 			s += typeString(getType(context));
 			return s;
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			return context->getTypeLiteral(this);
 		}
@@ -381,24 +381,24 @@ namespace AST
 		Expression* initExpr = nullptr;
 		bool isVariadic = false;
 
-		Symbol* getSymbol(Context* context)
+		Symbol* getSymbol(ASTContext* context)
 		{
 			auto* symbolSource = context->getSymbolSource(this);
 			assert(symbolSource);
 			return symbolSource->getSymbol();
 		}
 
-		TypeRef& getType(Context* context)
+		TypeRef& getType(ASTContext* context)
 		{
 			return getSymbol(context)->getType();
 		}
 
-		const string& getName(Context* context)
+		const string& getName(ASTContext* context)
 		{
 			return getSymbol(context)->name;
 		}
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 	
 			string s = "FunctionInParam(" + symbolString(name) + ")";
 			s += typeString(getType(context));
@@ -421,24 +421,24 @@ namespace AST
 		string name;
 		Expression* typeExpr = nullptr;
 
-		Symbol* getSymbol(Context* context)
+		Symbol* getSymbol(ASTContext* context)
 		{
 			auto* symbolSource = context->getSymbolSource(this);
 			assert(symbolSource);
 			return symbolSource->getSymbol();
 		}
 
-		TypeRef& getType(Context* context)
+		TypeRef& getType(ASTContext* context)
 		{
 			return getSymbol(context)->getType();
 		}
 
-		const string& getName(Context* context)
+		const string& getName(ASTContext* context)
 		{
 			return getSymbol(context)->name;
 		}
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "FunctionOutParam(" + symbolString(name) + ")";
 			s += typeString(getType(context));
@@ -463,7 +463,7 @@ namespace AST
 		bool specifiedOutParams = false;
 		bool isCVariadic = false;
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "FunctionSignature(isCVariadic: " + std::to_string(isCVariadic) +
 					", isAny: " + std::to_string(getType(context).getType().isAny()) + ")";
@@ -471,7 +471,7 @@ namespace AST
 			return s;
 		}
 
-		TypeRef createLiteralType(Context* context)
+		TypeRef createLiteralType(ASTContext* context)
 		{
 			auto func = std::make_unique<FunctionClass>();
 			func->isCVariadic = isCVariadic;
@@ -491,7 +491,7 @@ namespace AST
 			return createTypeVariable(Type(std::move(func)));
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			return context->getTypeLiteral(this);
 		}
@@ -516,12 +516,12 @@ namespace AST
 
 		bool isSymbolExpression() override { return true; }
 
-		bool hasSymbol(Context* context)
+		bool hasSymbol(ASTContext* context)
 		{
 			return context->getSymbolDependency(this) != nullptr;
 		}
 
-		Node* getNodeForDependency(Context* context)
+		Node* getNodeForDependency(ASTContext* context)
 		{
 			auto* symbolDependency = context->getSymbolDependency(this);
 			assert(symbolDependency);
@@ -530,14 +530,14 @@ namespace AST
 			return symbolSource->getNode();
 		}
 
-		Symbol* getSymbol(Context* context)
+		Symbol* getSymbol(ASTContext* context)
 		{
 			auto* symbolDependency = context->getSymbolDependency(this);
 			assert(symbolDependency);
 			return symbolDependency->getSymbol();
 		}
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s;
 			s = "SymbolExpression(" + symbol + ")";
@@ -546,7 +546,7 @@ namespace AST
 			return s; 
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			return getSymbol(context)->getType();
 		}
@@ -557,7 +557,7 @@ namespace AST
 		vector<Expression*> exprs;
 		std::optional<TypeRef> type;
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s;
 			s = "Tuple";
@@ -565,7 +565,7 @@ namespace AST
 			return s; 
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			return context->getTypeLiteral(this);
 		}
@@ -588,7 +588,7 @@ namespace AST
 
 		FunctionArgumentBinding* argBinding = nullptr;
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "Call(" + function + ")";
 			if (hasSymbol(context))
@@ -596,19 +596,19 @@ namespace AST
 			return s; 
 		}
 
-		bool hasSymbol(Context* context)
+		bool hasSymbol(ASTContext* context)
 		{
 			return context->getSymbolDependency(this->expr) != nullptr;
 		}
 
-		Symbol* getSymbol(Context* context)
+		Symbol* getSymbol(ASTContext* context)
 		{
 			auto* symbolDependency = context->getSymbolDependency(this->expr);
 			assert(symbolDependency);
 			return symbolDependency->getSymbol();
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			auto& type = getSymbol(context)->getType();
 			FunctionClass& function = type->getFunction();
@@ -638,7 +638,7 @@ namespace AST
 		SymbolExpression* symExpr;
 		Expression* expr = nullptr;
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			assert(symExpr);
 			string s = "Assigment";
@@ -660,7 +660,7 @@ namespace AST
 		TokenType opType;
 		Expression* expr = nullptr;
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "UnaryOp(" + ::toString(opType) + ")";
 			s += typeString(getType(context));
@@ -675,7 +675,7 @@ namespace AST
 			return ret;
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			// TODO: Bubble up types through ops for now
 			return expr->getType(context);
@@ -688,7 +688,7 @@ namespace AST
 		Expression* expr = nullptr;
 		std::optional<TypeRef> type;
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "UnaryPostfixOp(" + ::toString(opType) + ")";
 			s += typeString(getType(context));
@@ -703,7 +703,7 @@ namespace AST
 			return ret;
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			return context->getTypeLiteral(this);
 		}		
@@ -715,7 +715,7 @@ namespace AST
 		Expression* left = nullptr;
 		Expression* right = nullptr;
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "BinaryOp(" + ::toString(opType) + ")";
 			s += typeString(getType(context));
@@ -731,7 +731,7 @@ namespace AST
 			return ret;
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			// TODO: Bubble up types through ops for now
 			TypeRef& t1 = left->getType(context);
@@ -752,7 +752,7 @@ namespace AST
 		Expression* typeExpr = nullptr;
 		Expression* initExpr = nullptr;
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "SymbolDeclaration(" + symbolString(symbol) + ", SQ = " + 
 					sqToString(storageQualifier) + ")" + typeString(getType(context));
@@ -763,13 +763,13 @@ namespace AST
 		bool isConst() { return storageQualifier == StorageQualifier::Const; }
 		bool isDefine() { return storageQualifier == StorageQualifier::Def; }
 
-		Symbol* getSymbol(Context* context)
+		Symbol* getSymbol(ASTContext* context)
 		{
 			auto* symbolSource = context->getSymbolSource(this);
 			return symbolSource->getSymbol();
 		}
 
-		const TypeRef& getType(Context* context)
+		const TypeRef& getType(ASTContext* context)
 		{
 			return getSymbol(context)->getType();
 		}
@@ -794,14 +794,14 @@ namespace AST
 		FunctionLiteral()
 		{}	
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s = "FunctionLiteral";
 			s += typeString(getType(context));
 			return s;
 		}
 
-		TypeRef& getType(Context* context) override
+		TypeRef& getType(ASTContext* context) override
 		{
 			assert(signature);
 			auto& signType = signature->getType(context);
@@ -826,14 +826,14 @@ namespace AST
 		string symbol;
 		FunctionLiteral* funcLiteral = nullptr;
 
-		string toString(Context* context) override 
+		string toString(ASTContext* context) override 
 		{ 
 			string s;
 			s += "FunctionDeclaration(" + symbolString(symbol) + ")";
 			return s;
 		}
 
-		Symbol* getSymbol(Context* context)
+		Symbol* getSymbol(ASTContext* context)
 		{
 			auto* symbolSource = context->getSymbolSource(this);
 			assert(symbolSource);
