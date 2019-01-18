@@ -37,7 +37,83 @@ unique<IR::Expression> concretizeExpression(EvaluationContext& eContext, ASTCont
 	return std::move(c.expressionStack.back());
 }
 
-unique<IR::Literal> createLiteralFromConstantExpression(EvaluationContext& eContext, ASTContext& astContext, AST::Expression& expr)
+struct ExpressionEvaluator
+{
+	unique<IR::Literal> evaluateCall(IR::Function& func)
+	{
+		for (auto& block : func.scope.blocks)
+		{
+			for (auto& statement : block->statements)
+			{
+				switch (statement->statementType)
+				{
+					case IR::Statement::Return:
+					{
+						IR::Return& ret = static_cast<IR::Return&>(*statement);
+						return evaluate(*ret.expr);
+					}
+					default:
+					{
+						assert(false && "Call evaluation does not support much yet...");
+					}
+				}
+			}
+		}
+
+		assert(false && "No return value found!");
+		return unique<IR::Literal>();
+	}
+
+	// TODO: Add "Value" object? Should not use literal for this
+	unique<IR::Literal> evaluate(IR::Expression& expr)
+	{
+		switch (expr.exprType)
+		{
+			case IR::Expression::Literal:
+			{
+				auto& literal = static_cast<IR::Literal&>(expr);
+				return literal.copy();
+			}
+			case IR::Expression::Reference:
+			{
+				auto& ref = static_cast<IR::Reference&>(expr);
+				assert(ref.referenceable);
+
+				assert(ref.referenceable->isConstant() && "Only constant references are supported for now");
+
+				const IR::Constant& constant = ref.referenceable->asConstant();
+				return std::make_unique<IR::Literal>(constant.getType(), constant.literal->data);
+			}
+			case IR::Expression::BinaryOp:
+			{
+				assert(false && "BinaryOp evaluation not supported yet");
+			}
+			case IR::Expression::Call:
+			{
+				auto& call = static_cast<IR::Call&>(expr);
+				assert(call.callable.get());
+				auto callable = evaluate(*call.callable.get());
+				assert(call.args.empty() && "Evaluation of call arguments not supported yet");
+
+				IR::Function* func = eContext.module->getFunction(callable->readValue<IR::FunctionId>());
+				assert(func);
+
+				return evaluateCall(*func);
+			}
+		}
+
+		assert(false && "Could not evaluate unknown expression");
+	}
+
+	ExpressionEvaluator(EvaluationContext& eContext)
+		: eContext(eContext)
+	{
+	}
+
+	EvaluationContext& eContext;
+};
+
+unique<IR::Literal> createLiteralFromASTExpression(EvaluationContext& eContext, ASTContext& astContext, AST::Expression& expr)
 {
 	auto cexpr = concretizeExpression(eContext, astContext, expr);
 	switch (cexpr->exprType)
@@ -54,22 +130,19 @@ unique<IR::Literal> createLiteralFromConstantExpression(EvaluationContext& eCont
 			const IR::Constant& constant = ref->referenceable->asConstant();
 			return std::make_unique<IR::Literal>(constant.getType(), constant.literal->data);
 		}
-		case IR::Expression::BinaryOp:
+		default:
 		{
-		}
-		case IR::Expression::Call:
-		{
+			ExpressionEvaluator e(eContext);
+			return e.evaluate(*cexpr.get());
 		}
 	}
-
-	assert("Could not create literal from constant expression" && false);
-	return unique<IR::Literal>(nullptr);
 }
 
 void storeConstantFromExpression(EvaluationContext& eContext, ASTContext& astContext, AST::Expression& expr, SymbolSource& source)
 {
-	auto literal = createLiteralFromConstantExpression(eContext, astContext, expr);	
-	auto constant = std::make_unique<IR::Constant>(std::move(literal), source.getSymbol()->name, &source);
+	string name = source.getSymbol()->name;
+	auto literal = createLiteralFromASTExpression(eContext, astContext, expr);
+	auto constant = std::make_unique<IR::Constant>(std::move(literal), name, &source);
 	eContext.module->addConstant(std::move(constant));
 }
 
@@ -94,7 +167,7 @@ string readStringFromLiteral(IR::Literal& literal)
 
 string evaluateExpressionAsString(EvaluationContext& eContext, ASTContext& astContext, AST::Expression& expr)
 {
-	auto literal = createLiteralFromConstantExpression(eContext, astContext, expr);	
+	auto literal = createLiteralFromASTExpression(eContext, astContext, expr);	
 	return readStringFromLiteral(*literal);
 }
 

@@ -34,6 +34,13 @@ unique<IR::Literal> createIntegerLiteral(const TypeRef& type, long long l)
 	return createExpression<IR::Literal>(type, std::move(data));
 }
 
+	ConcretizerContext* context = nullptr;
+	IR::Block* currentBlock = nullptr;
+	ASTContext* astContext = nullptr;
+
+
+IR::Function* generateConcreteFunction(ConcretizerContext* context, ASTContext* astContext, IR::Function& func, AST::FunctionLiteral* funcLiteral);
+
 struct ExpressionConcretizer : AST::Visitor
 {
 	virtual void visit(AST::Call* node) override
@@ -67,6 +74,22 @@ struct ExpressionConcretizer : AST::Visitor
 		assert(ref);
 
 		expressionStack.push_back(createExpression<IR::Reference>(ref));
+	}
+
+	string generateUniqueFunctionName(AST::FunctionLiteral* node)
+	{
+		return string("lambda<") + std::to_string(node->order) + ">";
+	}
+
+	virtual void visit(AST::FunctionLiteral* node) override
+	{
+		auto& type = node->getType(this->astContext);
+
+		auto func = std::make_unique<IR::Function>(type, generateUniqueFunctionName(node));
+		auto funcPtr = context->module->addFunction(std::move(func));
+		generateConcreteFunction(this->context, this->astContext, *funcPtr, node);
+		
+		expressionStack.push_back(funcPtr->createLiteral());
 	}
 
 	virtual void visit(AST::IntegerLiteral* node) override
@@ -184,12 +207,13 @@ struct FunctionConcretizer : AST::Visitor
 		auto* ss = astContext->getSymbolSource(node);
 		assert(ss);
 		auto* ref = this->context->module->getReferenceable(ss);
-		// TODO: :(
 		assert(ref);
-		auto* constant = static_cast<IR::Constant*>(ref);
-		assert(constant->literal->getType()->isFunction());
-		auto* func = static_cast<IR::Function*>(constant->literal.get());
-		generateConcreteFunction(*func, node->funcLiteral);
+
+		auto& constant = ref->asConstant();
+		IR::Function* func = context->module->getFunction(constant.literal->readValue<IR::FunctionId>());
+		assert(func);
+
+		generateConcreteFunction(this->context, this->astContext, *func, node->funcLiteral);
 	}
 
 	virtual void visit(AST::SymbolDeclaration* node) override
@@ -291,7 +315,9 @@ struct FunctionConcretizer : AST::Visitor
 				if (type->isFunction())
 				{
 					auto func = std::make_unique<IR::Function>(type, symbol->name);
-					this->context->module->addFunction(std::move(func), symbolSource);
+					auto funcPtr = this->context->module->addFunction(std::move(func));
+
+					this->context->module->addConstant(funcPtr->createConstant(symbolSource));
 				}
 				else
 				{
@@ -355,18 +381,6 @@ struct FunctionConcretizer : AST::Visitor
 		}			
 	}
 
-	IR::Function* generateConcreteFunction(IR::Function& func, AST::FunctionLiteral* funcLiteral)
-	{
-		FunctionConcretizer c(this->context, this->astContext); 
-
-		// Handle signature
-		handleSignature(func, *funcLiteral);
-		
-		// Handle body
-		c.generateConcreteStatementBody(&func.getScope(), funcLiteral->body);
-		return &func;
-	}
-
 	FunctionConcretizer(ConcretizerContext* context, ASTContext* astContext)
 		: context(context)
 		, astContext(astContext)
@@ -377,6 +391,18 @@ struct FunctionConcretizer : AST::Visitor
 	IR::Block* currentBlock = nullptr;
 	ASTContext* astContext = nullptr;
 };
+
+IR::Function* generateConcreteFunction(ConcretizerContext* context, ASTContext* astContext, IR::Function& func, AST::FunctionLiteral* funcLiteral)
+{
+	FunctionConcretizer c(context, astContext); 
+
+	// Handle signature
+	c.handleSignature(func, *funcLiteral);
+	
+	// Handle body
+	c.generateConcreteStatementBody(&func.getScope(), funcLiteral->body);
+	return &func;
+}
 
 TypeRef createMainType()
 {
@@ -405,6 +431,7 @@ IR::Module concretizeASTModule(Backend::Context* backend, ASTContext* astContext
 	module.main = std::make_unique<IR::Function>(mainType, "main");
 
 	FunctionConcretizer c(&context, astContext);
+	// TODO: Handle signature
 	c.generateConcreteStatementBody(&module.main->scope, astModule->body);
  
 	// Add return instruction

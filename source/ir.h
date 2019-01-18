@@ -99,7 +99,7 @@ namespace IR
 		virtual const TypeRef& getType() const override { return this->type; }
 	};
 
-	struct Literal : Expression
+	struct Literal final : Expression
 	{
 		const TypeRef type;
 
@@ -121,6 +121,18 @@ namespace IR
 			this->backendValue = backendValue;
 		}
 
+		template<typename T>
+		T& readValue()
+		{
+			assert(data.size() == sizeof(T));
+			return *(T*)data.data();
+		}
+
+		unique<Literal> copy() const
+		{
+			return std::make_unique<Literal>(type, data);
+		}
+
 		virtual string toString() override
 		{
 			string s = "Literal";
@@ -129,6 +141,8 @@ namespace IR
 
 		virtual const TypeRef& getType() const override { return this->type; }
 	};
+
+	const struct Constant& asConstant(const struct Referenceable& ref);
 
 	struct Referenceable : Value
 	{
@@ -150,15 +164,21 @@ namespace IR
 			, type(type)
 			, name(name)
 			, symbolSource(symbolSource)
-		{}
+		{
+		}
 
 		const string getName() const { return name; }
 		virtual const TypeRef& getType() const = 0;
 
+		const bool isConstant() const
+		{
+			return type == Type::Constant;
+		}
+
 		const struct Constant& asConstant() const
 		{
 			assert(type == Type::Constant);
-			return *(const struct Constant*)(this);
+			return ::IR::asConstant(*this);
 		}
 	};
 
@@ -227,6 +247,11 @@ namespace IR
 
 		virtual const TypeRef& getType() const override { return literal->getType(); }
 	};
+
+	const struct Constant& asConstant(const Referenceable& ref)
+	{
+		return static_cast<const struct Constant&>(ref);
+	} 
 
 	struct Call;
 	struct Assignment;
@@ -401,17 +426,22 @@ namespace IR
 		}	
 	};
 
-	static u64 functionId = 0;
-	struct Function : Literal
+	// A function can be used a literal, but since we should copy instruction memory, the 
+	//	actual value of a function is its id
+	using FunctionId = u64;
+	static FunctionId functionId = 0;
+	struct Function
 	{
-		u64 id;
+		FunctionId id;
+		TypeRef type;
 		string name; // Duplicate of constant name for non-main/lambdas
 		Signature signature;
 		Scope scope;
+		Backend::Value* backendValue = nullptr;
 
 		Function(const TypeRef type, string name)
-			: Literal(type, vector<u8> { (u8*)&id, ((u8*)&id) + sizeof(id) })
-			, id(++functionId)
+			: id(++functionId)
+			, type(type)
 			, name(name)
 		{	
 		}
@@ -426,9 +456,29 @@ namespace IR
 			return scope;
 		}
 
-		u64 getId() const
+		string getName()
 		{
-			return *(u64*)(data.data());
+			return name;
+		}
+
+		FunctionId getId() const
+		{
+			return id;
+		}
+
+		const TypeRef& getType() const
+		{
+			return type;
+		}
+
+		unique<Literal> createLiteral()
+		{
+			return std::make_unique<IR::Literal>(type, vector<u8>((u8*)&id, ((u8*)&id) + sizeof(FunctionId)));
+		}
+
+		unique<Constant> createConstant(SymbolSource* symbolSource)
+		{
+			return std::make_unique<IR::Constant>(createLiteral(), name, symbolSource);
 		}
 	};
 
@@ -438,10 +488,12 @@ namespace IR
 		unique<Function> main;
 		vector<unique<External>> externals;
 		vector<unique<Constant>> constants;
-		vector<Function*> functions;
+		vector<unique<Function>> functions;
 
 		// TODO: Build the correct scopes directly from AST to avoid searching for symbols
 		std::unordered_map<const SymbolSource*, Referenceable*> refMap;
+
+		std::unordered_map<FunctionId, Function*> functionMap;	
 
 		void cacheReferenceable(Referenceable* ref)
 		{
@@ -450,17 +502,21 @@ namespace IR
 
 		Referenceable* getReferenceable(SymbolSource* symbolSource)
 		{
-			auto* ref = this->refMap[symbolSource];
-			assert(ref);
+			auto* ref = refMap[symbolSource];
 			return ref;
 		}
 
-		Constant* addFunction(unique<Function> func, SymbolSource* symbolSource)
+		Function* addFunction(unique<Function> func)
 		{
-			functions.push_back(func.get());
-			auto constant = std::make_unique<IR::Constant>(std::move(func), func->name, symbolSource);
-			addConstant(std::move(constant));
-			return &*constants.back();
+			functions.push_back(std::move(func));
+			auto* funcPtr = &*functions.back();
+			functionMap[funcPtr->getId()] = funcPtr;
+			return funcPtr;
+		}
+
+		Function* getFunction(FunctionId id)
+		{
+			return functionMap[id];
 		}
 
 		Constant* addConstant(unique<Constant> constant)

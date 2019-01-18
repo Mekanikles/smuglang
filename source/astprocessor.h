@@ -72,6 +72,13 @@ struct ASTProcessor : AST::Visitor
 		Symbol* symbol = node->getSymbol(this->context);
 		symbol->firstInitOrder = node->order;
 		symbol->type = functionType;
+
+		// Store function for evaluation
+		{
+			auto source = context->getSymbolSource(node);
+			assert(source);
+			Evaluation::storeConstantFromExpression(econtext, *context, *node->funcLiteral, *source);	
+		}
 	}
 
 	void visit(AST::FunctionSignature* node) override

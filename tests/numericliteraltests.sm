@@ -25,30 +25,32 @@ func printFloat(arg : f64)
 };
 */
 
-
 func sayHello(arg : cchar*)
 {
 	printf("Hello %s\n", arg);
 	extern printf : func(fmt : cchar*, args : cchar*) -> errCode : cint;	
 };
 
+//sayHello("World");
+
+/*
 def evalStr : cchar* = "sayHello(\"World\")";
 eval(evalStr);
 
-/*eval(innerValue());
+eval(innerValue());
+*/
+
+eval(chainedReturnValue());
 
 func innerValue() -> cchar*
 {
 	return "sayHello(\"Kreti\"); sayHello(\"Pleti\")";
-};*/
+};
 
-/*func chainedReturnValue() -> cchar*
+func chainedReturnValue() -> cchar*
 {
 	return innerValue();
 };
-
-eval(chainedReturnValue());
-*/
 
 /*
 func test(fmt : cchar*, args...)

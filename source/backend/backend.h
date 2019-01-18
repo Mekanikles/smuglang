@@ -31,6 +31,10 @@
 namespace Backend
 {
 
+// HACK: We need the ir module when generating expressions (for function literals)
+//	can we get rid of this dependency? Otherwise, add the IR module to the generator context
+static IR::Module* s_hackCurrentIRModule = nullptr;
+
 const uint DEFAULT_INT_SIZE = 32;
 const bool DEFAULT_INT_ISSIGNED = true;
 
@@ -299,8 +303,6 @@ struct Context
 	{
 		auto& type = literal.getType();
 		assert(type->isConcrete());
-		assert(!type->isFunction());
-
 		assert(!literal.backendValue);
 
 		if (type->isPrimitive())
@@ -311,6 +313,18 @@ struct Context
 				long long l = *(long long*)literal.data.data();
 				literal.backendValue = createIntegerConstant((uint64_t)l, p.size, p.isSigned());
 			}
+		}
+		else if (type->isFunction())
+		{
+			// Here we cheat a bit, the literal is the function id, but we want to treat that value
+			//	as the function ptr in generated code
+			const IR::FunctionId id  = literal.readValue<IR::FunctionId>();
+
+			IR::Function* func = s_hackCurrentIRModule->getFunction(id);
+			assert(func);
+			assert(func->backendValue);
+
+			literal.backendValue = func->backendValue;
 		}
 		else
 		{
@@ -517,13 +531,13 @@ struct Generator
 		}
 	}
 
-	void generateFunctionHead(IR::Function& irfunction)
+	void generateFunctionHead(IR::Function& irfunction, string name)
 	{
 		const TypeRef& funcType = irfunction.getType();
 		assert(funcType->isConcrete() && "Inconcrete types are not allowed in ir generation");
 		assert(funcType->isFunction());
 
-		auto* func = m_context.createFunction(funcType->getFunction(), irfunction.name);
+		auto* func = m_context.createFunction(funcType->getFunction(), name);
 		assert(!irfunction.backendValue);
 		irfunction.backendValue = func;
 	}
@@ -603,12 +617,14 @@ struct Generator
 
 	void generateMain(IR::Module& irmodule)
 	{
-		generateFunctionHead(*irmodule.main);
+		generateFunctionHead(*irmodule.main, "main");
 		generateFunctionBody(*irmodule.main);
 	}
 
 	void generateModule(IR::Module& irmodule)
 	{
+		s_hackCurrentIRModule = &irmodule;
+
 		vector<IR::Function*> funcs;
 
 		// Take care of external symbols
@@ -617,22 +633,20 @@ struct Generator
 			generateExternal(*external);
 		}
 
-		// Generate all constants and function headers, so we can generate function bodies freely
+		// Generate all function heads so we can fold constants to the underlying backend value
+		for (auto& function : irmodule.functions)
+		{
+			// TODO: Generalize literal generation to include functions
+			auto& func = *function;
+			generateFunctionHead(func, func.getName());
+			assert(func.backendValue);
+			funcs.push_back(&func);
+		}
+
+		// Generate all constants before function bodies, so we can cross reference between functions
 		for (auto& constant : irmodule.constants)
 		{
-			if (constant->getType()->isFunction())
-			{
-				// TODO: Generalize literal generation to include functions
-				auto* func = static_cast<IR::Function*>(constant->literal.get());
-				generateFunctionHead(*func);
-				assert(func->backendValue);
-				constant->backendValue = func->backendValue;
-				funcs.push_back(&*func);
-			}
-			else
-			{
-				generateConstant(*constant);
-			}
+			generateConstant(*constant);
 		}
 
 		// Generate all function bodies
@@ -656,7 +670,9 @@ struct Generator
 			{
 				printLine(l, 1);
 			}
-		}	
+		}
+
+		s_hackCurrentIRModule = nullptr;
 	}
 
 	Generator(Context& context)
