@@ -464,7 +464,7 @@ struct LLVMIRGenerator : AST::Visitor
 		{
 			switch (node->opType)
 			{
-				case TokenType::CompareOp:
+				case TokenType::EqualsOp:
 					pushValue(m_builder.CreateICmpEQ(leftVal, rightVal, "icmp")); 
 					break;
 				case TokenType::Plus:
@@ -486,7 +486,7 @@ struct LLVMIRGenerator : AST::Visitor
 		{
 			switch (node->opType)
 			{
-				case TokenType::CompareOp:
+				case TokenType::EqualsOp:
 					pushValue(m_builder.CreateFCmpOEQ(leftVal, rightVal, "fcmp")); 
 					break;
 				case TokenType::Plus:

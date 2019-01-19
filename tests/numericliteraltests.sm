@@ -1,72 +1,38 @@
 def cchar = #primitives.c.char;
 def cint = #primitives.c.int;
 def f64 = #primitives.f64;
+def s64 = #primitives.s64;
 
-/*
-func print(fmt : cchar*, args...) -> () 
-{
-	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
-	printf(fmt, args);
-};
-*/
-/*
-printFloat(getFloat(10.0));
+var f : f64 = 5.5;
+//printFloat(6.4 + 6.0 * f);
 
-func getFloat(floatArg1 : f64) -> f64
-{
-	return floatArg1 * 7.0 * 5.6 + 6.35 / 45.0 - 19.0 * 0.56 + 4.7;
-};
+var i : s64 = 7;
+//printInt(6 + 6 * i);
 
+if (f < 5.0)
+	print("ERROR\n");
+else
+	print("f was bigger than 5!\n");
 
-func printFloat(arg : f64)
+if (i > 6)
+	print("i was bigger than 6!\n");
+else
+	print("ERROR\n");
+
+/*func printFloat(arg : f64)
 {
 	printf("A float %f\n", arg);
-	extern printf : func(fmt : cchar*, args : f64) -> errCode : cint;	
+	extern printf : func(fmt : cchar*, farg : f64) -> errCode : cint;	
 };
-*/
 
-func sayHello(arg : cchar*)
+func printInt(arg : s64)
 {
-	printf("Hello %s\n", arg);
-	extern printf : func(fmt : cchar*, args : cchar*) -> errCode : cint;	
-};
+	printf("An int %il\n", arg);
+	extern printf : func(fmt : cchar*, sarg : s64) -> errCode : cint;	
+};*/
 
-//sayHello("World");
-
-/*
-def evalStr : cchar* = "sayHello(\"World\")";
-eval(evalStr);
-
-eval(innerValue());
-*/
-
-eval(chainedReturnValue());
-
-func innerValue() -> cchar*
+func print(arg : cchar*) -> () 
 {
-	return "sayHello(\"Kreti\"); sayHello(\"Pleti\")";
+	printf("%s", arg);
+	extern printf : func(fmt : cchar*, carg : cchar*) -> errCode : cint;
 };
-
-func chainedReturnValue() -> cchar*
-{
-	return innerValue();
-};
-
-/*
-func test(fmt : cchar*, args...)
-{
-	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
-	printf(fmt, args);	
-};
-
-test("Hello %s", ("World"));
-*/
-
-/*
-func test(e : #primitives.int)
-{
-};
-
-var i : cint = 5;
-test(i);
-*/

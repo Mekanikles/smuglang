@@ -176,7 +176,11 @@ struct ExpressionConcretizer : AST::Visitor
 			case TokenType::Minus: opType = IR::BinaryOp::Sub; break;
 			case TokenType::Asterisk: opType = IR::BinaryOp::Mul; break;
 			case TokenType::Slash: opType = IR::BinaryOp::Div; break;
-			case TokenType::CompareOp: opType = IR::BinaryOp::Eq; break;
+			case TokenType::EqualsOp: opType = IR::BinaryOp::Eq; break;
+			case TokenType::LessThanOp: opType = IR::BinaryOp::LT; break;
+			case TokenType::GreaterThanOp: opType = IR::BinaryOp::GT; break;
+			case TokenType::LessThanOrEqualsOp: opType = IR::BinaryOp::LTE; break;
+			case TokenType::GreaterThanOrEqualsOp: opType = IR::BinaryOp::GTE; break;
 			default: assert(false && "Invalid op type");
 		}
 
@@ -252,6 +256,25 @@ struct FunctionConcretizer : AST::Visitor
 		assert(valExprs.size() == 1);		
 
 		this->currentBlock->addStatement(std::make_unique<IR::Assignment>(std::move(assExprs.back()), std::move(valExprs.back())));		
+	}	
+
+	virtual void visit(AST::IfStatement* node) override
+	{
+		auto condExprs = generateConcreteExpression(node->expr);
+		assert(condExprs.size() == 1);
+
+		auto cond = std::make_unique<IR::Conditional>(std::move(condExprs.back()));
+
+		auto* prevBlock = this->currentBlock;
+		this->currentBlock = &cond->trueBlock;
+		node->statement->accept(this);
+
+		this->currentBlock = &cond->falseBlock;
+		node->elseStatement->accept(this);
+
+		this->currentBlock = prevBlock;
+
+		this->currentBlock->addStatement(std::move(cond));				
 	}	
 
 	virtual void visit(AST::StatementBody* node) override
@@ -342,10 +365,15 @@ struct FunctionConcretizer : AST::Visitor
 		assert(symbolScope);
 		handleSymbolScope(*scope, *symbolScope);
 
+		auto* prevScope = this->currentScope;
+		this->currentScope = scope;
+
 		auto* prevBlock = this->currentBlock;
 		this->currentBlock = scope->addBlock();
 		AST::visitChildren(node, this);
 		this->currentBlock = prevBlock;
+		
+		this->currentScope = prevScope;
 	}
 
 	vector<std::unique_ptr<IR::Expression>> generateConcreteExpression(AST::Expression* expression)
@@ -388,6 +416,7 @@ struct FunctionConcretizer : AST::Visitor
 	}
 
 	ConcretizerContext* context = nullptr;
+	IR::Scope* currentScope = nullptr;
 	IR::Block* currentBlock = nullptr;
 	ASTContext* astContext = nullptr;
 };

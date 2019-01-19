@@ -97,6 +97,7 @@ int main(int argc, char** argv)
 			}
 		}
 
+		/*
 		printLine("Generating LLVM IR from AST...");
 		{
 			std::stringstream llvmOutput;
@@ -113,7 +114,7 @@ int main(int argc, char** argv)
 				printLine(l, 1);
 				//outFile << l << std::endl;
 			}
-		}
+		}*/
 
 		// output generic filename without ext
 		std::cout << outFileName;

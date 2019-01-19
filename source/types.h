@@ -535,6 +535,7 @@ struct PrimitiveClass : TypeClass
 	}
 
 	bool isInteger() const { return primitiveType == Int; }
+	bool isFloat() const { return primitiveType == Float; }
 	bool isChar() const { return primitiveType == Char; }
 	bool isSigned() const { return signedType == Signed; }
 	bool knowsSign() const { return signedType != UnknownSign; }

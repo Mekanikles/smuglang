@@ -26,3 +26,16 @@ eval("
 		{
 			printf(\"Hello late evaled function!\n\");
 		};");
+
+
+eval(chainedReturnValue());
+
+func innerValue() -> cchar*
+{
+	return "printf(\"Hello chained eval function\")";
+};
+
+func chainedReturnValue() -> cchar*
+{
+	return innerValue();
+};

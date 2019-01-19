@@ -104,6 +104,7 @@ void printIRExpression(IR::Expression& expression, int indent = 0)
 }
 
 void printIRScope(IR::Scope* scope, int indent = 0);
+void printIRBlock(IR::Block* block, int indent = 0);
 
 void printIRStatement(IR::Statement* statement, int indent = 0)
 {
@@ -143,8 +144,14 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 
 	case IR::Statement::Conditional:
 	{
-		//auto* conditional = static_cast<IR::Conditional*>(statement);
-		printLine("Conditional", indent);		
+		auto* cond = static_cast<IR::Conditional*>(statement);
+		printLine("Conditional", indent);	
+		printLine("  expression:", indent);
+		printIRExpression(*cond->expr, indent + 1);
+		printLine("  trueBlock:", indent);
+		printIRBlock(&cond->trueBlock, indent + 1);
+		printLine("  falseBlock:", indent);
+		printIRBlock(&cond->falseBlock, indent + 1);
 		break;
 	}
 
@@ -159,7 +166,7 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 	}
 }
 
-void printIRBlock(IR::Block* block, int indent = 0)
+void printIRBlock(IR::Block* block, int indent)
 {
 	for (auto& s : block->statements)
 		printIRStatement(&*s, indent);

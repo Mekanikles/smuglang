@@ -61,6 +61,10 @@ namespace IR
 			Mul,
 			Div,
 			Eq,
+			LT,
+			GT,
+			LTE,
+			GTE
 		};
 
 		const TypeRef type;
@@ -87,6 +91,10 @@ namespace IR
 				case Mul: return "Mul";
 				case Div: return "Div";
 				case Eq: return "Eq";
+				case LT: return "LT";
+				case GT: return "GT";	
+				case LTE: return "LTE";	
+				case GTE: return "GTE";		
 			}
 			return "Unknown op";
 		}
@@ -351,12 +359,13 @@ namespace IR
 
 	struct Conditional : Statement
 	{
-		unique<Expression> condExpr;
+		unique<Expression> expr;
 		Block trueBlock;
 		Block falseBlock;
 
-		Conditional() 
+		Conditional(unique<Expression> expr) 
 			: Statement(Statement::Conditional)
+			, expr(std::move(expr))
 		{}
 	};
 

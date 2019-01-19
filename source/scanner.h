@@ -419,7 +419,7 @@ public:
 			else if (n == '=' && n2 == '=')
 			{
 				m_inStream.ignore(2);
-				*outToken = Token(TokenType::CompareOp);
+				*outToken = Token(TokenType::EqualsOp);
 				return true;
 			}
 			else if (n == '-' && n2 == '>')
@@ -428,6 +428,18 @@ public:
 				*outToken = Token(TokenType::Arrow);
 				return true;
 			}
+			else if (n == '<' && n2 == '=')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::LessThanOrEqualsOp);
+				return true;
+			}
+			else if (n == '>' && n2 == '=')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::GreaterThanOrEqualsOp);
+				return true;
+			}			
 
 			// Note: scan lone dot after numericals to allow decimal point
 			if (n == '.')
@@ -481,6 +493,18 @@ public:
 			{
 				m_inStream.ignore();
 				*outToken = Token(TokenType::Ampersand);
+				return true;
+			}
+			else if (n == '<')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::LessThanOp);
+				return true;
+			}
+			else if (n == '>')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::GreaterThanOp);
 				return true;
 			}
 

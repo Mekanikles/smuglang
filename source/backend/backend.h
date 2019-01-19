@@ -137,6 +137,16 @@ struct Context
 		return globData;
 	}
 
+	Value* createFloatConstant(double d, int size)
+	{
+		if (size == 32)
+			return llvm::ConstantFP::get(m_llvmContext, llvm::APFloat((float)d));
+		else if (size == 64)
+			return llvm::ConstantFP::get(m_llvmContext, llvm::APFloat(d));
+		
+		assert(false && "Unsupported float format");
+	}
+
 	Value* createFloatConstantFromText(string text, int size)
 	{
 		auto val = llvm::ConstantFP::get(m_llvmContext, llvm::APFloat(*getFloatStandard(size), llvm::StringRef(text)));	
@@ -233,6 +243,11 @@ struct Context
 				case IR::BinaryOp::Sub: return m_llvmBuilder.CreateSub(leftVal, rightVal, "isub"); 
 				case IR::BinaryOp::Mul: return m_llvmBuilder.CreateMul(leftVal, rightVal, "imul"); 
 				case IR::BinaryOp::Div: return m_llvmBuilder.CreateSDiv(leftVal, rightVal, "idiv"); 
+				case IR::BinaryOp::LT: return m_llvmBuilder.CreateICmpSLT(leftVal, rightVal, "ilt"); 
+				case IR::BinaryOp::GT: return m_llvmBuilder.CreateICmpSGT(leftVal, rightVal, "igt"); 
+				case IR::BinaryOp::LTE: return m_llvmBuilder.CreateICmpSLE(leftVal, rightVal, "ilte"); 
+				case IR::BinaryOp::GTE: return m_llvmBuilder.CreateICmpSGE(leftVal, rightVal, "igte"); 
+				
 				default: assert(false);
 			}
 		}
@@ -245,6 +260,11 @@ struct Context
 				case IR::BinaryOp::Sub: return m_llvmBuilder.CreateFSub(leftVal, rightVal, "isub"); 
 				case IR::BinaryOp::Mul: return m_llvmBuilder.CreateFMul(leftVal, rightVal, "imul"); 
 				case IR::BinaryOp::Div: return m_llvmBuilder.CreateFDiv(leftVal, rightVal, "idiv"); 
+				case IR::BinaryOp::LT: return m_llvmBuilder.CreateFCmpOLT(leftVal, rightVal, "ilt"); 
+				case IR::BinaryOp::GT: return m_llvmBuilder.CreateFCmpOGT(leftVal, rightVal, "igt"); 
+				case IR::BinaryOp::LTE: return m_llvmBuilder.CreateFCmpOLE(leftVal, rightVal, "ilte"); 
+				case IR::BinaryOp::GTE: return m_llvmBuilder.CreateFCmpOGE(leftVal, rightVal, "igte"); 
+
 				default: assert(false);
 			}
 		}
@@ -310,8 +330,17 @@ struct Context
 			auto& p = type->getPrimitive();
 			if (p.isInteger())
 			{
-				long long l = *(long long*)literal.data.data();
+				long long l = literal.readValue<long long>();
 				literal.backendValue = createIntegerConstant((uint64_t)l, p.size, p.isSigned());
+			}
+			else if (p.isFloat())
+			{
+				double d = literal.readValue<double>();
+				literal.backendValue = createFloatConstant(d, p.size);
+			}
+			else
+			{
+				assert(false && "Unsupported primitive");
 			}
 		}
 		else if (type->isFunction())
@@ -491,7 +520,34 @@ struct Generator
 
 		case IR::Statement::Conditional:
 		{
-			//auto* conditional = static_cast<IR::Conditional*>(&irstatement);	
+			auto* cond = static_cast<IR::Conditional*>(&irstatement);
+			
+			auto* trueBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "true");
+			auto* falseBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "false");
+			auto* contBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "cont");
+
+			auto* val = m_context.createValueFromExpression(*cond->expr);
+			m_context.m_llvmBuilder.CreateCondBr(val, trueBlock, falseBlock);
+
+			auto func = m_context.m_llvmBuilder.GetInsertBlock()->getParent();
+
+			// True branch
+			func->getBasicBlockList().push_back(trueBlock);
+			m_context.m_llvmBuilder.SetInsertPoint(trueBlock);
+			generateBlock(cond->trueBlock);
+			m_context.m_llvmBuilder.CreateBr(contBlock);
+
+			// False branch
+			func->getBasicBlockList().push_back(falseBlock);
+			m_context.m_llvmBuilder.SetInsertPoint(falseBlock);
+			generateBlock(cond->falseBlock);
+			m_context.m_llvmBuilder.CreateBr(contBlock);
+
+			// TODO: Phi nodes and whatnot
+			// Continue block
+			func->getBasicBlockList().push_back(contBlock);
+			m_context.m_llvmBuilder.SetInsertPoint(contBlock);
+
 			break;
 		}
 

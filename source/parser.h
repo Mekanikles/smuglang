@@ -184,26 +184,22 @@ struct Parser
 
 	bool acceptBinaryOperator()
 	{
-		if (accept(TokenType::CompareOp))
+		auto ops = { TokenType::EqualsOp,
+					 TokenType::Plus,
+					 TokenType::Minus,
+					 TokenType::Asterisk,
+					 TokenType::Slash,
+					 TokenType::LessThanOp,
+					 TokenType::GreaterThanOp,
+					 TokenType::LessThanOrEqualsOp,
+					 TokenType::GreaterThanOrEqualsOp };
+
+		for (auto& op : ops)
 		{
-			return true;
+			if (accept(op))
+				return true;
 		}
-		else if (accept(TokenType::Plus))
-		{
-			 return true;
-		}
-		else if (accept(TokenType::Minus))
-		{
-			 return true;
-		}
-		else if (accept(TokenType::Asterisk))
-		{
-			 return true;
-		}
-		else if (accept(TokenType::Slash))
-		{
-			 return true;
-		}		
+
 		return false;
 	}
 
@@ -302,6 +298,11 @@ struct Parser
 						expect(TokenType::CloseParenthesis);
 					}
 				}
+				else if (lastToken().symbol == "s64")
+				{
+					sign = PrimitiveClass::Signed;
+					size = 64;
+				}				
 				else if (lastToken().symbol == "u64")
 				{
 					sign = PrimitiveClass::Unsigned;
@@ -496,7 +497,11 @@ struct Parser
 			case TokenType::Plus:
 			case TokenType::Minus:
 				return 9;
-			case TokenType::CompareOp:
+			case TokenType::EqualsOp:
+			case TokenType::LessThanOp:
+			case TokenType::GreaterThanOp:
+			case TokenType::LessThanOrEqualsOp:
+			case TokenType::GreaterThanOrEqualsOp:
 				return 1;
 			default:
 				return 0;

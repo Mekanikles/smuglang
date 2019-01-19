@@ -30,7 +30,11 @@ enum class TokenType
 	Colon,
 	Dot,
 	Ampersand,
-	CompareOp,
+	EqualsOp,
+	LessThanOp,
+	GreaterThanOp,
+	LessThanOrEqualsOp,
+	GreaterThanOrEqualsOp,
 	Plus,
 	Minus,
 	Asterisk,
@@ -89,7 +93,11 @@ string toString(TokenType type)
 		case TokenType::Colon: return "Colon";
 		case TokenType::Dot: return "Dot";
 		case TokenType::Ampersand: return "Ampersand";
-		case TokenType::CompareOp: return "Compare op";
+		case TokenType::EqualsOp: return "Equals Op";
+		case TokenType::LessThanOp: return "LessThan Op";
+		case TokenType::GreaterThanOp: return "GreaterThan Op";
+		case TokenType::LessThanOrEqualsOp: return "LessThanOrEquals Op";
+		case TokenType::GreaterThanOrEqualsOp: return "GreaterThanOrEquals Op";
 		case TokenType::Plus: return "Plus";
 		case TokenType::Minus: return "Minus";
 		case TokenType::Asterisk: return "Asterisk";

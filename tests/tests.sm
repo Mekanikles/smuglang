@@ -1,4 +1,9 @@
-extern func printf;
+def cchar = #primitives.c.char;
+def cint = #primitives.c.int;
+def s32 = #primitives.s32;
+def u8 = #primitives.u8;
+
+extern printf : func(fmt : cchar*, args...) -> errCode : cint;	
 
 // Use c lib
 printf("Hello %s\n", "string");
@@ -15,15 +20,15 @@ printf("Hello float expressions %f, %f\n", 5.1 * 4.4 - .33 / 2.22, 1.0 + 2.1 * .
 
 printf("Hello sub expression %i\n", (5 + 4) - (3 + 2) - (((1))));
 
-var i : #primitives.s32 = 5;
+var i : s32 = 5;
 {
-	var i : #primitives.u8 = 10;
+	var i : u8 = 10;
 	printf("Hello variable should be 10: %i\n", i);
 }
 printf("Hello variable should be 5: %i\n", i);
 
 printf("Hello garbage forward ref: %i\n", b);
-var b : #primitives.u8 = 3;
+var b : u8 = 3;
 
 if (b == 3)
 	printf("Hello if-conditional\n");
@@ -70,14 +75,14 @@ func doNoParamFunc()
 	printf("Hello outer function!\n");
 };
 
-func doMultiParamFunc(p : #primitives.u8, q : #primitives.u8)
+func doMultiParamFunc(p : u8, q : u8)
 {
 	printf("Hello integer parameter 1: %i, 2: %i\n", p, q);
 };
 
 crossCallFunc1(1);
 
-func crossCallFunc1(whatCall : #primitives.u8)  
+func crossCallFunc1(whatCall : u8)  
 {
 	printf("cross call func 1 called!\n");
 	if (whatCall == 1)
@@ -86,7 +91,7 @@ func crossCallFunc1(whatCall : #primitives.u8)
 		crossCallFunc2(1);
 };
 
-func crossCallFunc2(shouldCall : #primitives.u8)
+func crossCallFunc2(shouldCall : u8)
 {
 	printf("cross call func 2 called!\n");
 	if (shouldCall == 1)
