@@ -892,6 +892,29 @@ struct FunctionClass : TypeClass
 
 	bool operator==(const FunctionClass& o) const
 	{
+		if (isCVariadic != o.isCVariadic)
+			return false;
+
+		size_t inParamCount = inParams.size();
+		if (inParamCount!= o.inParams.size())
+			return false;
+
+		size_t outParamCount = inParams.size();
+		if (outParamCount != o.outParams.size())
+			return false;
+
+		for (int i = 0; i < inParamCount; ++i)
+		{
+			if (!(inParams[i].type == o.inParams[i].type))
+				return false;
+		}
+
+		for (int i = 0; i < outParamCount; ++i)
+		{
+			if (!(outParams[i].type == o.outParams[i].type))
+				return false;
+		}
+
 		return true;
 	}
 

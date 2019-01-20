@@ -154,22 +154,22 @@ namespace IR
 
 	struct Referenceable : Value
 	{
-		enum class Type
+		enum class RefType
 		{
 			Variable,
 			External,
 			Constant
 		};
 
-		Type type;
+		RefType refType;
 		string name;
 
 		// TODO: Need this for mapping to sources, for now
 		const SymbolSource* symbolSource;
 
-		Referenceable(Type type, string name, const SymbolSource* symbolSource)
+		Referenceable(RefType refType, string name, const SymbolSource* symbolSource)
 			: Value(Value::ValueType::Referenceable)
-			, type(type)
+			, refType(refType)
 			, name(name)
 			, symbolSource(symbolSource)
 		{
@@ -180,12 +180,12 @@ namespace IR
 
 		const bool isConstant() const
 		{
-			return type == Type::Constant;
+			return refType == RefType::Constant;
 		}
 
 		const struct Constant& asConstant() const
 		{
-			assert(type == Type::Constant);
+			assert(refType == RefType::Constant);
 			return ::IR::asConstant(*this);
 		}
 	};
@@ -214,12 +214,12 @@ namespace IR
 		const TypeRef type;	
 
 		Variable(const TypeRef& type, string name, const SymbolSource* symbolSource) 
-			: Referenceable(Referenceable::Type::Variable, name, symbolSource)
+			: Referenceable(Referenceable::RefType::Variable, name, symbolSource)
 			, type(type)
 		{}
 
 		Variable(Variable&& var)
-			: Referenceable(Referenceable::Type::Variable, std::move(var.name), var.symbolSource)
+			: Referenceable(Referenceable::RefType::Variable, std::move(var.name), var.symbolSource)
 			, type(std::move(var.type))
 		{
 		}
@@ -227,16 +227,29 @@ namespace IR
 		virtual const TypeRef& getType() const override { return type; }
 	};
 
-	struct External : Referenceable
+	struct StaticLinkable
 	{
 		const TypeRef type;
+		string name;
+		Backend::Value* backendValue = nullptr;
 
-		External(const TypeRef type, string name, const SymbolSource* symbolSource)
-			: Referenceable(Referenceable::Type::External, std::move(name), symbolSource)
-			, type(type)
+		StaticLinkable(const TypeRef type, string name)
+			: type(type)
+			, name(std::move(name))
+		{
+		}
+	};
+
+	struct External : Referenceable
+	{
+		std::shared_ptr<StaticLinkable> linkable;
+
+		External(std::shared_ptr<StaticLinkable> linkable, const SymbolSource* symbolSource)
+			: Referenceable(Referenceable::RefType::External, linkable->name, symbolSource)
+			, linkable(linkable)
 		{}
 
-		virtual const TypeRef& getType() const override { return type; }	
+		virtual const TypeRef& getType() const override { return linkable->type; }	
 	};
 
 	struct Constant : Referenceable
@@ -244,12 +257,12 @@ namespace IR
 		unique<Literal> literal;
 
 		Constant(unique<Literal> literal, string name, const SymbolSource* symbolSource) 
-			: Referenceable(Referenceable::Type::Constant, std::move(name), symbolSource) 
+			: Referenceable(Referenceable::RefType::Constant, std::move(name), symbolSource) 
 			, literal(std::move(literal))
 		{}
 
 		Constant(Constant&& con)
-			: Referenceable(Referenceable::Type::Constant, std::move(con.name), con.symbolSource)
+			: Referenceable(Referenceable::RefType::Constant, std::move(con.name), con.symbolSource)
 			, literal(std::move(con.literal))
 		{}
 
@@ -303,6 +316,11 @@ namespace IR
 			T* ret = statement.get();
 			this->statements.push_back(std::move(statement));
 			return ret;
+		}
+
+		bool isEmpty()
+		{
+			return statements.empty();
 		}
 	};	
 
@@ -540,6 +558,17 @@ namespace IR
 			externals.push_back(std::move(external));
 			cacheReferenceable(&*externals.back());
 			return &*externals.back();
+		}
+
+		External* getExternalByName(string name)
+		{
+			for (auto& e : externals)
+			{
+				if (e->name == name)
+					return e.get();
+			}
+
+			return nullptr;
 		}
 	};
 };

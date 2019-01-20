@@ -269,8 +269,11 @@ struct FunctionConcretizer : AST::Visitor
 		this->currentBlock = &cond->trueBlock;
 		node->statement->accept(this);
 
-		this->currentBlock = &cond->falseBlock;
-		node->elseStatement->accept(this);
+		if (node->elseStatement)
+		{
+			this->currentBlock = &cond->falseBlock;
+			node->elseStatement->accept(this);
+		}
 
 		this->currentBlock = prevBlock;
 
@@ -330,7 +333,21 @@ struct FunctionConcretizer : AST::Visitor
 
 			if (symbolSource->storageQualifier == StorageQualifier::Extern)
 			{
-				auto external = std::make_unique<IR::External>(type, symbol->name, symbolSource);
+				std::shared_ptr<IR::StaticLinkable> linkable;
+				IR::External* existingExternal = this->context->module->getExternalByName(symbol->name);
+				if (existingExternal)
+				{
+					auto& exType = existingExternal->getType();
+					assert(exType == type && "Cannot declare c-externals with same name but different types");
+
+					linkable = existingExternal->linkable;
+				}
+				else
+				{
+					linkable = std::make_shared<IR::StaticLinkable>(type, symbol->name);
+				}
+
+				auto external = std::make_unique<IR::External>(linkable, symbolSource);
 				this->context->module->addExternal(std::move(external));
 			}
 			else if (symbolSource->storageQualifier == StorageQualifier::Def)

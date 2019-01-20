@@ -139,12 +139,7 @@ struct Context
 
 	Value* createFloatConstant(double d, int size)
 	{
-		if (size == 32)
-			return llvm::ConstantFP::get(m_llvmContext, llvm::APFloat((float)d));
-		else if (size == 64)
-			return llvm::ConstantFP::get(m_llvmContext, llvm::APFloat(d));
-		
-		assert(false && "Unsupported float format");
+		return llvm::ConstantFP::get(getFloatType(size), d);
 	}
 
 	Value* createFloatConstantFromText(string text, int size)
@@ -521,10 +516,11 @@ struct Generator
 		case IR::Statement::Conditional:
 		{
 			auto* cond = static_cast<IR::Conditional*>(&irstatement);
+			bool hasFalseBranch = !cond->falseBlock.isEmpty();
 			
 			auto* trueBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "true");
-			auto* falseBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "false");
 			auto* contBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "cont");
+			auto* falseBlock = hasFalseBranch ? llvm::BasicBlock::Create(m_context.m_llvmContext, "false") : contBlock;
 
 			auto* val = m_context.createValueFromExpression(*cond->expr);
 			m_context.m_llvmBuilder.CreateCondBr(val, trueBlock, falseBlock);
@@ -538,10 +534,13 @@ struct Generator
 			m_context.m_llvmBuilder.CreateBr(contBlock);
 
 			// False branch
-			func->getBasicBlockList().push_back(falseBlock);
-			m_context.m_llvmBuilder.SetInsertPoint(falseBlock);
-			generateBlock(cond->falseBlock);
-			m_context.m_llvmBuilder.CreateBr(contBlock);
+			if (hasFalseBranch)
+			{
+				func->getBasicBlockList().push_back(falseBlock);
+				m_context.m_llvmBuilder.SetInsertPoint(falseBlock);
+				generateBlock(cond->falseBlock);
+				m_context.m_llvmBuilder.CreateBr(contBlock);
+			}
 
 			// TODO: Phi nodes and whatnot
 			// Continue block
@@ -666,9 +665,10 @@ struct Generator
 	{
 		assert(external.getType()->isFunction() && "Only supports external functions for now");
 		
-		auto* func = m_context.createFunction(external.getType()->getFunction(), external.getName());
+		if (!external.linkable->backendValue)
+			external.linkable->backendValue = m_context.createFunction(external.getType()->getFunction(), external.getName());
 		assert(!external.backendValue);
-		external.backendValue = func;
+		external.backendValue = external.linkable->backendValue;
 	}
 
 	void generateMain(IR::Module& irmodule)
