@@ -5,9 +5,14 @@ struct FunctionArgumentBinding
 	struct Param
 	{
 		TypeRef type;
-		int index;
+		int argIndex;
+		int argCount;
 
-		Param(TypeRef&& type, int index) : type(std::move(type)), index(index) {}
+		Param(TypeRef&& type, int argIndex, int argCount) 
+			: type(std::move(type))
+			, argIndex(argIndex) 
+			, argCount(argCount)
+		{}
 	};
 
 	vector<Param> params;
@@ -18,26 +23,73 @@ FunctionArgumentBinding* createFunctionArgumentBinding(const AST::Call* callNode
 	auto* binding = createObject<FunctionArgumentBinding>();
 
 	const auto& functionInParams = functionClass.inParams;
-	const auto& args = callNode->args;
 
-	const int argCount = args.size();
-	int argsConsumed = 0;
+	struct ArgConsumer
+	{
+		const vector<AST::Expression*>& args;
+		int consumed = 0;
+
+		bool canConsume()
+		{
+			return consumed < args.size();
+		}
+
+		int consume()
+		{
+			assert(canConsume() && "Too few arguments to function");
+			return consumed++;
+		}
+	} args { callNode->args };
+
 	// TODO: For now, we only allow left-to-right consuming of args
 	//	tuples must be explicitly provided.
 	// In the future, we want to allow fleible mapping between single args
 	//	and tuples, plus named argument
 	for (const auto& p : functionInParams)
 	{
-		const TypeRef& type = p.type;
-		if (argsConsumed >= argCount)
-			assert(false && "Too few arguments to function");
+		// Important to clone all types so we can do type inference for each
+		//	binding rather than the function itself	
+		if (p.type->isTuple())
+		{
+			auto& tuple = p.type->getTuple();
+			if (tuple.unbounded)
+			{
+				// Eat rest of args
+				auto& elType = tuple.types.back();
+				vector<TypeRef> types;
+				int index = args.consumed;
+				while (args.canConsume())
+				{
+					args.consume();
+					types.push_back(elType.clone());
+				}
+				int count = types.size();			
 
-		// Important to clone type so we can do type inference for each
-		//	call rather than the function
-		binding->params.emplace_back(type.clone(), argsConsumed++);
+				auto tupleType = createTupleType(std::move(types));
+				binding->params.emplace_back(TypeRef(std::move(tupleType)), index, count);
+			}
+			else
+			{
+				vector<TypeRef> types;
+				int index = args.consumed;
+				for (auto& t : tuple.types)
+				{
+					types.push_back(t.clone());
+				}
+				int count = types.size();
+
+				auto tupleType = createTupleType(std::move(types));
+				binding->params.emplace_back(TypeRef(std::move(tupleType)), index, count);
+			}		
+		}
+		else
+		{
+			int index = args.consume();
+			binding->params.emplace_back(p.type.clone(), index, 1);
+		}
 	}
 
-	if (argsConsumed != argCount)
+	if (args.canConsume())
 		assert(false && "Too many arguments to function");
 
 	// TODO: Bind to output params
@@ -50,15 +102,31 @@ bool unifyArguments(ASTContext* context, AST::Call* callNode, FunctionArgumentBi
 	auto& args = callNode->args;
 	for (auto& p : argBinding->params)
 	{
-		TypeRef& t1 = args[p.index]->getType(context);
-		TypeRef& t2 = p.type;
+		if (p.argCount == 0)
+			continue;
 
-		const auto result = unifyTypes(t1, t2);
-		if (result == CannotUnify)
+		TypeRef& paramType = p.type;
+		TypeRef argType;
+		if (paramType->isTuple())
 		{
-			assert(false && "Could not unify function argument");
-			return false;
+			// Wrap the argument types in a tuple, to be able to unify all at once
+			// 	note that we do not clone the types here, we want to ref the args directly
+			vector<TypeRef> types;
+			for (int i = p.argIndex; i < p.argIndex + p.argCount; i++)
+			{
+				types.push_back(args[p.argIndex]->getType(context));
+			}
+
+			argType = createTupleType(std::move(types));
 		}
+		else
+		{
+			argType = args[p.argIndex]->getType(context);	
+		} 
+
+		const auto result = unifyTypes(argType, paramType);
+		if (result == CannotUnify)
+			assert(false && "Could not unify function argument");
 	}
 
 	return true;

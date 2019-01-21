@@ -1,13 +1,14 @@
 def cchar = #primitives.c.char;
 def cint = #primitives.c.int;
+
 def f64 = #primitives.f64;
 def s64 = #primitives.s64;
 
 var f : f64 = 5.5;
-//printFloat(6.4 + 6.0 * f);
+printFloat(6.4 + 6.0 * f);
 
 var i : s64 = 5;
-//printInt(6 + 6 * i);
+printInt(6 + 6 * i);
 
 if (f < 5.0)
 {
@@ -28,20 +29,20 @@ if (i > 6)
 else
 	print("i was smaller than 6!\n");
 
-/*func printFloat(arg : f64)
+func printFloat(farg : f64)
 {
-	printf("A float %f\n", arg);
-	extern printf : func(fmt : cchar*, farg : f64) -> errCode : cint;	
+	printf("A float %f\n", farg);
+	extern printf : func(fmt : cchar*, args...) -> errCode : cint;	
 };
 
-func printInt(arg : s64)
+func printInt(iarg : s64)
 {
-	printf("An int %il\n", arg);
-	extern printf : func(fmt : cchar*, sarg : s64) -> errCode : cint;	
-};*/
+	printf("An int %li\n", iarg);
+	extern printf : func(fmt : cchar*, args...) -> errCode : cint;	
+};
 
-func print(arg : cchar*) -> () 
+func print(sarg : cchar*) -> () 
 {
-	printf("%s", arg);
-	extern printf : func(fmt : cchar*, carg : cchar*) -> errCode : cint;
+	printf("%s", sarg);
+	extern printf : func(fmt : cchar*, args...) -> errCode : cint;
 };

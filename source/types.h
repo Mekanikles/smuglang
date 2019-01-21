@@ -45,6 +45,7 @@ struct TypeClass
 	virtual std::unique_ptr<TypeClass> clone() const = 0;
 	virtual string toString() const = 0;
 	virtual bool isConcrete() const = 0;
+	virtual bool ensureConcrete() = 0;
 	virtual int getSize() const = 0;
 
 	ClassType type = Any;
@@ -165,6 +166,13 @@ struct Type
 			return true;
 		else
 			return typeClass->isConcrete();
+	}
+
+	bool ensureConcrete()
+	{
+		if (kind == Value)
+			return typeClass->ensureConcrete();
+		return false;	
 	}
 
 	bool operator==(const Type& o) const
@@ -528,6 +536,45 @@ struct PrimitiveClass : TypeClass
 		return knownSize && (signedType != UnknownSign || primitiveType == Float);
 	}
 
+	virtual bool ensureConcrete() override
+	{
+		switch (primitiveType)
+		{
+			case Int:
+			{
+				if (signedType == UnknownSign)
+					signedType = Signed;
+				if (!knownSize)
+				{
+					knownSize = true;
+					size = 32;
+				}
+				break;
+			}
+			case Float:
+			{
+				if (!knownSize)
+				{
+					knownSize = true;
+					size = 32;
+				}
+				break;
+			}
+			case Char:
+			{
+				if (signedType == UnknownSign)
+					signedType = Unsigned;
+				if (!knownSize)
+				{
+					knownSize = true;
+					size = 8;
+				}
+				break;
+			}
+		}
+		return true;
+	}
+
 	virtual int getSize() const override
 	{
 		assert(knownSize);
@@ -613,6 +660,11 @@ struct ArrayClass : TypeClass
 	{
 		return arrayType != AnyArray &&
 			type->isConcrete();
+	}
+
+	virtual bool ensureConcrete() override
+	{
+		return type->ensureConcrete();
 	}
 
 	virtual int getSize() const override
@@ -711,7 +763,9 @@ public:
 
 	virtual bool isConcrete() const override
 	{
-		// TODO: Is tuple ever concrete? Unbounded tuples also?
+		if (unbounded)
+			return false;
+
 		for (const auto& t : types)
 		{
 			if (!t->isConcrete())
@@ -719,6 +773,20 @@ public:
 		}
 		return true;
 	}
+
+	virtual bool ensureConcrete() override
+	{
+		if (unbounded)
+			return false;
+
+		for (auto& t : types)
+		{
+			if (!t->ensureConcrete())
+				return false;
+		}
+
+		return true;
+	}	
 
 	virtual int getSize() const override
 	{
@@ -884,6 +952,36 @@ struct FunctionClass : TypeClass
 		return true;
 	}
 
+	void convertToVariadicIfPossible()
+	{
+		if (!inParams.empty())
+		{
+			auto& p = inParams.back();
+			if (p.type->isTuple() && p.type->getTuple().unbounded)
+			{
+				inParams.pop_back();
+				isCVariadic = true;
+			}
+		}
+	}	
+
+	virtual bool ensureConcrete() override
+	{
+		for (auto& p : inParams)
+		{
+			if (!p.type->ensureConcrete())
+				return false;
+		}
+
+		for (auto& p : outParams)
+		{
+			if (!p.type->ensureConcrete())
+				return false;
+		}
+
+		return true;
+	}
+
 	virtual int getSize() const override
 	{
 		// Function types is always the size of a pointer
@@ -951,6 +1049,11 @@ struct PointerClass : TypeClass
 		return type->isConcrete();
 	}
 
+	virtual bool ensureConcrete() override
+	{
+		return type->ensureConcrete();
+	}
+
 	virtual int getSize() const override
 	{
 		return POINTER_SIZE_BYTES;
@@ -995,6 +1098,11 @@ struct TypeVariableClass : TypeClass
 	{
 		return type->isConcrete();
 	}
+
+	virtual bool ensureConcrete() override
+	{
+		return type->ensureConcrete();
+	}	
 
 	virtual int getSize() const override
 	{
@@ -1052,6 +1160,11 @@ struct MultiTypeClass : TypeClass
 	}
 
 	virtual bool isConcrete() const override
+	{
+		return false;
+	}
+	
+	virtual bool ensureConcrete() override
 	{
 		return false;
 	}

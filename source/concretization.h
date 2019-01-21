@@ -95,8 +95,10 @@ struct ExpressionConcretizer : AST::Visitor
 	virtual void visit(AST::IntegerLiteral* node) override
 	{
 		TypeRef& type = node->getType(this->astContext);
-		// TODO: Does support for default types go here?
-		assert(type.getType().isConcrete());
+
+		// TODO: This happens too late here?
+		assert(type.getType().ensureConcrete());
+
 		assert(type.getType().isPrimitive());
 		const PrimitiveClass& primitive = type.getType().getPrimitive();
 		assert(primitive.primitiveType == PrimitiveClass::Int);
@@ -333,6 +335,14 @@ struct FunctionConcretizer : AST::Visitor
 
 			if (symbolSource->storageQualifier == StorageQualifier::Extern)
 			{
+				// Allow some non-concrete functions to be converted to variadics
+				// TODO: Maybe this is idiotic, should all external be forced to be delcared variadic
+				//	from the beginning, and the type system should just handle it?
+				//	Motivation: external functions should be required to exactly match the linked
+				//	 external, othewise we will have ABI problems
+				if (type->isFunction())
+					type->getFunction().convertToVariadicIfPossible();
+
 				std::shared_ptr<IR::StaticLinkable> linkable;
 				IR::External* existingExternal = this->context->module->getExternalByName(symbol->name);
 				if (existingExternal)
