@@ -330,6 +330,15 @@ struct ASTProcessor : AST::Visitor
 		else if (node->isExternal())
 		{
 			symbol->firstInitOrder = node->order;
+
+			if (symbol->type->isFunction())
+			{
+				// Allow some non-concrete functions to be converted to variadics
+				if (symbol->type->isFunction())
+					symbol->type->getFunction().convertToVariadicIfPossible();
+			}
+
+			assert(symbol->type->isConcrete() && "External types need to be explicitly concrete");
 		}
 
 		// Evaluate defines and store as constant in IR env

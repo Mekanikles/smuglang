@@ -89,6 +89,22 @@ FunctionArgumentBinding* createFunctionArgumentBinding(const AST::Call* callNode
 		}
 	}
 
+	// For variadic we just eat the rest of all arguments with a tuple
+	if (functionClass.isCVariadic)
+	{
+		vector<TypeRef> types;
+		int index = args.consumed;
+		while (args.canConsume())
+		{
+			args.consume();
+			types.push_back(Type());
+		}
+		int count = types.size();			
+
+		auto tupleType = createTupleType(std::move(types));
+		binding->params.emplace_back(TypeRef(std::move(tupleType)), index, count);
+	}
+
 	if (args.canConsume())
 		assert(false && "Too many arguments to function");
 
