@@ -555,7 +555,6 @@ namespace AST
 	struct Tuple : public NodeImpl<Tuple, Expression>
 	{
 		vector<Expression*> exprs;
-		std::optional<TypeRef> type;
 
 		string toString(ASTContext* context) override 
 		{ 
@@ -686,7 +685,6 @@ namespace AST
 	{
 		TokenType opType;
 		Expression* expr = nullptr;
-		std::optional<TypeRef> type;
 
 		string toString(ASTContext* context) override 
 		{ 
@@ -714,6 +712,7 @@ namespace AST
 		TokenType opType;
 		Expression* left = nullptr;
 		Expression* right = nullptr;
+		std::optional<TypeRef> type;
 
 		string toString(ASTContext* context) override 
 		{ 
@@ -737,9 +736,7 @@ namespace AST
 			TypeRef& t1 = left->getType(context);
 			TypeRef& t2 = right->getType(context);
 
-			const auto result = unifyTypes(t1, t2);
-			if (result == CannotUnify)
-				assert("Cannot unify types" && false);
+			assert(t1 == t2 && "Binary op types should have been unified");
 
 			return t1;
 		}

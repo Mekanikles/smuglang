@@ -5,6 +5,7 @@ def u8 = #primitives.u8;
 
 extern printf : func(fmt : cchar*, args...) -> errCode : cint;	
 
+
 // Use c lib
 printf("Hello %s\n", "string");
 
@@ -96,6 +97,18 @@ func crossCallFunc2(shouldCall : u8)
 	printf("cross call func 2 called!\n");
 	if (shouldCall == 1)
 		crossCallFunc1(0);
+};
+
+eval(chainedReturnValue());
+
+func innerValue() -> cchar*
+{
+	return "printf(\"Hello chained eval function\\n\")";
+};
+
+func chainedReturnValue() -> cchar*
+{
+	return innerValue();
 };
 
 

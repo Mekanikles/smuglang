@@ -13,6 +13,7 @@ struct TupleClass;
 struct MultiTypeClass;
 
 struct TypeRef;
+bool isSubType(const Type& t, const TupleClass& tc);
 bool isSubType(const Type& t, const MultiTypeClass& mtc);
 
 using TypeId = unsigned int;
@@ -190,12 +191,18 @@ struct Type
 		if (o.kind == Any)
 			return true;
 
+		// Some tuples can folded into the inner type
+		if (!this->isTuple() && o.isTuple())
+		{
+			auto& tuple = o.getTuple();
+			return ::isSubType(*this, tuple);
+		}
+
 		// Special 1:n case, where we need to compare a type with a typeclass
 		if (!this->isMultiType() && o.isMultiType())
 		{
-			auto& t1 = *this;
 			auto& multiType = o.getMultiType();
-			return ::isSubType(t1, multiType);
+			return ::isSubType(*this, multiType);
 		};
 
 		return this->kind == o.kind &&
@@ -443,6 +450,8 @@ struct TypeRef
 			*ref = o;
 		}
 	}
+
+	void stripTrivialTuples();
 };
 
 TypeRef s_voidType(Type::Kind::Void);
@@ -453,7 +462,12 @@ string typeString(const TypeRef& t)
 {
 	FGTextColor color;
 	if (t->isConcrete())
-		color = FGTextColor::Magenta;
+	{
+		if (t->isTuple())
+			color = FGTextColor::BrightBlue;
+		else
+			color = FGTextColor::Magenta;
+	}
 	else
 		color = FGTextColor::BrightRed;
 		
@@ -1207,6 +1221,25 @@ struct MultiTypeClass : TypeClass
 	}
 };
 
+bool isSubType(const Type& t, const TupleClass& tc)
+{
+	// Allow folding single-type tuples into the inner type
+	// TODO: Should we just strip the tuple type on expression processing instead?
+	if (tc.types.size() == 1)
+	{
+		if (t.isMultiType())
+		{
+			// TODO: Hm, flipped check, does that matter?
+			return tc.types.back().getType().isSubType(t);
+		}
+		else
+		{
+			return t.isSubType(tc.types.back().getType());
+		}
+	}
+	return false;
+}
+
 bool isSubType(const Type& t, const MultiTypeClass& mtc)
 {
 	for (const TypeRef& t2 : mtc.types)
@@ -1323,6 +1356,10 @@ bool tryUnifyMultiTypes(TypeRef& leftType, TypeRef& rightType);
 
 UnificationResult unifyTypes(TypeRef& leftType, TypeRef& rightType)
 {
+	// Strip trivial tuples
+	leftType.stripTrivialTuples();
+	rightType.stripTrivialTuples();
+
 	if (leftType == rightType || rightType.isSubType(leftType))
 	{
 		leftType.mergeInto(rightType);
@@ -1403,10 +1440,15 @@ bool isStringType(const Type& type)
 	return isCharPointer(type);
 }
 
-
-
-
-
-
-
+void TypeRef::stripTrivialTuples()
+{
+	while (getType().isTuple())
+	{
+		auto& tuple = getType().getTuple();
+		if (tuple.types.size() == 1)
+			*this = tuple.types[0];
+		else
+			break;
+	}
+}
 

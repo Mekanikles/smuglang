@@ -29,12 +29,8 @@ bool init(EvaluationContext& context)
 
 unique<IR::Expression> concretizeExpression(EvaluationContext& eContext, ASTContext& astContext, AST::Expression& expr)
 {
-	ExpressionConcretizer c(&eContext, &astContext); 
-	expr.accept(&c);
-
-	// TODO: Handle multiple return values
-	assert(c.expressionStack.size() == 1);
-	return std::move(c.expressionStack.back());
+	ExpressionConcretizer c(&eContext, &astContext);
+	return c.concretizeExpression(expr);
 }
 
 struct ExpressionEvaluator
@@ -144,6 +140,29 @@ void storeConstantFromExpression(EvaluationContext& eContext, ASTContext& astCon
 	auto literal = createLiteralFromASTExpression(eContext, astContext, expr);
 	auto constant = std::make_unique<IR::Constant>(std::move(literal), name, &source);
 	eContext.module->addConstant(std::move(constant));
+}
+
+void storeExternal(EvaluationContext& eContext, ASTContext& astContext, const TypeRef& type, SymbolSource& source)
+{
+	createAndAddExternal(eContext, type, source);
+}
+
+IR::Function* createAndStoreFunctionHeader(EvaluationContext& eContext, ASTContext& astContext, AST::FunctionLiteral& literal, SymbolSource& source)
+{
+	string name = source.getSymbol()->name;
+	auto& type = literal.getType(&astContext);
+	auto func = std::make_unique<IR::Function>(type, name);
+	auto funcPtr = eContext.module->addFunction(std::move(func));
+
+	auto constant = std::make_unique<IR::Constant>(funcPtr->createLiteral(), name, &source);
+	eContext.module->addConstant(std::move(constant));
+
+	return funcPtr;
+}
+
+void generateFunctionBody(EvaluationContext& eContext, ASTContext& astContext, IR::Function& function, AST::FunctionLiteral& literal)
+{
+	generateConcreteFunction(&eContext, &astContext, function, &literal);
 }
 
 string readStringFromLiteral(IR::Literal& literal)

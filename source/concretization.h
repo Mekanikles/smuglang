@@ -34,10 +34,9 @@ unique<IR::Literal> createIntegerLiteral(const TypeRef& type, long long l)
 	return createExpression<IR::Literal>(type, std::move(data));
 }
 
-	ConcretizerContext* context = nullptr;
-	IR::Block* currentBlock = nullptr;
-	ASTContext* astContext = nullptr;
-
+ConcretizerContext* context = nullptr;
+IR::Block* currentBlock = nullptr;
+ASTContext* astContext = nullptr;
 
 IR::Function* generateConcreteFunction(ConcretizerContext* context, ASTContext* astContext, IR::Function& func, AST::FunctionLiteral* funcLiteral);
 
@@ -96,8 +95,10 @@ struct ExpressionConcretizer : AST::Visitor
 	{
 		TypeRef& type = node->getType(this->astContext);
 
-		// TODO: This happens too late here?
-		assert(type.getType().ensureConcrete());
+		// Defaulting rules
+		{
+			assert(type.getType().ensureConcrete());
+		}
 
 		assert(type.getType().isPrimitive());
 		const PrimitiveClass& primitive = type.getType().getPrimitive();
@@ -117,7 +118,11 @@ struct ExpressionConcretizer : AST::Visitor
 	{
 		TypeRef& type = node->getType(this->astContext);
 
-		assert(type.getType().isConcrete());
+		// Defaulting rules
+		{
+			assert(type.getType().ensureConcrete());
+		}
+
 		assert(type.getType().isPrimitive());
 		const PrimitiveClass& primitive = type.getType().getPrimitive();
 		assert(primitive.primitiveType == PrimitiveClass::Float);
@@ -138,8 +143,19 @@ struct ExpressionConcretizer : AST::Visitor
 	virtual void visit(AST::StringLiteral* node) override
 	{
 		TypeRef& type = node->getType(this->astContext);
-		// TODO: Does support for default types go here?
-		assert(type->isConcrete());
+
+		// Defaulting rules
+		{
+			if (type->isMultiType())
+			{
+				// Try unifying with char* as default to c compatibility
+				auto ptrType = TypeRef(createPointerType(createPrimitiveType(PrimitiveClass::Char)));
+				unifyTypes(type, ptrType);
+			}
+
+			assert(type.getType().ensureConcrete());
+		}
+		
 		assert(isStringType(type));
 
 		// Might as well create the value here directly
@@ -186,12 +202,23 @@ struct ExpressionConcretizer : AST::Visitor
 			default: assert(false && "Invalid op type");
 		}
 
+		auto& type = node->getType(this->astContext);
+
 		expressionStack.push_back(createExpression<IR::BinaryOp>(
-				node->getType(this->astContext),
+				type,
 				opType,
 				std::move(leftEpxr),
 				std::move(rightEpxr)
 			));
+	}
+
+	unique<IR::Expression> concretizeExpression(AST::Expression& expr)
+	{
+		expr.accept(this);
+
+		// TODO: Handle multiple return values
+		assert(expressionStack.size() == 1);
+		return std::move(expressionStack.back());
 	}
 
 	ExpressionConcretizer(ConcretizerContext* context, ASTContext* astContext)
@@ -204,6 +231,27 @@ struct ExpressionConcretizer : AST::Visitor
 	ASTContext* astContext;
 	vector<std::unique_ptr<IR::Expression>> expressionStack;
 };
+
+void createAndAddExternal(ConcretizerContext& context, const TypeRef& type, SymbolSource& source)
+{
+	Symbol* symbol = source.getSymbol();
+	std::shared_ptr<IR::StaticLinkable> linkable;
+	IR::External* existingExternal = context.module->getExternalByName(symbol->name);
+	if (existingExternal)
+	{
+		auto& exType = existingExternal->getType();
+		assert(exType == type && "Cannot declare c-externals with same name but different types");
+
+		linkable = existingExternal->linkable;
+	}
+	else
+	{
+		linkable = std::make_shared<IR::StaticLinkable>(type, symbol->name);
+	}
+
+	auto external = std::make_unique<IR::External>(linkable, &source);
+	context.module->addExternal(std::move(external));
+}
 
 // TODO: StatementConcretizer?
 struct FunctionConcretizer : AST::Visitor
@@ -335,22 +383,7 @@ struct FunctionConcretizer : AST::Visitor
 
 			if (symbolSource->storageQualifier == StorageQualifier::Extern)
 			{
-				std::shared_ptr<IR::StaticLinkable> linkable;
-				IR::External* existingExternal = this->context->module->getExternalByName(symbol->name);
-				if (existingExternal)
-				{
-					auto& exType = existingExternal->getType();
-					assert(exType == type && "Cannot declare c-externals with same name but different types");
-
-					linkable = existingExternal->linkable;
-				}
-				else
-				{
-					linkable = std::make_shared<IR::StaticLinkable>(type, symbol->name);
-				}
-
-				auto external = std::make_unique<IR::External>(linkable, symbolSource);
-				this->context->module->addExternal(std::move(external));
+				createAndAddExternal(*this->context, type, *symbolSource);
 			}
 			else if (symbolSource->storageQualifier == StorageQualifier::Def)
 			{

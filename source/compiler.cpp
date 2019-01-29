@@ -38,8 +38,11 @@ int main(int argc, char** argv)
 	LOG("Parsing...");
 	Parser parser(&fileInput);
 	bool parseSuccess = parser.parse(&ast);
-	printLine("Tokens:");
-	printTokens(parser.getTokens());
+	if (false)
+	{
+		printLine("Tokens:");
+		printTokens(parser.getTokens());
+	}
 	if (!parseSuccess)
 	{
 		LOG("Parse fail!");

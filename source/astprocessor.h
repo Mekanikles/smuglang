@@ -3,6 +3,24 @@
 // Processing is done through dependency chain, rather than AST order
 struct ASTProcessor : AST::Visitor
 {
+	void visit(AST::BinaryOp* node) override
+	{
+		if (node->processed)
+			return;
+		node->processed = true;
+
+		// Visit subtree of op
+		AST::Visitor::visit(node);
+
+		// TODO: Bubble up types through ops for now
+		TypeRef& t1 = node->left->getType(this->context);
+		TypeRef& t2 = node->right->getType(this->context);
+
+		const auto result = unifyTypes(t1, t2);
+		if (result == CannotUnify)
+			assert("Cannot unify types" && false);
+	}
+
 	void visit(AST::Call* node) override
 	{
 		if (node->processed)
@@ -63,22 +81,37 @@ struct ASTProcessor : AST::Visitor
 			return;
 		node->processed = true;
 
-		assert(node->funcLiteral);
-		// Process literal
-		node->funcLiteral->accept(this);
+		auto* funcLiteral = node->funcLiteral;
+		assert(funcLiteral);
 
-		TypeRef& functionType = node->funcLiteral->getType(this->context);
-
+		// Process literal signature separately to allow recursive 
+		//	references to this declaration with the correct type
+		assert(funcLiteral->signature);
+		funcLiteral->signature->accept(this);
+	
+		// Store type for this function
+		auto& signType = funcLiteral->signature->getType(this->context);
+		auto& functionType = signType->getTypeVariable().type;
 		Symbol* symbol = node->getSymbol(this->context);
 		symbol->firstInitOrder = node->order;
 		symbol->type = functionType;
 
-		// Store function for evaluation
-		{
-			auto source = context->getSymbolSource(node);
-			assert(source);
-			Evaluation::storeConstantFromExpression(econtext, *context, *node->funcLiteral, *source);	
-		}
+		auto source = context->getSymbolSource(node);
+		assert(source);
+
+		// Store function header for evaluation
+		// NOTE: We need to do this before processing of the body
+		//	since we can cause recursive calls through another function.
+		//	Processing this body will cause processing of the other function
+		//	which will in turn require this node to have stored at least the 
+		//	function header. It's complicated :(
+		auto irfunction = Evaluation::createAndStoreFunctionHeader(econtext, *context, *node->funcLiteral, *source);
+		assert(irfunction);
+
+		funcLiteral->accept(this);
+
+		// Store function body for evaluation
+		Evaluation::generateFunctionBody(econtext, *context, *irfunction, *node->funcLiteral);	
 	}
 
 	void visit(AST::FunctionSignature* node) override
@@ -204,7 +237,10 @@ struct ASTProcessor : AST::Visitor
 			types.push_back(TypeRef(e->getType(context)));
 		}
 
-		this->context->addTypeLiteral(node, createTupleType(std::move(types)));
+		auto type = TypeRef(createTupleType(std::move(types)));
+		type.stripTrivialTuples();
+
+		this->context->addTypeLiteral(node, std::move(type));
 	}
 
 	void visit(AST::UnaryPostfixOp* node) override
@@ -345,7 +381,7 @@ struct ASTProcessor : AST::Visitor
 		// 	This allows dependants to look them up
 		if (node->isDefine())
 		{
-			// TODO: Hm, we probably want to store a value for types as well, a hash maybe?
+			// TODO: Hm, we probably want to store a value for types as well, a hash/id maybe?
 			if (!symbol->getType()->isTypeVariable())
 			{
 				auto source = context->getSymbolSource(node);
@@ -353,7 +389,14 @@ struct ASTProcessor : AST::Visitor
 				assert(node->initExpr);
 				Evaluation::storeConstantFromExpression(econtext, *context, *node->initExpr, *source);	
 			}
-		}  
+		}
+		else if (node->isExternal())
+		{
+			assert(symbol->getType()->isFunction());
+			auto source = context->getSymbolSource(node);
+			assert(source);
+			Evaluation::storeExternal(econtext, *context, symbol->getType(), *source);
+		}
 	}
 
 	void visit(AST::Assignment* node) override
