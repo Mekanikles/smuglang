@@ -208,10 +208,25 @@ struct Context
 		auto func = llvm::dyn_cast<llvm::Function>(val);
 		assert(func);
 
+		const bool isVariadic = func->isVarArg();
+		const int funcArgCount = func->arg_size();
+
 		std::vector<llvm::Value*> args;
+		int argCount = 0;
 		for (auto& arg : call.args)
 		{
+			argCount++;
 			auto* val = createValueFromExpression(*arg);
+			if (argCount > funcArgCount)
+			{
+				assert(isVariadic);
+				// C ABI: Varags cannot handle floats, add a cast to double
+				if (val->getType()->isFloatTy())
+				{
+					val = m_llvmBuilder.CreateFPCast(val, llvm::Type::getDoubleTy(m_llvmContext), "vararg_cast");
+				}
+			}
+
 			args.push_back(val);
 		}
 
