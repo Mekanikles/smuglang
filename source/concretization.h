@@ -106,10 +106,21 @@ struct ExpressionConcretizer : AST::Visitor
 
 		// Might as well create the value here directly
 		//auto* value = this->context->backend->createIntegerConstantFromText(node->value, primitive.size, primitive.signedType == PrimitiveClass::Signed);
-
-		std::istringstream os(node->value);
-    	long long l;
-    	os >> l;
+		long int l;
+		if (node->ltype == AST::IntegerLiteral::Hexadecimal)
+		{
+			string s = &node->value[2];
+			l = std::stol(s, nullptr, 16);
+		}
+		else if (node->ltype == AST::IntegerLiteral::Binary)
+		{
+			string s = &node->value[2];
+			l = std::stol(s, nullptr, 2);
+		}
+		else
+		{
+			l = std::stol(node->value, nullptr, 10);
+		}
 
 		expressionStack.push_back(createIntegerLiteral(type, l));
 	}

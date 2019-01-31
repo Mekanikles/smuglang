@@ -164,7 +164,7 @@ public:
 				while (isxdigit(m_inStream.peek()))
 					out += m_inStream.get();
 
-				return TokenType::IntegerLiteral;
+				return TokenType::HexadecimalLiteral;
 			}
 
 			// binary integer
@@ -178,7 +178,7 @@ public:
 				while (isBinaryDigit(m_inStream.peek()))
 					out += m_inStream.get();
 
-				return TokenType::IntegerLiteral;
+				return TokenType::BinaryLiteral;
 			}
 		}
 
@@ -385,10 +385,7 @@ public:
 				TokenType type = scanNumericLiteral(literal);
 
 				assert(literal != "");
-				if (type == TokenType::FloatLiteral)
-					*outToken = Token(TokenType::FloatLiteral, literal);
-				else
-					*outToken = Token(TokenType::IntegerLiteral, literal);
+				*outToken = Token(type, literal);
 
 				return true;
 			}

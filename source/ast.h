@@ -295,10 +295,19 @@ namespace AST
 
 	struct IntegerLiteral : public NodeImpl<IntegerLiteral, Expression>
 	{
-		string value;
+		enum LiteralType
+		{
+			Decimal,
+			Hexadecimal,
+			Binary
+		};
 
-		IntegerLiteral(const string& value)
+		string value;
+		LiteralType ltype;
+
+		IntegerLiteral(const string& value, LiteralType ltype = Decimal)
 			: value(value)
+			, ltype(ltype)
 		{
 		}
 

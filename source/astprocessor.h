@@ -1,4 +1,5 @@
 #pragma once
+#include "ast.h"
 
 // Processing is done through dependency chain, rather than AST order
 struct ASTProcessor : AST::Visitor

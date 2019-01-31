@@ -10,6 +10,8 @@ enum class TokenType
 	CloseBrace,
 	StringLiteral,
 	IntegerLiteral,
+	HexadecimalLiteral,
+	BinaryLiteral,
 	FloatLiteral,
 	Symbol,
 	At,
@@ -72,6 +74,8 @@ string toString(TokenType type)
 		case TokenType::CloseBrace: return "Closing brace";
 		case TokenType::StringLiteral: return "String Literal";
 		case TokenType::IntegerLiteral: return "Integer Literal";
+		case TokenType::HexadecimalLiteral: return "Hexadecimal Literal";
+		case TokenType::BinaryLiteral: return "Binary Literal";
 		case TokenType::FloatLiteral: return "Float Literal";
 		case TokenType::Symbol: return "Symbol";
 		case TokenType::At: return "At";

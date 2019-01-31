@@ -429,9 +429,19 @@ struct Parser
 		}
 		else if (accept(TokenType::IntegerLiteral))
 		{
-			auto* expr = createNode<AST::IntegerLiteral>(lastToken().symbol);
+			auto* expr = createNode<AST::IntegerLiteral>(lastToken().symbol, AST::IntegerLiteral::Decimal);
 			*outNode = expr;
 		}
+		else if (accept(TokenType::HexadecimalLiteral))
+		{
+			auto* expr = createNode<AST::IntegerLiteral>(lastToken().symbol, AST::IntegerLiteral::Hexadecimal);
+			*outNode = expr;
+		}
+		else if (accept(TokenType::BinaryLiteral))
+		{
+			auto* expr = createNode<AST::IntegerLiteral>(lastToken().symbol, AST::IntegerLiteral::Binary);
+			*outNode = expr;
+		}				
 		else if (accept(TokenType::FloatLiteral))
 		{
 			auto* expr = createNode<AST::FloatLiteral>(lastToken().symbol);
