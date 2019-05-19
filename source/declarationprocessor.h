@@ -40,7 +40,7 @@ struct DeclarationProcessor : public AST::Visitor
 			Symbol* symbol = createSymbol(param->name);
 			symbol->isParam = true;
 
-			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, param, StorageQualifier::Const);
+			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, param, param->storageQualifier);
 			paramScope.addSymbolSource(symbolSource);
 			this->context->setSymbolSource(param, symbolSource);
 
@@ -52,7 +52,7 @@ struct DeclarationProcessor : public AST::Visitor
 			Symbol* symbol = createSymbol(param->name);
 			symbol->isParam = true;
 
-			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, param, StorageQualifier::Var);
+			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, param, param->storageQualifier);
 			paramScope.addSymbolSource(symbolSource);
 			this->context->setSymbolSource(param, symbolSource);
 
@@ -121,6 +121,30 @@ struct DeclarationProcessor : public AST::Visitor
 
 		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)this->currentScope->id));
 		AST::Visitor::visit(node);
+	}
+
+	void visit(AST::TemplateDeclaration* node) override
+	{
+		AST::Declaration* symDecl = node->declaration;
+
+		string symbolName = symDecl->getSymbolName();
+
+		// Make sure symbol is not declared in same scope
+		// 	It is okay to overshadow parent scope declarations.
+		auto exitingDeclaration = this->currentScope->lookUpDeclarationInScope(symDecl->getSymbolName());
+		if (exitingDeclaration)
+		{
+			assert(false && "Symbol already declared");
+		}
+
+		auto symbolSource = createTemplateSymbolSource(this->context, symbolName, node);
+		this->currentScope->addSymbolSource(symbolSource);
+		this->context->setSymbolSource(node, symbolSource);
+
+		//printLine(string("Created symbol: ") + symbol->name + " in scope: " + std::to_string((long)this->currentScope->id));
+
+		// Don't traverse the inner declaration before knowing template arguments
+		this->context->setScope(node, this->currentScope);
 	}
 
 	void visit(AST::EvalStatement* node) override

@@ -1,4 +1,12 @@
 #pragma once
+#include "core.h"
+#include "utils.h"
+#include "input.h"
+#include "token.h"
+#include "scanner.h"
+#include "types.h"
+#include "symbols.h"
+#include "ast.h"
 
 struct SourceInput
 {
@@ -107,9 +115,11 @@ struct Parser
 		//printLine(string("Found token: ") + toString(this->currentToken));
 	}
 
-	bool peek(TokenType type)
+	const Token& peek(TokenType type)
 	{
-		return this->currentToken.type == type;
+		if (this->currentToken.type == type)
+			return this->currentToken;
+		return s_invalidToken;
 	}
 
 	bool accept(TokenType type)
@@ -237,16 +247,26 @@ struct Parser
 
 	bool parseTypeLiteral(AST::TypeLiteral** outNode)
 	{
-		if (accept(TokenType::CompilerDirective))
+		if (const Token& token = peek(TokenType::CompilerDirective))
 		{
-			if (lastToken().symbol == "primitives")
+			if (token.symbol == "primitives")
 			{
+				advanceToken();
+				
 				// TODO: Generalise primitives as list of types
 				expect(TokenType::Dot);
 
 				expect(TokenType::Symbol);
+
+				if (lastToken().symbol == "type")
+				{
+					auto* node = createNode<AST::TypeLiteral>(createTypeVariable());		
+					*outNode = node;
+					return true;
+				}
+
 				PrimitiveClass::SignedType sign = PrimitiveClass::UnknownSign;
-				int size = -1;
+				int size = -1; 
 
 				auto type = PrimitiveClass::Int;
 
@@ -264,6 +284,10 @@ struct Parser
 						type = PrimitiveClass::Char;
 						sign = PrimitiveClass::Signed;
 						size = 8;
+					}
+					else
+					{
+						errorOnAccept("Unknown c primitive");
 					}
 				}
 				else if (lastToken().symbol == "int")
@@ -368,13 +392,9 @@ struct Parser
 					std::make_unique<PrimitiveClass>(type, (uint)size, sign);
 				auto* node = createNode<AST::TypeLiteral>(Type(std::move(typeClass)));		
 				*outNode = node;
-			}
-			else
-			{
-				errorOnAccept("Unknown compiler directive");
-			}
 
-			return true;
+				return true;
+			}
 		}
 
 		return false;
@@ -450,18 +470,30 @@ struct Parser
 		else if (accept(TokenType::Symbol))
 		{
 			string symbol = lastToken().symbol;
+
+			auto* expr = createNode<AST::SymbolExpression>(symbol);
+
+			// Template parameters
+			if (accept(TokenType::TemplateParameterOpener))
+			{
+				if (!parseTemplateArguments(expr))
+				{
+					errorOnExpect("Template parameter list expected");
+				}
+
+				expect(TokenType::CloseParenthesis);
+			}
+
 			// TODO: Support any primary expression as a call initializer
 			if (accept(TokenType::OpenParenthesis))
 			{	
 				auto node = createNode<AST::Call>();
 				node->function = symbol;
- 
-				auto* expr = createNode<AST::SymbolExpression>(symbol);
 				node->expr = expr;
 
-				if (!parseCallParameters(node))
+				if (!parseCallArguments(node))
 				{
-					errorOnExpect("Call parameter list expected");
+					errorOnExpect("Call arguments expected");
 				}
 
 				expect(TokenType::CloseParenthesis);
@@ -469,7 +501,6 @@ struct Parser
 			}
 			else
 			{
-				auto* expr = createNode<AST::SymbolExpression>(symbol);
 				*outNode = expr;	
 			}
 		}
@@ -604,7 +635,7 @@ struct Parser
 		return true;
 	}
 
-	bool parseCallParameters(AST::Call* call)
+	bool parseCallArguments(AST::Call* call)
 	{
 		AST::Expression* exprNode;
 		if (parseExpression(&exprNode))
@@ -615,6 +646,26 @@ struct Parser
 			{
 				if (parseExpression(&exprNode))
 					call->args.push_back(exprNode);
+				else
+					errorOnExpect("Expected expression");
+			}
+		}
+
+		return true;
+	}
+
+	// TODO: generalize argument lists
+	bool parseTemplateArguments(AST::SymbolExpression* expr)
+	{
+		AST::Expression* exprNode;
+		if (parseExpression(&exprNode))
+		{
+			expr->templateArgs.push_back(exprNode);
+
+			while (accept(TokenType::Comma))
+			{
+				if (parseExpression(&exprNode))
+					expr->templateArgs.push_back(exprNode);
 				else
 					errorOnExpect("Expected expression");
 			}
@@ -770,7 +821,7 @@ struct Parser
 		return true;
 	}
 
-	bool parseFunctionSignature(AST::FunctionSignature** outSignature)
+	bool parseFunctionSignature(AST::FunctionSignature** outSignature, bool forceDefQualifier = false)
 	{
 		AST::FunctionSignature* node;
 
@@ -786,6 +837,9 @@ struct Parser
 			if (parseFunctionInParam(&inParam))
 			{
 				node->inParams.push_back(inParam);
+
+				if (forceDefQualifier)
+					inParam->storageQualifier = StorageQualifier::Def;
 
 				while(accept(TokenType::Comma))
 				{
@@ -942,6 +996,38 @@ struct Parser
 		return false;
 	}
 
+	bool parseTemplatedDeclarationStatement(AST::TemplateDeclaration** outTemplateDeclaration)
+	{
+		if (const Token& token = peek(TokenType::CompilerDirective))
+		{
+			if (token.symbol == "template")
+			{
+				advanceToken();
+
+				AST::TemplateDeclaration* node = createNode<AST::TemplateDeclaration>();
+
+				if (!parseFunctionSignature(&node->signature, true))
+				{
+					errorOnAccept("Expected signature following template declaration");
+					return true;
+				}
+
+				AST::Declaration* innerDecl = nullptr;
+				if (!parseDeclarationStatement(&innerDecl))
+				{
+					errorOnAccept("Expected declaration statement");
+				}
+
+				node->declaration = innerDecl;
+				*outTemplateDeclaration = node;
+
+				return true;
+			}
+		}
+
+		return false;
+	}
+
 	bool parseIfStatement(AST::IfStatement** outStatement)
 	{
 		if (accept(TokenType::If))
@@ -1023,6 +1109,7 @@ struct Parser
 	bool parseStatement(AST::Statement** outStatement)
 	{
 		AST::Declaration* declaration;
+		AST::TemplateDeclaration* templateDeclaration;
 		AST::IfStatement* ifStatement;
 		AST::EvalStatement* evalStatement;
 		AST::StatementBody* statementBody;
@@ -1124,6 +1211,20 @@ struct Parser
 			Token t = lastToken();
 			string symbol = t.symbol;
 
+			AST::SymbolExpression* expr = nullptr;
+
+			// Template parameters
+			if (accept(TokenType::TemplateParameterOpener))
+			{
+				expr = createNode<AST::SymbolExpression>(symbol);
+				if (!parseTemplateArguments(expr))
+				{
+					errorOnExpect("Template parameter list expected");
+				}
+
+				expect(TokenType::CloseParenthesis);
+			}
+
 			// TODO: accept expression instead
 			//	Will allow assigning to function return values
 			// Function call
@@ -1132,10 +1233,11 @@ struct Parser
 				auto node = createNode<AST::Call>();
 				node->function = symbol;
 
-				auto* expr = createNode<AST::SymbolExpression>(symbol);
+				if (!expr)
+					expr = createNode<AST::SymbolExpression>(symbol);
 				node->expr = expr;
 
-				if (!parseCallParameters(node))
+				if (!parseCallArguments(node))
 				{
 					errorOnExpect("Call parameter list expected");
 				}
@@ -1157,18 +1259,19 @@ struct Parser
 				auto* node = createNode<AST::Assignment>();
 				*outStatement = node;
 				
-				auto* symExpr = createNode<AST::SymbolExpression>(symbol);
-				symExpr->isPartOfAssignment = true;
+				if (!expr)
+					expr = createNode<AST::SymbolExpression>(symbol);
+				expr->isPartOfAssignment = true;
 
 				// Assignment
-				AST::Expression* expr;
-				if (!parseExpression(&expr))
+				AST::Expression* assignExpr;
+				if (!parseExpression(&assignExpr))
 				{
 					errorOnExpect("Expected expression");
 				}
 
-				node->symExpr = symExpr;
-				node->expr = expr;
+				node->symExpr = expr;
+				node->expr = assignExpr;
 
 				expect(TokenType::SemiColon, false);
 			}
@@ -1182,6 +1285,12 @@ struct Parser
 			expect(TokenType::SemiColon, false);
 			*outStatement = expression;
 		}	
+		else if (parseTemplatedDeclarationStatement(&templateDeclaration))
+		{
+			// TODO: Should declarations ending in bodies require semi colon?
+			expect(TokenType::SemiColon, false);			
+			*outStatement = templateDeclaration;
+		}
 		else if (parseDeclarationStatement(&declaration))
 		{
 			// TODO: Should declarations ending in bodies require semi colon?

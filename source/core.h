@@ -26,6 +26,8 @@ using vector = std::vector<T>;
 using string = std::string;
 template<typename T>
 using unique = std::unique_ptr<T>;
+template<typename T>
+using shared = std::shared_ptr<T>;
 
 using uint = unsigned int;
 using u8 = unsigned char;

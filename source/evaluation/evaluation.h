@@ -134,12 +134,17 @@ unique<IR::Literal> createLiteralFromASTExpression(EvaluationContext& eContext, 
 	}
 }
 
-void storeConstantFromExpression(EvaluationContext& eContext, ASTContext& astContext, AST::Expression& expr, SymbolSource& source)
+void storeConstantFromLiteral(EvaluationContext& eContext, ASTContext& astContext, shared<IR::Literal> literal, SymbolSource& source)
 {
 	string name = source.getSymbol()->name;
-	auto literal = createLiteralFromASTExpression(eContext, astContext, expr);
-	auto constant = std::make_unique<IR::Constant>(std::move(literal), name, &source);
+	auto constant = std::make_unique<IR::Constant>(literal, name, &source);
 	eContext.module->addConstant(std::move(constant));
+}
+
+void storeConstantFromExpression(EvaluationContext& eContext, ASTContext& astContext, AST::Expression& expr, SymbolSource& source)
+{
+	auto literal = createLiteralFromASTExpression(eContext, astContext, expr);
+	storeConstantFromLiteral(eContext, astContext, std::move(literal), source);
 }
 
 void storeExternal(EvaluationContext& eContext, ASTContext& astContext, const TypeRef& type, SymbolSource& source)

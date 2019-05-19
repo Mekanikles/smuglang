@@ -9,6 +9,7 @@ namespace AST
 	struct SymbolDeclaration;
 	struct Declaration;
 	struct SymbolExpression;
+	struct TemplateDeclaration;
 }
 
 struct ASTContext;
@@ -76,45 +77,70 @@ vector<Symbol*>& getSymbols()
 }
 
 struct SymbolScope;
-
+struct TemplateSymbolSource;
 struct SymbolDependency;
 
 struct SymbolSource
 {
+	ASTContext* context;
+
 	// TODO: This should not be necessary, SymbolScope knows what to do and
 	//	should store sources by name
 	virtual bool providesSymbolName(const string& s) = 0;
 	virtual void hookDependency(SymbolDependency* dependency) = 0;
 	virtual bool isSingleSymbolSource() = 0;
+	virtual bool isDefine() { return false; }
 	virtual Symbol* getSymbol() const = 0;
 	virtual AST::Node* getNode() = 0;
-	virtual ASTContext* getContext() = 0;
+	virtual ASTContext* getContext() { assert(context); return context; }
 	virtual bool isExternal() { return false; }
+	virtual bool isTemplate() { return false; }
+	virtual TemplateSymbolSource* asTemplate() { assert(false); return nullptr; }
 };
 
-struct DeclarationSymbolSource : SymbolSource
+struct SingleSymbolSource : SymbolSource
 {
-	AST::Node* node;
-	ASTContext* context;
-	Symbol* symbol = nullptr;
 	StorageQualifier storageQualifier;
+
+	bool isSingleSymbolSource() override { return true; }
+	bool isDefine() override { return storageQualifier == StorageQualifier::Def; } 
+};
+
+struct DeclarationSymbolSource : SingleSymbolSource
+{
+	// TODO: This should be AST::Declaration but functions Params are not
+	//	statements
+	AST::Node* node;
+	Symbol* symbol = nullptr;
 
 	bool providesSymbolName(const string& s) override { return s == symbol->name; }
 	void hookDependency(SymbolDependency* dependency) override;
-	bool isSingleSymbolSource() override { return true; }
 	Symbol* getSymbol() const override { assert(symbol); return symbol; }
 	AST::Node* getNode() override { assert(node); return node; }
-	ASTContext* getContext() override { assert(context); return context; }
 	bool isExternal() override { return storageQualifier == StorageQualifier::Extern; }
+};
+
+struct TemplateSymbolSource : SingleSymbolSource
+{
+	// TODO: This should be AST::Declaration but requires casting
+	//	to AST::Node
+	AST::Node* node;
+	string symbolName;
+
+	bool providesSymbolName(const string& s) override { return s == symbolName; }
+	void hookDependency(SymbolDependency* dependency) override;
+	Symbol* getSymbol() const override { assert(false && "Cannot resolve a single symbol from template source without parameters"); return nullptr; }
+	AST::Node* getNode() override { assert(node); return node; }
+	bool isTemplate() override { return true; }	
+	virtual TemplateSymbolSource* asTemplate() override { return this; }
 };
 
 struct CatchAllSymbolSource : SymbolSource
 {
 	AST::Node* node;
-	ASTContext* context;
 	vector<SymbolDependency*> dependencies;
 
-	// Catch all symbol requgests
+	// Catch all symbol requests
 	bool providesSymbolName(const string& s) override { return true; }
 	void hookDependency(SymbolDependency* dependency) override;
 	bool isSingleSymbolSource() override { return false; }
@@ -146,6 +172,11 @@ void DeclarationSymbolSource::hookDependency(SymbolDependency* dependency)
 	dependency->source = this;
 }
 
+void TemplateSymbolSource::hookDependency(SymbolDependency* dependency)
+{
+	dependency->source = this;
+}
+
 void CatchAllSymbolSource::hookDependency(SymbolDependency* dependency)
 {
 	// Store all symbol requests for later
@@ -162,6 +193,16 @@ DeclarationSymbolSource* createDeclarationSymbolSource(ASTContext* context, Symb
 	s->symbol = symbol;
 	s->context = context;
 	s->storageQualifier = storageQualifier;
+	s_symbolSources.push_back(s);
+	return s;
+}
+
+TemplateSymbolSource* createTemplateSymbolSource(ASTContext* context, string symbolName, AST::Node* node)
+{
+	auto s = new TemplateSymbolSource();
+	s->node = node;
+	s->symbolName = symbolName;
+	s->context = context;
 	s_symbolSources.push_back(s);
 	return s;
 }
@@ -187,12 +228,12 @@ struct SymbolScope
 {
 	uint id = s_scopeCount++;
 	SymbolScope* parentScope = nullptr;
-	vector<DeclarationSymbolSource*> declarationSymbolSources;
+	vector<SingleSymbolSource*> singleSymbolSources;
 	vector<CatchAllSymbolSource*> catchAllSymbolSources;
 
-	void addSymbolSource(DeclarationSymbolSource* symbolSource)
+	void addSymbolSource(SingleSymbolSource* symbolSource)
 	{
-		this->declarationSymbolSources.push_back(symbolSource);
+		this->singleSymbolSources.push_back(symbolSource);
 	}
 
 	void addSymbolSource(CatchAllSymbolSource* symbolSource)
@@ -211,21 +252,21 @@ struct SymbolScope
 		return false;
 	}
 
-	vector<DeclarationSymbolSource*>& getDeclarations() 
+	vector<SingleSymbolSource*>& getDeclarations() 
 	{
-		return declarationSymbolSources;
+		return this->singleSymbolSources;
 	}
 
-	const vector<DeclarationSymbolSource*>& getDeclarations() const
+	const vector<SingleSymbolSource*>& getDeclarations() const
 	{
-		return declarationSymbolSources;
+		return this->singleSymbolSources;
 	}
 
 	bool hasCatchAlls() const { return catchAllSymbolSources.size() > 0; }
 
-	DeclarationSymbolSource* lookUpDeclarationInScope(const string& symbolName)
+	SingleSymbolSource* lookUpDeclarationInScope(const string& symbolName)
 	{
-		for (auto* s : this->declarationSymbolSources)
+		for (auto* s : this->singleSymbolSources)
 		{
 			if (s->providesSymbolName(symbolName))
 				return s;

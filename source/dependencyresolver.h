@@ -45,6 +45,11 @@ struct DependencyResolver : AST::Visitor
 		resolveDependency(dependency, scope);
 	}
 
+	void visit(AST::TemplateDeclaration* node) override
+	{
+		// Do not traverse subtree
+	}	
+
 	DependencyResolver(ASTContext* context)
 		: context(context)
 	{

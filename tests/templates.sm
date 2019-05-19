@@ -1,0 +1,15 @@
+/*def cchar = #primitives.c.char;
+def cint = #primitives.c.int;
+def f16 = #primitives.c.f16;
+def type = #primitives.type;*/
+
+//extern printf : func(fmt : #primitives.c.char*, args...) -> errCode : #primitives.c.int;
+
+#template(T : #primitives.type, value : T) 
+var hej : T = value;
+
+hej#(#primitives.c.int, 666) = 5;
+//hej#(#primitives.f16, 123.0) = 6.0;
+
+//printf("The Int: %i\n", hej#(#primitives.c.int));
+//printf("The Float: %f\n", hej#(#primitives.f16));

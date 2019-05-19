@@ -9,11 +9,11 @@ def u64 = #primitives.int(64, false);
 def s32 = #primitives.int(32, true);
 def u32 = #primitives.int(32, false);
 
-func get_fmt_types(fmt : cchar*) -> type[]
+func get_fmt_types(fmt : String) -> type[]
 {
 	var types : [256]; // TODO: implement dynamic arrays and replace return types
 	var count : s32 = 0;
-	var cptr : cchar* = fmt;
+	var cptr : cchar* = fmt.cstr();
 	while (*cptr != '\0') // TODO: Don't rely on cchar* strings for parsing chars
 	{
 		var c : cchar = *cptr++;
@@ -49,18 +49,29 @@ func get_fmt_types(fmt : cchar*) -> type[]
 	return types[0:count];
 }
 
-func printf(def fmt : cchar*, args : get_fmt_types(fmt)))
+// This works with generics because args are specified as a tuple.
+//	Tuples can be generically handled by the typesystem.
+//	fmt need to be declared "def" to ensure that its value is known
+//	at compile time.
+// Note: get_fmt_types must return cchar* for %s, and string arguments 
+//	will have to implement that interface, leading to an implicit conversion.
+func printf(def fmt : String, args : ...(get_fmt_types(fmt)))
 {
 	extern printf(fmt : cchar*, args...) -> err : cint;
-	printf(fmt, args);
+	printf(fmt.cstr(), args);
 }
 
-printf("Typesafe printf test!\n");
-printf("Print char: %c\n", '0');
-printf("Print int: %i\n", 1);
-printf("Print uint: %u\n", 2);
-printf("Print long: %il\n", 3);
-printf("Print ulong: %il\n", 4);
+func print(str : String)
+{
+	printf("%s", str);
+}
+
+print("Typesafe printf test!\n");
+printf("Print char: %c", '0');
+printf("Print int: %i", 1);
+printf("Print uint: %u", 2);
+printf("Print long: %il", 3);
+printf("Print float: %f", 4.0f);
 
 
 

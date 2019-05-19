@@ -34,6 +34,16 @@ unique<IR::Literal> createIntegerLiteral(const TypeRef& type, long long l)
 	return createExpression<IR::Literal>(type, std::move(data));
 }
 
+unique<IR::Literal> createTypeLiteral(const TypeRef& type)
+{
+	vector<u8> data;
+	data.resize(sizeof(TypeId));
+	const TypeId typeId = type->typeId();
+	memcpy(data.data(), &typeId, sizeof(TypeId));
+
+	return createExpression<IR::Literal>(type, std::move(data));
+}
+
 ConcretizerContext* context = nullptr;
 IR::Block* currentBlock = nullptr;
 ASTContext* astContext = nullptr;
@@ -89,6 +99,15 @@ struct ExpressionConcretizer : AST::Visitor
 		generateConcreteFunction(this->context, this->astContext, *funcPtr, node);
 		
 		expressionStack.push_back(funcPtr->createLiteral());
+	}
+
+	virtual void visit(AST::TypeLiteral* node) override
+	{
+		auto& type = node->getType(this->astContext);
+
+		assert(type->isTypeVariable());
+
+		expressionStack.push_back(createTypeLiteral(type));
 	}
 
 	virtual void visit(AST::IntegerLiteral* node) override
@@ -378,48 +397,97 @@ struct FunctionConcretizer : AST::Visitor
 		this->currentBlock->addStatement(std::unique_ptr<IR::Statement>(call));
 	}
 
+	virtual void visit(AST::TemplateDeclaration* node) override
+	{
+		for (auto& instance : node->instances)
+		{
+			FunctionConcretizer concretizer(this->context, &instance.astContext, currentScope, currentBlock);
+			concretizer.generateConcreteNode(node->declaration);
+		}
+	}
+
+	void handleDeclarationSymbolSource(IR::Scope& scope, DeclarationSymbolSource& source)
+	{
+		Symbol* symbol = source.getSymbol();
+		assert(symbol);
+		TypeRef& type = symbol->getType();
+		if (type->isTypeVariable())
+			return;
+
+		if (source.storageQualifier == StorageQualifier::Extern)
+		{
+			createAndAddExternal(*this->context, type, source);
+		}
+		else if (source.storageQualifier == StorageQualifier::Def)
+		{
+			if (type->isFunction())
+			{
+				auto func = std::make_unique<IR::Function>(type, symbol->name);
+				auto funcPtr = this->context->module->addFunction(std::move(func));
+
+				this->context->module->addConstant(funcPtr->createConstant(&source));
+			}
+			else
+			{
+				// TODO: For now, treat defs as variables, until we enfore conversion to literals for all defs
+				auto variable = std::make_unique<IR::Variable>(type, symbol->name, &source);
+				auto* ref = scope.addVariable(std::move(variable));
+				this->context->module->cacheReferenceable(ref);	
+			}	
+		}
+		else
+		{
+			auto variable = std::make_unique<IR::Variable>(type, symbol->name, &source);
+			auto* ref = scope.addVariable(std::move(variable));
+			this->context->module->cacheReferenceable(ref);	
+		}
+	}
+
 	void handleSymbolScope(IR::Scope& scope, const SymbolScope& symbolScope)
 	{
 		IR::Module* module = this->context->module;
 		assert(module);
 
-		// 
-		for (DeclarationSymbolSource* symbolSource : symbolScope.getDeclarations())
+		for (auto* symbolSource : symbolScope.getDeclarations())
 		{
-			Symbol* symbol = symbolSource->symbol;
-			assert(symbol);
-			TypeRef& type = symbol->getType();
-			if (type->isTypeVariable())
-				continue;
+			if (symbolSource->isTemplate())
+			{
+				auto* templateSource = static_cast<TemplateSymbolSource*>(symbolSource);
+				auto* templateNode = static_cast<AST::TemplateDeclaration*>(templateSource->node);
+				assert(templateNode);
 
-			if (symbolSource->storageQualifier == StorageQualifier::Extern)
-			{
-				createAndAddExternal(*this->context, type, *symbolSource);
-			}
-			else if (symbolSource->storageQualifier == StorageQualifier::Def)
-			{
-				if (type->isFunction())
+				for (auto& instance : templateNode->instances)
 				{
-					auto func = std::make_unique<IR::Function>(type, symbol->name);
-					auto funcPtr = this->context->module->addFunction(std::move(func));
+					// Store template constants
+					for (auto& literalAndSource : instance.literals)
+					{
+						if (literalAndSource.literal->type->isTypeVariable())
+							continue;
 
-					this->context->module->addConstant(funcPtr->createConstant(symbolSource));
+						auto constant = std::make_unique<IR::Constant>(literalAndSource.literal, literalAndSource.name, literalAndSource.source);
+						this->context->module->addConstant(std::move(constant));			
+					}
+
+					// Add instanced declaration to current scope
+					auto* declSymbolSource = instance.astContext.getSymbolSource(templateNode->declaration);
+					assert(declSymbolSource);
+					assert(declSymbolSource->isSingleSymbolSource() && !declSymbolSource->isTemplate());
+					auto* declarationSymbolSource = static_cast<DeclarationSymbolSource*>(declSymbolSource);
+					handleDeclarationSymbolSource(scope, *declarationSymbolSource);
 				}
-				else
-				{
-					// TODO: For now, treat defs as variables, until we enfore conversion to literals for all defs
-					auto variable = std::make_unique<IR::Variable>(type, symbol->name, symbolSource);
-					auto* ref = scope.addVariable(std::move(variable));
-					this->context->module->cacheReferenceable(ref);	
-				}	
 			}
 			else
 			{
-				auto variable = std::make_unique<IR::Variable>(type, symbol->name, symbolSource);
-				auto* ref = scope.addVariable(std::move(variable));
-				this->context->module->cacheReferenceable(ref);	
-			}	
+				assert(symbolSource->isSingleSymbolSource());
+				auto* declarationSymbolSource = static_cast<DeclarationSymbolSource*>(symbolSource);
+				handleDeclarationSymbolSource(scope, *declarationSymbolSource);
+			}
 		}
+	}
+
+	void generateConcreteNode(AST::Node* node)
+	{
+		node->accept(this);
 	}
 
 	void generateConcreteStatementBody(IR::Scope* scope, AST::StatementBody* node)
@@ -472,16 +540,18 @@ struct FunctionConcretizer : AST::Visitor
 		}			
 	}
 
-	FunctionConcretizer(ConcretizerContext* context, ASTContext* astContext)
+	FunctionConcretizer(ConcretizerContext* context, ASTContext* astContext, IR::Scope* currentScope = nullptr, IR::Block* currentBlock = nullptr)
 		: context(context)
 		, astContext(astContext)
+		, currentScope(currentScope)
+		, currentBlock(currentBlock)
 	{
 	}
 
 	ConcretizerContext* context = nullptr;
+	ASTContext* astContext = nullptr;	
 	IR::Scope* currentScope = nullptr;
 	IR::Block* currentBlock = nullptr;
-	ASTContext* astContext = nullptr;
 };
 
 IR::Function* generateConcreteFunction(ConcretizerContext* context, ASTContext* astContext, IR::Function& func, AST::FunctionLiteral* funcLiteral)

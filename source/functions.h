@@ -1,15 +1,28 @@
 #pragma once
 
-struct FunctionArgumentBinding
+#include "core.h"
+#include "types.h"
+#include "context.h"
+#include "ast.h"
+
+struct ArgumentBinding
 {
 	struct Param
 	{
-		TypeRef type;
+		int paramIndex;
 		int argIndex;
 		int argCount;
 
-		Param(TypeRef&& type, int argIndex, int argCount) 
-			: type(std::move(type))
+		// Hm, this will be filled in by unification
+		TypeRef type;
+
+		bool isVariadic()
+		{
+			return argCount > 1;
+		}
+
+		Param(int paramIndex, int argIndex, int argCount = 1) 
+			: paramIndex(paramIndex)
 			, argIndex(argIndex) 
 			, argCount(argCount)
 		{}
@@ -18,129 +31,163 @@ struct FunctionArgumentBinding
 	vector<Param> params;
 };
 
-FunctionArgumentBinding* createFunctionArgumentBinding(const AST::Call* callNode, const FunctionClass& functionClass)
+struct ArgProvider
 {
-	auto* binding = createObject<FunctionArgumentBinding>();
-
-	const auto& functionInParams = functionClass.inParams;
-
-	struct ArgConsumer
+	struct Arg
 	{
-		const vector<AST::Expression*>& args;
-		int consumed = 0;
+		string name;
+		AST::Expression* expr;
+	};
 
-		bool canConsume()
-		{
-			return consumed < args.size();
-		}
+	vector<Arg> args;
+	int consumed = 0;
 
-		int consume()
-		{
-			assert(canConsume() && "Too few arguments to function");
-			return consumed++;
-		}
-	} args { callNode->args };
+	bool canConsume()
+	{
+		return consumed < args.size();
+	}
+
+	int consume()
+	{
+		assert(canConsume() && "Too few arguments to function");
+		return consumed++;
+	}
+};
+
+struct ParamProvider
+{
+	struct Param
+	{
+		string name;
+		bool isVariadic;
+	};
+
+	vector<Param> params;
+	int consumed = 0;
+
+	bool canConsume()
+	{
+		return consumed < params.size();
+	}
+
+	int consume()
+	{
+		assert(canConsume() && "Too few arguments to function");
+		return consumed++;
+	}
+
+	bool isVariadic()
+	{
+		assert(consumed < params.size());
+		return params[consumed].isVariadic;
+	}
+};
+
+ArgumentBinding* createArgumentBinding(ArgProvider& args, ParamProvider& params)
+{
+	auto* binding = createObject<ArgumentBinding>();
 
 	// TODO: For now, we only allow left-to-right consuming of args
 	//	tuples must be explicitly provided.
 	// In the future, we want to allow fleible mapping between single args
 	//	and tuples, plus named argument
-	for (const auto& p : functionInParams)
+	while (params.canConsume())
 	{
 		// Important to clone all types so we can do type inference for each
 		//	binding rather than the function itself	
-		if (p.type->isTuple())
+		if (params.isVariadic())
 		{
-			auto& tuple = p.type->getTuple();
-			if (tuple.unbounded)
+			// Eat rest of args
+			int argIndex = args.consumed;
+			int count = 0;
+			while (args.canConsume())
 			{
-				// Eat rest of args
-				auto& elType = tuple.types.back();
-				vector<TypeRef> types;
-				int index = args.consumed;
-				while (args.canConsume())
-				{
-					args.consume();
-					types.push_back(elType.clone());
-				}
-				int count = types.size();			
-
-				auto tupleType = createTupleType(std::move(types));
-				binding->params.emplace_back(TypeRef(std::move(tupleType)), index, count);
+				args.consume();
+				count++;
 			}
-			else
-			{
-				vector<TypeRef> types;
-				int index = args.consumed;
-				for (auto& t : tuple.types)
-				{
-					types.push_back(t.clone());
-				}
-				int count = types.size();
-
-				auto tupleType = createTupleType(std::move(types));
-				binding->params.emplace_back(TypeRef(std::move(tupleType)), index, count);
-			}		
+			
+			binding->params.push_back(ArgumentBinding::Param(params.consumed, argIndex, count));
 		}
 		else
 		{
-			int index = args.consume();
-			binding->params.emplace_back(p.type.clone(), index, 1);
-		}
-	}
-
-	// For variadic we just eat the rest of all arguments with a tuple
-	if (functionClass.isCVariadic)
-	{
-		vector<TypeRef> types;
-		int index = args.consumed;
-		while (args.canConsume())
-		{
+			binding->params.emplace_back(ArgumentBinding::Param(params.consumed, args.consumed));
 			args.consume();
-			types.push_back(Type());
 		}
-		int count = types.size();			
 
-		auto tupleType = createTupleType(std::move(types));
-		binding->params.emplace_back(TypeRef(std::move(tupleType)), index, count);
+		params.consume();
 	}
 
 	if (args.canConsume())
-		assert(false && "Too many arguments to function");
-
-	// TODO: Bind to output params
+		assert(false && "Too many arguments for binding");
 
 	return binding;
 }
 
-bool unifyArguments(ASTContext* context, AST::Call* callNode, FunctionArgumentBinding* argBinding)
+ArgumentBinding* createFunctionArgumentBinding(const AST::Call& callNode, const FunctionClass& function)
 {
-	auto& args = callNode->args;
-	for (auto& p : argBinding->params)
+	ArgProvider args;
+	for (auto* expr : callNode.args)
 	{
-		if (p.argCount == 0)
+		args.args.push_back(ArgProvider::Arg{ "", expr });
+	}
+	
+	ParamProvider params;
+	for (auto& inParam : function.inParams)
+	{
+		params.params.push_back(ParamProvider::Param{ "", inParam.type->isTuple() });
+	}
+
+	return createArgumentBinding(args, params);
+}
+
+ArgumentBinding* createTemplateArgumentBinding(const AST::SymbolExpression& expr, const AST::TemplateDeclaration& templDecl)
+{
+	ArgProvider args;
+	for (auto* expr : expr.templateArgs)
+	{
+		args.args.push_back(ArgProvider::Arg{ "", expr });
+	}
+	
+	ParamProvider params;
+	for (auto* inParam : templDecl.signature->inParams)
+	{
+		params.params.push_back(ParamProvider::Param{ "", inParam->isVariadic });
+	}
+
+	return createArgumentBinding(args, params);
+}
+
+
+bool unifyArguments(vector<TypeRef>& argTypes, vector<TypeRef>& paramTypes, ArgumentBinding* argBinding)
+{
+	for (auto& boundParam : argBinding->params)
+	{
+		if (boundParam.argCount == 0)
 			continue;
 
-		TypeRef& paramType = p.type;
-		TypeRef argType;
-		if (paramType->isTuple())
+		assert(boundParam.paramIndex < paramTypes.size());
+		TypeRef& paramType = paramTypes[boundParam.paramIndex];
+
+		if (boundParam.isVariadic())
 		{
 			// Wrap the argument types in a tuple, to be able to unify all at once
 			// 	note that we do not clone the types here, we want to ref the args directly
 			vector<TypeRef> types;
-			for (int i = p.argIndex; i < p.argIndex + p.argCount; i++)
+			for (int i = boundParam.argIndex; i < boundParam.argIndex + boundParam.argCount; i++)
 			{
-				types.push_back(args[p.argIndex]->getType(context));
+				assert(i < argTypes.size());
+				types.push_back(argTypes[i]);
 			}
 
-			argType = createTupleType(std::move(types));
+			boundParam.type = createTupleType(std::move(types));
 		}
 		else
 		{
-			argType = args[p.argIndex]->getType(context);	
+			assert(boundParam.argIndex < argTypes.size());
+			boundParam.type = argTypes[boundParam.argIndex];	
 		} 
 
-		const auto result = unifyTypes(argType, paramType);
+		const auto result = unifyTypes(boundParam.type, paramType);
 		if (result == CannotUnify)
 			assert(false && "Could not unify function argument");
 	}
@@ -148,7 +195,45 @@ bool unifyArguments(ASTContext* context, AST::Call* callNode, FunctionArgumentBi
 	return true;
 }
 
+bool unifyFunctionCall(ASTContext* context, AST::Call* call, const FunctionClass& function, ArgumentBinding* argBinding)
+{
+	vector<TypeRef> argTypes;
+	for (AST::Expression* expr : call->args)
+	{
+		argTypes.push_back(expr->getType(context));
+	}
 
+	vector<TypeRef> paramTypes;
+	for (const FunctionClass::Param& param : function.inParams)
+	{
+		// Important to clone all types so we can do type inference for each
+		//	binding rather than the function itself		
+		argTypes.emplace_back(param.type.clone());
+	}
+
+	return unifyArguments(argTypes, paramTypes, argBinding);
+
+	// TOOD: Unify out params
+}
+
+bool unifyTemplateArguments(ASTContext* argContext, ASTContext* instanceContext, AST::SymbolExpression* expr, AST::FunctionSignature* signature, ArgumentBinding* argBinding)
+{
+	vector<TypeRef> argTypes;
+	for (AST::Expression* expr : expr->templateArgs)
+	{
+		argTypes.push_back(expr->getType(argContext));
+	}
+
+	vector<TypeRef> paramTypes;
+	for (AST::FunctionInParam* param : signature->inParams)
+	{
+		// Important to clone all types so we can do type inference for each
+		//	binding rather than the function itself		
+		paramTypes.emplace_back(param->getType(instanceContext));
+	}
+
+	return unifyArguments(argTypes, paramTypes, argBinding);
+}
 
 
 

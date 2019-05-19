@@ -1,0 +1,48 @@
+
+
+// no semicolons gives less ambiguity in syntax and indenting
+//	can that be achieved without whitespace sensitive syntax?
+//	is "end" directives too verbose, how is functions declarations solved?
+
+Car : namespace
+	this : struct(T : type(int))
+		wheelCount : T
+		hasBonnet : bool
+	end	this
+
+	hej : Int
+	då : Bool
+
+	blu : Vec4
+
+	
+
+	// This is problematic, how do we know method is a type and
+	//	not a function block?
+	FunctionType : Type = method(toWhere : Destination) -> success : bool
+
+	// How do we know how to start a function block here?
+	drive : FunctionType
+		if true 
+			print "driving!"
+		else 
+			print "not driving!"
+	end drive
+
+	// Hm, how does short-hand if-case vs block if look?
+	// 	can short-hand be used as expression?
+	expression(if true print "hej" else print "nej")
+
+	if true
+		print "hej"
+	else
+		print "nej"	
+
+	if true
+		print "hej"
+		print "hej igen"
+	else
+		print "hm"
+	end if
+
+end Car

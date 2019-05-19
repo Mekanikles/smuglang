@@ -1,6 +1,6 @@
 
 #!/bin/sh
-./buildsmugc.sh && ./smugc.sh tests/tests.sm
+./buildsmugc.sh && ./smugc.sh tests/templates.sm
 if [ $? -eq 0 ]
 	then
 		echo "LLVM program execution:"

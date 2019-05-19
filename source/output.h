@@ -217,15 +217,15 @@ void printIRModule(IR::Module* module, int indent = 0)
 {
 	printLine("module:", indent);
 
+	printLine(prettyString(string("// Constants"), FGTextColor::Green), indent + 1);
 	for (auto& constant : module->constants)
 	{
 		if (constant->getType()->isFunction())
 			continue;
 			
 		printIRConstant(*constant, indent + 1);
-		printLine("");
 	}
-
+	printLine("");
 	printIRFunction(*module->main, indent + 1);
 
 	for (auto& func : module->functions)

@@ -1,14 +1,25 @@
 #pragma once
+#include "core.h"
+#include "input.h"
+#include "output.h"
+#include "token.h"
 #include "ast.h"
+#include "ir.h"
+#include "evaluation/evaluation.h"
+#include "evaluation.h" // TODO: Remove
+#include "functions.h"
+#include "declarationprocessor.h"
+#include "dependencyresolver.h"
+
+void processAST(EvaluationContext& econtext, ASTContext* context, AST::Node* root);
 
 // Processing is done through dependency chain, rather than AST order
 struct ASTProcessor : AST::Visitor
 {
 	void visit(AST::BinaryOp* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		// Visit subtree of op
 		AST::Visitor::visit(node);
@@ -24,9 +35,8 @@ struct ASTProcessor : AST::Visitor
 
 	void visit(AST::Call* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		// Make sure function expression is processed
 		node->expr->accept(this);
@@ -40,18 +50,10 @@ struct ASTProcessor : AST::Visitor
 		assert(functionType.isFunction());
 		FunctionClass& function = functionType.getFunction();
 
-		FunctionArgumentBinding* argBinding = createFunctionArgumentBinding(node, function);
+		ArgumentBinding* argBinding = createFunctionArgumentBinding(*node, function);
 		node->argBinding = argBinding;
 
-		// Here we differentiate between generic and concrete functions
-		if (function.isConcrete())
-		{
-			unifyArguments(this->context, node, argBinding);
-		}
-		else
-		{
-			unifyArguments(this->context, node, argBinding);
-		}
+		unifyFunctionCall(this->context, node, function, argBinding);
 
 		/*
 		auto& inTypes = function.inTypes;
@@ -78,9 +80,8 @@ struct ASTProcessor : AST::Visitor
 	// TODO: Remove functiondeclaration special node, use symboldeclaration instead
 	void visit(AST::FunctionDeclaration* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		auto* funcLiteral = node->funcLiteral;
 		assert(funcLiteral);
@@ -117,9 +118,8 @@ struct ASTProcessor : AST::Visitor
 
 	void visit(AST::FunctionSignature* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		// Visit subtree of signature
 		AST::Visitor::visit(node);
@@ -132,13 +132,11 @@ struct ASTProcessor : AST::Visitor
 			TypeRef type;
 			if (param->typeExpr)
 			{
-				Value nodeVal;
-				if (!evaluateExpression(this->context, param->typeExpr, &nodeVal))
-				{
-					assert("Cannot evaluate type expression for in-parameter" && false);
-				}
-				
-				type = nodeVal.type->getTypeVariable().type;
+				unique<IR::Literal> value = Evaluation::createLiteralFromASTExpression(this->econtext, *this->context, *param->typeExpr);
+				const TypeRef& exprType = value->type;
+
+				assert(exprType->isTypeVariable());
+				type = exprType->getTypeVariable().type;
 			}
 
 			const bool isVariadic = param->isVariadic;
@@ -190,45 +188,40 @@ struct ASTProcessor : AST::Visitor
 
 	void visit(AST::StringLiteral* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		this->context->addTypeLiteral(node, node->createLiteralType());
 	}
 
 	void visit(AST::IntegerLiteral* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		this->context->addTypeLiteral(node, node->createLiteralType());
 	}
 
 	void visit(AST::FloatLiteral* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		this->context->addTypeLiteral(node, node->createLiteralType());
 	}
 
 	void visit(AST::TypeLiteral* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		this->context->addTypeLiteral(node, node->createLiteralType());
 	}
 
 	void visit(AST::Tuple* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		vector<TypeRef> types;
 		for (auto* e : node->exprs)
@@ -246,9 +239,8 @@ struct ASTProcessor : AST::Visitor
 
 	void visit(AST::UnaryPostfixOp* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 		
 		assert(node->expr);
 		node->expr->accept(this);
@@ -276,9 +268,8 @@ struct ASTProcessor : AST::Visitor
 
 	void visit(AST::FunctionLiteral* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		assert(node->signature);
 		node->signature->accept(this);
@@ -301,9 +292,8 @@ struct ASTProcessor : AST::Visitor
 
 	void visit(AST::ReturnStatement* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		// TODO: This is super similiar to an assignment, maybe convert
 		if (node->expr)
@@ -325,11 +315,15 @@ struct ASTProcessor : AST::Visitor
 		}
 	}
 
+	void visit(AST::TemplateDeclaration* node) override
+	{
+		// Do not traverse subtree
+	}	
+
 	void visit(AST::SymbolDeclaration* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		Symbol* symbol = node->getSymbol(this->context);
 
@@ -338,13 +332,12 @@ struct ASTProcessor : AST::Visitor
 		if (node->typeExpr)
 		{
 			node->typeExpr->accept(this);
-			Value nodeVal;
-			if (!evaluateExpression(this->context, node->typeExpr, &nodeVal))
-			{
-				assert("Cannot evaluate type expression for declaration" && false);
-			}
 
-			symbol->type = nodeVal.type->getTypeVariable().type;
+			unique<IR::Literal> value = Evaluation::createLiteralFromASTExpression(this->econtext, *this->context, *node->typeExpr);
+			const TypeRef& exprType = value->type;
+
+			assert(exprType->isTypeVariable());
+			symbol->type = exprType->getTypeVariable().type;
 		}
 
 		// Infer type from init expression
@@ -354,8 +347,9 @@ struct ASTProcessor : AST::Visitor
 			if (node->initExpr)
 			{
 				node->initExpr->accept(this);
+				TypeRef& nodeType = symbol->getType();
 				TypeRef& initExprType = node->initExpr->getType(this->context);
-				const auto result = unifyTypes(symbol->getType(), initExprType);
+				const auto result = unifyTypes(nodeType, initExprType);
 
 				// TODO: Handle implicit casts?
 				if (result == CannotUnify)
@@ -402,9 +396,8 @@ struct ASTProcessor : AST::Visitor
 
 	void visit(AST::Assignment* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		assert(node->symExpr);
 		node->symExpr->accept(this);
@@ -427,9 +420,8 @@ struct ASTProcessor : AST::Visitor
 
 	void visit(AST::SymbolExpression* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;
 
 		auto* dependency = this->context->getSymbolDependency(node);
 		assert(dependency);
@@ -446,7 +438,102 @@ struct ASTProcessor : AST::Visitor
 		}
 
 		// Make sure that symbol source is processed
+		auto* symbolSource = dependency->getSymbolSource();
 		dependency->getSymbolSource()->getNode()->accept(this);
+
+		if (symbolSource->isTemplate())
+		{
+			// Process any template arguments we might have
+			for (auto tArg : node->templateArgs)
+			{
+				tArg->accept(this);
+			}
+
+			// TODO: Literals in this list is moved into template instance constants atm
+			//	make sure we can keep them around for comparisons to already existing template instances
+			// Resolve constants for all template arguments
+			vector<unique<IR::Literal>> tArgLiterals;
+			for (auto tArg : node->templateArgs)
+			{
+				tArgLiterals.emplace_back(Evaluation::createLiteralFromASTExpression(this->econtext, *this->context, *tArg));
+			}
+
+			TemplateSymbolSource* templateSource = symbolSource->asTemplate();
+			SymbolSource* generatedSource = nullptr;
+
+			auto* declNode = (AST::TemplateDeclaration*)templateSource->node;
+
+			// TODO: Match existing instances against args
+			// Create new template instance
+			{
+				auto* currentScope = this->context->getScope(node);
+				assert(currentScope);
+
+				AST::TemplateDeclaration::Instance& instance = declNode->addInstance();		
+				ASTProcessor instanceAp(this->econtext, &instance.astContext);
+
+				// Run declaration/dependency steps on signature, 
+				processDeclarations(&instance.astContext, declNode->signature, currentScope);
+				resolveDependencies(&instance.astContext, declNode->signature);
+
+				auto* argBinding = createTemplateArgumentBinding(*node, *declNode);
+				assert(argBinding);
+
+				// Match template arguments and store values
+				//	NOTE: do this before further processing of signature to be able
+				//		to use dependent types
+				{
+					auto& tParams = declNode->signature->inParams;
+
+					for (ArgumentBinding::Param& tArgBinding : argBinding->params)
+					{
+						assert(tArgBinding.paramIndex < tParams.size());
+						assert(tArgBinding.argIndex < tArgLiterals.size());
+						AST::FunctionInParam* param = tParams[tArgBinding.paramIndex];
+						SymbolSource* paramSource = instance.astContext.getSymbolSource(param);
+						assert(paramSource);
+
+						shared<IR::Literal> literal = std::move(tArgLiterals[tArgBinding.argIndex]);
+						Evaluation::storeConstantFromLiteral(this->econtext, instance.astContext, literal, *paramSource);
+
+						string name = string("tConst_") + declNode->declaration->getSymbolName() + string("_") + param->name;
+						instance.literals.emplace_back(AST::TemplateDeclaration::Instance::LiteralAndSource { literal, paramSource, name});
+					}
+
+					//unifyArguments(this->context, node, argBinding);
+				}
+
+				// Process signature
+				declNode->signature->accept(&instanceAp);
+
+				// TODO: Template arguments should be unified one by one as they are processed.
+				//	Now, we assume that values can be used before type checking, which can have weird consequences
+				// Now we are able to unify template arguments
+				bool success = unifyTemplateArguments(this->context, &instance.astContext, node, declNode->signature, argBinding);
+				assert(success);
+
+				// Signature scope should be a parent scope for the declaration
+				auto* signatureScope = instance.astContext.getScope(declNode->signature);
+				assert(signatureScope);		
+
+				// Process declaration
+				processDeclarations(&instance.astContext, declNode->declaration, signatureScope);
+				resolveDependencies(&instance.astContext, declNode->declaration);
+				declNode->declaration->accept(&instanceAp);
+
+				generatedSource = instance.astContext.getSymbolSource(declNode->declaration);
+				assert(generatedSource);
+			}
+
+			// Re-assign depedency to generated template
+			assert(generatedSource);
+			generatedSource->hookDependency(dependency);
+		}
+		else
+		{
+			if (node->templateArgs.size() > 0)
+				assert("Template arguments were specified for non-template symbol");
+		}	
 
 		// TODO: It does not work to use firstInitOrder with evals
 		// 	since they inject code, currently getting wrongly ordered
@@ -463,9 +550,8 @@ struct ASTProcessor : AST::Visitor
 
 	void visit(AST::EvalStatement* node) override
 	{
-		if (node->processed)
+		if (this->context->processCheck(node))
 			return;
-		node->processed = true;	
 
 		//printLine(string("Processing eval: ") + std::to_string(node->order));
 

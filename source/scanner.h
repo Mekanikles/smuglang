@@ -332,6 +332,14 @@ public:
 			if (n == '#')
 			{
 				m_inStream.ignore();
+
+				if (m_inStream.peek() == '(')
+				{
+					m_inStream.ignore();
+					*outToken = Token(TokenType::TemplateParameterOpener);
+					return true;
+				}
+				
 				string w = scanWord();
 				// TODO: Add error for no symbol
 				if (w != "")

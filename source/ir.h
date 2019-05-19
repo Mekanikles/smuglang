@@ -254,16 +254,16 @@ namespace IR
 
 	struct Constant : Referenceable
 	{
-		unique<Literal> literal;
+		shared<Literal> literal;
 
-		Constant(unique<Literal> literal, string name, const SymbolSource* symbolSource) 
+		Constant(shared<Literal> literal, string name, const SymbolSource* symbolSource) 
 			: Referenceable(Referenceable::RefType::Constant, std::move(name), symbolSource) 
-			, literal(std::move(literal))
+			, literal(literal)
 		{}
 
 		Constant(Constant&& con)
 			: Referenceable(Referenceable::RefType::Constant, std::move(con.name), con.symbolSource)
-			, literal(std::move(con.literal))
+			, literal(con.literal)
 		{}
 
 		virtual const TypeRef& getType() const override { return literal->getType(); }

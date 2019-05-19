@@ -9,6 +9,10 @@ struct ASTContext
 	{
 		SymbolScope* scope = nullptr;
 
+		// This is used to prevent infinite recursion when processing the AST tree
+		// TODO: Build a processing graph instead of testing for this bool
+		bool processed = false;
+
 		// TODO: All nodes get these now
 		SymbolSource* symbolSource = nullptr;
 		SymbolDependency* symbolDependency = nullptr;
@@ -19,6 +23,17 @@ struct ASTContext
 
 	std::unordered_map<AST::Node*, NodeInfo> astNodeMap;
 	std::unordered_map<AST::Node*, TypeRef> typeLiterals;
+
+	bool processCheck(AST::Node* node)
+	{
+		NodeInfo& info = this->astNodeMap[node];
+		if (!info.processed)
+		{
+			info.processed = true;
+			return false;
+		}
+		return true;
+	}
 
 	void addTypeLiteral(AST::Node* node, TypeRef&& type)
 	{

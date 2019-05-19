@@ -27,6 +27,7 @@ enum class TokenType
 	True,
 	False,
 	CompilerDirective,
+	TemplateParameterOpener,
 	SemiColon,
 	Comma,
 	Colon,
@@ -60,7 +61,14 @@ struct Token
 	Token(TokenType type, const string& symbol = "")
 		: type(type), symbol(symbol)
 	{}
+
+	operator bool() const
+	{
+		return type != TokenType::Invalid;
+	}
 };
+
+const Token s_invalidToken(TokenType::Invalid);
 
 string toString(TokenType type)
 {
@@ -91,7 +99,8 @@ string toString(TokenType type)
 		case TokenType::True: return "True";
 		case TokenType::False: return "False";
 		// TODO: # should be its own token, compiler directive should be on parser level
-		case TokenType::CompilerDirective: return "CompilerDirective";		
+		case TokenType::CompilerDirective: return "CompilerDirective";
+		case TokenType::TemplateParameterOpener: return "TemplateParameterOpener";	
 		case TokenType::SemiColon: return "Semi Colon";
 		case TokenType::Comma: return "Comma";
 		case TokenType::Colon: return "Colon";

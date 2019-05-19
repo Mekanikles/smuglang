@@ -1,6 +1,11 @@
 #pragma once
 
-struct FunctionArgumentBinding;
+struct ArgumentBinding;
+
+namespace IR
+{
+	struct Literal;
+}
 
 namespace AST
 {
@@ -13,6 +18,7 @@ namespace AST
 	struct Call;
 	struct Assignment;
 	struct IfStatement;
+	struct TemplateDeclaration;
 	struct SymbolDeclaration;
 	struct FunctionDeclaration;
 	struct SymbolExpression;
@@ -49,15 +55,16 @@ namespace AST
 		// TODO: This sucks, every visit has an overahead of 3 stack frames going through
 		//	the abstractions
 		virtual void visit(Node* node) { visitChildren(node, this); }
-		virtual void visit(Declaration* node) { visit((Node*)node); }
+		virtual void visit(Declaration* node) { visit((Statement*)node); }
 		virtual void visit(Statement* node) { visit((Node*)node); }
 		virtual void visit(Module* node) { visit((Node*)node); }
 		virtual void visit(Import* node) { visit((Statement*)node); }
 		virtual void visit(Call* node) { visit((Statement*)node); }
 		virtual void visit(Assignment* node) { visit((Statement*)node); }
 		virtual void visit(IfStatement* node) { visit((Statement*)node); }
-		virtual void visit(SymbolDeclaration* node) { visit((Statement*)node);}	
-		virtual void visit(FunctionDeclaration* node) { visit((Statement*)node);}	
+		virtual void visit(TemplateDeclaration* node) { visit((Statement*)node); }
+		virtual void visit(SymbolDeclaration* node) { visit((Declaration*)node);}	
+		virtual void visit(FunctionDeclaration* node) { visit((Declaration*)node);}	
 		virtual void visit(Expression* node) { visit((Node*)node); }
 		virtual void visit(SymbolExpression* node) { visit((Expression*)node);}
 		virtual void visit(StringLiteral* node) { visit((Expression*)node);}
@@ -90,10 +97,6 @@ namespace AST
 		virtual string toString(ASTContext* context) = 0;
 
 		uint order = s_nodeCount++;
-
-		// This is used to prevent infinite recursion when processing the AST tree
-		// TODO: Build a processing graph instead of testing for this bool
-		bool processed = false;
 	};
 
 	void visitChildren(Node* node, Visitor* v) 
@@ -113,6 +116,7 @@ namespace AST
 
 	struct Declaration : Statement
 	{
+		virtual string getSymbolName() = 0;
 	};
 
 	void visitChildren(Declaration* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
@@ -388,6 +392,7 @@ namespace AST
 		string name;
 		Expression* typeExpr = nullptr;
 		Expression* initExpr = nullptr;
+		StorageQualifier storageQualifier = StorageQualifier::Const;
 		bool isVariadic = false;
 
 		Symbol* getSymbol(ASTContext* context)
@@ -429,6 +434,7 @@ namespace AST
 	{
 		string name;
 		Expression* typeExpr = nullptr;
+		StorageQualifier storageQualifier = StorageQualifier::Var;
 
 		Symbol* getSymbol(ASTContext* context)
 		{
@@ -518,6 +524,7 @@ namespace AST
 	{
 		string symbol;
 		bool isPartOfAssignment = false;
+		vector<Expression*> templateArgs;
 
 		SymbolExpression(string symbol)
 			: symbol(symbol)
@@ -594,7 +601,7 @@ namespace AST
 		SymbolExpression* expr = nullptr; // TODO: Can be any expression
 		vector<Expression*> args;
 
-		FunctionArgumentBinding* argBinding = nullptr;
+		ArgumentBinding* argBinding = nullptr;
 
 		string toString(ASTContext* context) override 
 		{ 
@@ -751,12 +758,55 @@ namespace AST
 		}
 	};
 
+	// NOTE: We don't want to be able to nest template declarations, so inherit Statement instead of declaration
+	struct TemplateDeclaration : public NodeImpl<TemplateDeclaration, Statement>
+	{
+		FunctionSignature* signature = nullptr;	
+		Declaration* declaration = nullptr;
+
+		struct Instance
+		{
+			struct LiteralAndSource
+			{
+				shared<IR::Literal> literal;
+				SymbolSource* source;
+				string name;
+			};
+			
+			vector<LiteralAndSource> literals;
+			ASTContext astContext;
+		};
+
+		vector<Instance> instances;
+
+		string toString(ASTContext* context) override 
+		{
+			string s;
+			if (instances.size() > 0)
+				s = "Template with " + std::to_string(instances.size()) + " instances";
+			else
+				s = "Unused Template ";
+			return s; 
+		}
+
+		Instance& addInstance()
+		{
+			instances.push_back(Instance());
+			return instances.back();
+		}
+	};
+
 	struct SymbolDeclaration : public NodeImpl<SymbolDeclaration, Declaration>
 	{
 		string symbol;
 		StorageQualifier storageQualifier = StorageQualifier::Var;
 		Expression* typeExpr = nullptr;
 		Expression* initExpr = nullptr;
+
+		virtual string getSymbolName() override
+		{
+			return symbol;
+		}
 
 		string toString(ASTContext* context) override 
 		{ 
@@ -831,6 +881,11 @@ namespace AST
 	{
 		string symbol;
 		FunctionLiteral* funcLiteral = nullptr;
+
+		virtual string getSymbolName() override
+		{
+			return symbol;
+		}
 
 		string toString(ASTContext* context) override 
 		{ 

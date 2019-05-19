@@ -1126,12 +1126,12 @@ struct TypeVariableClass : TypeClass
 
 	bool operator==(const TypeVariableClass& o) const
 	{
-		return true;
+		return type == o.type;
 	}
 
 	bool isSubClass(const TypeVariableClass& o) const
 	{
-		return true;
+		return type.isSubType(o.type);
 	}
 };
 
@@ -1256,7 +1256,9 @@ bool TypeClass::operator==(const TypeClass& o) const
 	if (this->type != o.type)
 		return false;
 	
-	if (o.type == Primitive)
+	if (o.type == TypeVariable)
+		return this->compareAs<TypeVariableClass>(&o);	
+	else if (o.type == Primitive)
 		return this->compareAs<PrimitiveClass>(&o);
 	else if (o.type == Array)
 		return this->compareAs<ArrayClass>(&o);
@@ -1278,7 +1280,9 @@ bool TypeClass::isSubClass(const TypeClass& o) const
 	if (o.type == TypeClass::Any)
 		return true;
 
-	if (o.type == Primitive)
+	if (o.type == TypeVariable)
+		return o.type == this->type && this->isSubClassAs<TypeVariableClass>(&o);	
+	else if (o.type == Primitive)
 		return o.type == this->type && this->isSubClassAs<PrimitiveClass>(&o);
 	else if (o.type == Array)
 		return o.type == this->type && this->isSubClassAs<ArrayClass>(&o);
@@ -1309,6 +1313,11 @@ Type createStaticArrayType(TypeRef&& type, int length)
 Type createTypeVariable(TypeRef&& type)
 {
 	return Type(std::make_unique<TypeVariableClass>(std::move(type)));
+}
+
+Type createTypeVariable()
+{
+	return Type(std::make_unique<TypeVariableClass>(Type()));
 }
 
 Type createPointerTypeVariable(TypeRef&& type)
