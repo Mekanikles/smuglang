@@ -566,6 +566,13 @@ namespace AST
 		{
 			return getSymbol(context)->getType();
 		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.insert(ret.end(), templateArgs.begin(), templateArgs.end());
+			return ret;
+		}	
 	};
 
 	struct Tuple : public NodeImpl<Tuple, Expression>

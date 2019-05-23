@@ -37,6 +37,8 @@ struct DependencyResolver : AST::Visitor
 {
 	void visit(AST::SymbolExpression* node) override
 	{
+		AST::Visitor::visit(node);
+
 		SymbolDependency* dependency = createSymbolDepedency(node->symbol);
 		this->context->setSymbolDependency(node, dependency);
 

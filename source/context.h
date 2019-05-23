@@ -1,6 +1,17 @@
 #pragma once
 #include <unordered_map>
 
+namespace AST
+{
+	struct Node;
+	struct Expression;
+}
+
+namespace IR
+{
+	struct Literal;
+}
+
 struct ASTContext
 {
 	vector<SymbolScope*> symbolScopes;
@@ -24,6 +35,15 @@ struct ASTContext
 	std::unordered_map<AST::Node*, NodeInfo> astNodeMap;
 	std::unordered_map<AST::Node*, TypeRef> typeLiterals;
 
+	struct ExpressionAndContext
+	{
+		AST::Expression* expr = nullptr;
+		ASTContext* context = nullptr;
+	};
+
+	std::unordered_map<AST::Node*, ExpressionAndContext> templateExpressions;
+	std::unordered_map<AST::Node*, shared<IR::Literal>> templateLiterals;
+
 	bool processCheck(AST::Node* node)
 	{
 		NodeInfo& info = this->astNodeMap[node];
@@ -43,7 +63,27 @@ struct ASTContext
 	TypeRef& getTypeLiteral(AST::Node* node)
 	{
 		return this->typeLiterals[node];
-	}	
+	}
+
+	void addTemplateExpression(AST::Node* node, AST::Expression* expr, ASTContext* context)
+	{	
+		this->templateExpressions[node] = ExpressionAndContext{ expr, context };
+	}
+
+	ExpressionAndContext& getTemplateExpression(AST::Node* node)
+	{
+		return this->templateExpressions[node];
+	}
+
+	void addTemplateLiteral(AST::Node* node, shared<IR::Literal> literal)
+	{	
+		this->templateLiterals[node] = literal;
+	}
+
+	shared<IR::Literal> getTemplateLiteral(AST::Node* node)
+	{
+		return this->templateLiterals[node];
+	}
 
 	SymbolScope* createScope(SymbolScope* parentScope = nullptr)
 	{

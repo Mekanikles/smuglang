@@ -5,11 +5,14 @@ def type = #primitives.type;*/
 
 //extern printf : func(fmt : #primitives.c.char*, args...) -> errCode : #primitives.c.int;
 
-#template(T : #primitives.type, value : T) 
+#template(X : #primitives.type)
+def type = X;
+
+#template(value : type#(T), T : #primitives.type) 
 var hej : T = value;
 
-hej#(#primitives.c.int, 666) = 5;
-//hej#(#primitives.f16, 123.0) = 6.0;
+//hej#(666, #primitives.c.int) = 667;
+hej#(123.0, #primitives.f32) = 124.0;
 
 //printf("The Int: %i\n", hej#(#primitives.c.int));
 //printf("The Float: %f\n", hej#(#primitives.f16));

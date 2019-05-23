@@ -28,6 +28,7 @@ struct ConcretizerContext
 unique<IR::Literal> createIntegerLiteral(const TypeRef& type, long long l)
 {
 	vector<u8> data;
+	// TODO: Use type size instead and verify value is not truncated
 	data.resize(sizeof(l));
 	memcpy(data.data(), &l, sizeof(l));
 
@@ -78,11 +79,19 @@ struct ExpressionConcretizer : AST::Visitor
 	{
 		SymbolDependency* symDep = this->astContext->getSymbolDependency(node);
 		auto* source = symDep->source;
+		if (source->getSymbol()->getType()->isTypeVariable())
+		{
+			// TODO: Atm typeliterals are not stored as refs since the type of a type
+			//	carry all info we need. Should probably fix.
+			expressionStack.push_back(createExpression<IR::Literal>(source->getSymbol()->getType()));
+		}
+		else
+		{
+			IR::Referenceable* ref = this->context->module->getReferenceable(source);
+			assert(ref);
 
-		IR::Referenceable* ref = this->context->module->getReferenceable(source);
-		assert(ref);
-
-		expressionStack.push_back(createExpression<IR::Reference>(ref));
+			expressionStack.push_back(createExpression<IR::Reference>(ref));
+		}
 	}
 
 	string generateUniqueFunctionName(AST::FunctionLiteral* node)

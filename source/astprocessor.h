@@ -116,6 +116,95 @@ struct ASTProcessor : AST::Visitor
 		Evaluation::generateFunctionBody(econtext, *context, *irfunction, *node->funcLiteral);	
 	}
 
+	void visit(AST::FunctionInParam* node) override
+	{
+		if (this->context->processCheck(node))
+			return;
+
+		Symbol* symbol = node->getSymbol(this->context);
+
+		TypeRef type;
+		if (node->typeExpr)
+		{
+			node->typeExpr->accept(this);
+
+			unique<IR::Literal> value = Evaluation::createLiteralFromASTExpression(this->econtext, *this->context, *node->typeExpr);
+			const TypeRef& exprType = value->type;
+
+			assert(exprType->isTypeVariable());
+			type = exprType->getTypeVariable().type;
+		}
+
+		const bool isVariadic = node->isVariadic;
+		if (isVariadic)
+			type = createTupleType(std::move(type));
+
+		// Infer type from init expression
+		if (node->initExpr)
+		{
+			node->initExpr->accept(this);
+
+			assert(!isVariadic);
+			symbol->firstInitOrder = node->order;
+			if (node->initExpr)
+			{
+				TypeRef& exprType = node->initExpr->getType(this->context);
+				const auto result = unifyTypes(type, exprType);
+
+				// TODO: Handle implicit casts?
+				if (result == CannotUnify)
+					assert("Cannot unify types" && false);
+
+				// TODO: How to apply unification to expression?
+			}
+		}
+
+		// TODO: Have separate node for template params, so we can assert on expression
+		const ASTContext::ExpressionAndContext& exprAndContext = this->context->getTemplateExpression(node);
+		if (AST::Expression* expr = exprAndContext.expr)
+		{
+			// Unify each expression as they are used to allow type inference on template args
+			TypeRef& exprType = expr->getType(exprAndContext.context);
+			const auto result = unifyTypes(exprType, type);
+			if (result == CannotUnify)
+				assert("Cannot unify types" && false);
+
+			// Expression value must be known at this time
+			shared<IR::Literal> literal = Evaluation::createLiteralFromASTExpression(this->econtext, *exprAndContext.context, *expr);
+
+			// Store constant
+			Evaluation::storeConstantFromLiteral(this->econtext, *this->context, literal, *this->context->getSymbolSource(node));		
+
+			// Template declaration needs to store this literal, save it
+			this->context->addTemplateLiteral(node, literal);
+		}
+
+		// Assign type
+		symbol->getType() = type;	
+	}
+
+	void visit(AST::FunctionOutParam* node) override
+	{
+		if (this->context->processCheck(node))
+			return;
+
+		Symbol* symbol = node->getSymbol(this->context);
+
+		TypeRef type;
+		if (node->typeExpr)
+		{
+			Value nodeVal;
+			if (!evaluateExpression(this->context, node->typeExpr, &nodeVal))
+			{
+				assert("Cannot evaluate type expression for out-parameter" && false);
+			}
+			
+			type = nodeVal.type->getTypeVariable().type;
+		}
+
+		symbol->type = type;			
+	}
+
 	void visit(AST::FunctionSignature* node) override
 	{
 		if (this->context->processCheck(node))
@@ -123,65 +212,6 @@ struct ASTProcessor : AST::Visitor
 
 		// Visit subtree of signature
 		AST::Visitor::visit(node);
-
-		// Assign types to inparams
-		for (AST::FunctionInParam* param : node->inParams)
-		{
-			Symbol* symbol = param->getSymbol(this->context);
-
-			TypeRef type;
-			if (param->typeExpr)
-			{
-				unique<IR::Literal> value = Evaluation::createLiteralFromASTExpression(this->econtext, *this->context, *param->typeExpr);
-				const TypeRef& exprType = value->type;
-
-				assert(exprType->isTypeVariable());
-				type = exprType->getTypeVariable().type;
-			}
-
-			const bool isVariadic = param->isVariadic;
-			if (isVariadic)
-				symbol->getType() = createTupleType(std::move(type));
-			else
-				symbol->getType() = type;
-
-			// Infer type from init expression
-			if (param->initExpr && !isVariadic)
-			{
-				symbol->firstInitOrder = node->order;
-				if (param->initExpr)
-				{
-					TypeRef& exprType = param->initExpr->getType(this->context);
-					const auto result = unifyTypes(symbol->getType(), exprType);
-
-					// TODO: Handle implicit casts?
-					if (result == CannotUnify)
-						assert("Cannot unify types" && false);
-
-					// TODO: How to apply unification to expression?
-				}
-			}
-		}
-
-		// Assign types to outparams
-		for (AST::FunctionOutParam* param : node->outParams)
-		{
-			Symbol* symbol = param->getSymbol(this->context);
-
-			TypeRef type;
-			if (param->typeExpr)
-			{
-				Value nodeVal;
-				if (!evaluateExpression(this->context, param->typeExpr, &nodeVal))
-				{
-					assert("Cannot evaluate type expression for out-parameter" && false);
-				}
-				
-				type = nodeVal.type->getTypeVariable().type;
-			}
-
-			symbol->type = type;
-		}
 
 		this->context->addTypeLiteral(node, node->createLiteralType(this->context));
 	}
@@ -449,15 +479,6 @@ struct ASTProcessor : AST::Visitor
 				tArg->accept(this);
 			}
 
-			// TODO: Literals in this list is moved into template instance constants atm
-			//	make sure we can keep them around for comparisons to already existing template instances
-			// Resolve constants for all template arguments
-			vector<unique<IR::Literal>> tArgLiterals;
-			for (auto tArg : node->templateArgs)
-			{
-				tArgLiterals.emplace_back(Evaluation::createLiteralFromASTExpression(this->econtext, *this->context, *tArg));
-			}
-
 			TemplateSymbolSource* templateSource = symbolSource->asTemplate();
 			SymbolSource* generatedSource = nullptr;
 
@@ -479,38 +500,33 @@ struct ASTProcessor : AST::Visitor
 				auto* argBinding = createTemplateArgumentBinding(*node, *declNode);
 				assert(argBinding);
 
-				// Match template arguments and store values
-				//	NOTE: do this before further processing of signature to be able
-				//		to use dependent types
+				// Match template arguments and assign expressions to parameters
+				for (ArgumentBinding::Param& tArgBinding : argBinding->params)
 				{
-					auto& tParams = declNode->signature->inParams;
-
-					for (ArgumentBinding::Param& tArgBinding : argBinding->params)
-					{
-						assert(tArgBinding.paramIndex < tParams.size());
-						assert(tArgBinding.argIndex < tArgLiterals.size());
-						AST::FunctionInParam* param = tParams[tArgBinding.paramIndex];
-						SymbolSource* paramSource = instance.astContext.getSymbolSource(param);
-						assert(paramSource);
-
-						shared<IR::Literal> literal = std::move(tArgLiterals[tArgBinding.argIndex]);
-						Evaluation::storeConstantFromLiteral(this->econtext, instance.astContext, literal, *paramSource);
-
-						string name = string("tConst_") + declNode->declaration->getSymbolName() + string("_") + param->name;
-						instance.literals.emplace_back(AST::TemplateDeclaration::Instance::LiteralAndSource { literal, paramSource, name});
-					}
-
-					//unifyArguments(this->context, node, argBinding);
+					assert(tArgBinding.paramIndex < declNode->signature->inParams.size());
+					assert(tArgBinding.argIndex < node->templateArgs.size());
+					AST::FunctionInParam* param = declNode->signature->inParams[tArgBinding.paramIndex];
+					AST::Expression* expr = node->templateArgs[tArgBinding.argIndex];
+					instance.astContext.addTemplateExpression(param, expr, this->context);
 				}
 
 				// Process signature
 				declNode->signature->accept(&instanceAp);
 
-				// TODO: Template arguments should be unified one by one as they are processed.
-				//	Now, we assume that values can be used before type checking, which can have weird consequences
-				// Now we are able to unify template arguments
-				bool success = unifyTemplateArguments(this->context, &instance.astContext, node, declNode->signature, argBinding);
-				assert(success);
+				// Save the resulting literals from processing
+				for (AST::FunctionInParam* param : declNode->signature->inParams)
+				{
+					string name = string("tConst_") + declNode->declaration->getSymbolName() + string("_") + param->name;
+					shared<IR::Literal> literal = instance.astContext.getTemplateLiteral(param);
+					assert(literal);
+					SymbolSource* paramSource = instance.astContext.getSymbolSource(param);
+					assert(paramSource);
+					instance.literals.emplace_back(AST::TemplateDeclaration::Instance::LiteralAndSource { literal, paramSource, name});
+				}
+
+				// Type checking has already been done in signature processing
+				//	assert on it, for safety
+				assert(unifyTemplateArguments(this->context, &instance.astContext, node, declNode->signature, argBinding));
 
 				// Signature scope should be a parent scope for the declaration
 				auto* signatureScope = instance.astContext.getScope(declNode->signature);

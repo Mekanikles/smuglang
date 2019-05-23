@@ -129,6 +129,12 @@ namespace IR
 			this->backendValue = backendValue;
 		}
 
+		Literal(const TypeRef type)
+			: Literal(type, vector<u8>())
+		{
+			this->backendValue = backendValue;
+		}		
+
 		template<typename T>
 		T& readValue()
 		{
