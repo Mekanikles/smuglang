@@ -29,7 +29,7 @@ struct ASTProcessor : AST::Visitor
 		TypeRef& t2 = node->right->getType(this->context);
 
 		const auto result = unifyTypes(t1, t2);
-		if (result == CannotUnify)
+		if (!result)
 			assert("Cannot unify types" && false);
 	}
 
@@ -53,7 +53,8 @@ struct ASTProcessor : AST::Visitor
 		ArgumentBinding* argBinding = createFunctionArgumentBinding(*node, function);
 		node->argBinding = argBinding;
 
-		unifyFunctionCall(this->context, node, function, argBinding);
+		bool success = unifyFunctionCall(this->context, node, function, argBinding);
+		assert(success && "Could not unify function argument");
 
 		/*
 		auto& inTypes = function.inTypes;
@@ -152,7 +153,7 @@ struct ASTProcessor : AST::Visitor
 				const auto result = unifyTypes(type, exprType);
 
 				// TODO: Handle implicit casts?
-				if (result == CannotUnify)
+				if (!result)
 					assert("Cannot unify types" && false);
 
 				// TODO: How to apply unification to expression?
@@ -166,7 +167,7 @@ struct ASTProcessor : AST::Visitor
 			// Unify each expression as they are used to allow type inference on template args
 			TypeRef& exprType = expr->getType(exprAndContext.context);
 			const auto result = unifyTypes(exprType, type);
-			if (result == CannotUnify)
+			if (!result)
 				assert("Cannot unify types" && false);
 
 			// Expression value must be known at this time
@@ -335,7 +336,7 @@ struct ASTProcessor : AST::Visitor
 			const auto result = unifyTypes(*m_expectedReturnType, exprType);
 
 			// TODO: Handle implicit casts?
-			if (result == CannotUnify)
+			if (!result)
 				assert("Cannot unify types for return statement" && false);
 		}
 		else
@@ -382,7 +383,7 @@ struct ASTProcessor : AST::Visitor
 				const auto result = unifyTypes(nodeType, initExprType);
 
 				// TODO: Handle implicit casts?
-				if (result == CannotUnify)
+				if (!result)
 					assert("Cannot unify types for declaration" && false);
 
 				// TODO: How to apply unification to expression?
@@ -444,7 +445,7 @@ struct ASTProcessor : AST::Visitor
 		const auto result = unifyTypes(symbol->type, exprType);
 
 		// TODO: Handle implicit casts?
-		if (result == CannotUnify)
+		if (!result)
 			assert("Cannot unify types" && false);	
 	}
 
@@ -483,8 +484,17 @@ struct ASTProcessor : AST::Visitor
 			SymbolSource* generatedSource = nullptr;
 
 			auto* declNode = (AST::TemplateDeclaration*)templateSource->node;
+			auto* argBinding = createTemplateArgumentBinding(*node, *declNode);
+			assert(argBinding);			
 
 			// TODO: Match existing instances against args
+			/*for (AST::TemplateDeclaration::Instance& instance : declNode->instances)
+			{
+
+
+
+			}*/
+
 			// Create new template instance
 			{
 				auto* currentScope = this->context->getScope(node);
@@ -496,9 +506,6 @@ struct ASTProcessor : AST::Visitor
 				// Run declaration/dependency steps on signature, 
 				processDeclarations(&instance.astContext, declNode->signature, currentScope);
 				resolveDependencies(&instance.astContext, declNode->signature);
-
-				auto* argBinding = createTemplateArgumentBinding(*node, *declNode);
-				assert(argBinding);
 
 				// Match template arguments and assign expressions to parameters
 				for (ArgumentBinding::Param& tArgBinding : argBinding->params)

@@ -1353,79 +1353,126 @@ Type createPointerType(TypeRef&& type)
 
 ////////////////////////////////////////////////////////////////////////////////
 
-enum UnificationResult
+struct UnificationResult
 {
-	LeftChanged,
-	RightChanged,
-	BothChanged,
-	CannotUnify,
+	enum ChangeStatusFlag
+	{
+		NoUnification = 0x00,
+		LeftChanged = 0x01,
+		RightChanged =  0x02,
+	};
+
+	struct PendingChange
+	{
+		TypeRef& source;
+		TypeRef& target;
+	};
+
+	vector<PendingChange> pendingChanges;
+	uint status;
+
+	UnificationResult()
+		: status(NoUnification)
+	{}
+
+	UnificationResult(ChangeStatusFlag statusFlag)
+		: status(statusFlag)
+	{}
+
+	void addPendingChange(TypeRef& source, TypeRef& target)
+	{
+		pendingChanges.emplace_back(PendingChange{ source, target });
+	}
+
+	operator bool() const
+	{
+		return status != NoUnification;
+	}
+
+	void merge(UnificationResult&& other)
+	{
+		status |= other.status;
+		pendingChanges.reserve(pendingChanges.size() + other.pendingChanges.size());
+		for (auto& change : other.pendingChanges)
+		{
+			pendingChanges.emplace_back(std::move(change));
+		}
+
+		other.pendingChanges.clear();
+	}
+
+	void apply()
+	{
+		for (auto& change : pendingChanges)
+		{
+			change.source.mergeInto(change.target);
+		}
+		pendingChanges.clear();
+	}
 };
 
-bool tryUnifyMultiTypes(TypeRef& leftType, TypeRef& rightType);
-
-UnificationResult unifyTypes(TypeRef& leftType, TypeRef& rightType)
+UnificationResult createLeftChange(TypeRef& left, TypeRef& right)
 {
-	// Strip trivial tuples
-	leftType.stripTrivialTuples();
-	rightType.stripTrivialTuples();
+	UnificationResult result(UnificationResult::LeftChanged);
+	result.addPendingChange(left, right);
+	return result;
+}
 
+UnificationResult createRightChange(TypeRef& left, TypeRef& right)
+{
+	UnificationResult result(UnificationResult::RightChanged);
+	result.addPendingChange(right, left);
+	return result;
+}
+
+UnificationResult generateMultiTypeUnification(TypeRef& leftType, TypeRef& rightType);
+
+UnificationResult generateTypeUnification(TypeRef& leftType, TypeRef& rightType)
+{
 	if (leftType == rightType || rightType.isSubType(leftType))
 	{
-		leftType.mergeInto(rightType);
-		return LeftChanged;
+		return createLeftChange(leftType, rightType);
 	}
 	else if (leftType.isSubType(rightType))
 	{
-		rightType.mergeInto(leftType);
-		return RightChanged;
+		return createRightChange(leftType, rightType);
 	}
 
-	if (tryUnifyMultiTypes(leftType, rightType))
-		return BothChanged;
-
-	return CannotUnify;
+	return generateMultiTypeUnification(leftType, rightType);
 }
 
-bool tryUnifyMultiTypes(TypeRef& leftType, TypeRef& rightType)
+bool unifyTypes(TypeRef& leftType, TypeRef& rightType)
 {
-	if (!leftType.getType().isMultiType() || !rightType.getType().isMultiType())
-		return false;
+	leftType.stripTrivialTuples();
+	rightType.stripTrivialTuples();
 
-	vector<TypeRef> typeIntersection;
+	auto result = generateTypeUnification(leftType, rightType);
+	result.apply();
+	return (bool)result;
+}
+
+UnificationResult generateMultiTypeUnification(TypeRef& leftType, TypeRef& rightType)
+{
+	UnificationResult result;
+
+	if (!leftType.getType().isMultiType() || !rightType.getType().isMultiType())
+		return result;
 
 	auto& leftMultiType = leftType.getType().getMultiType();
 	auto& rightMultiType = leftType.getType().getMultiType();
-	for (const TypeRef& t1 : leftMultiType.types)
+	for (TypeRef& leftSubType : leftMultiType.types)
 	{
-		for (const TypeRef& t2 : rightMultiType.types)
+		for (TypeRef& rightSubType : rightMultiType.types)
 		{
-			// TODO: Potential performance problem, n2 clone
-			TypeRef tc1 = t1.clone();
-			TypeRef tc2 = t2.clone();
-			const auto result = unifyTypes(tc1, tc2);
-			if (result != CannotUnify)
+			auto subResult = generateTypeUnification(leftSubType, rightSubType);
+			if (subResult)
 			{
-				if (result == LeftChanged || result == BothChanged)
-				{
-					typeIntersection.push_back(std::move(tc1));
-				}
-				else if (result == RightChanged)
-				{
-					typeIntersection.push_back(std::move(tc2));
-				}
-				break;
+				result.merge(std::move(subResult));
 			}
 		}
 	}
 
-	if (!typeIntersection.empty())
-	{
-		leftMultiType.types = std::move(typeIntersection);
-		rightType.mergeInto(leftType);
-		return true;
-	}
-
-	return false;
+	return result;
 }
 
 bool isCharPointer(const Type& type)

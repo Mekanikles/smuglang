@@ -371,7 +371,9 @@ namespace AST
 		//	probably move out all type creation to some processor
 		TypeRef createLiteralType()
 		{
-			return createTypeVariable(std::move(type));
+			// Hm, this is called mulitple times, possibly in multiple
+			//	contexts, make sure not to share this type across different inferences
+			return createTypeVariable(type.clone());
 		}
 
 		string toString(ASTContext* context) override 

@@ -93,8 +93,6 @@ ArgumentBinding* createArgumentBinding(ArgProvider& args, ParamProvider& params)
 	//	and tuples, plus named argument
 	while (params.canConsume())
 	{
-		// Important to clone all types so we can do type inference for each
-		//	binding rather than the function itself	
 		if (params.isVariadic())
 		{
 			// Eat rest of args
@@ -157,9 +155,9 @@ ArgumentBinding* createTemplateArgumentBinding(const AST::SymbolExpression& expr
 	return createArgumentBinding(args, params);
 }
 
-
 bool unifyArguments(vector<TypeRef>& argTypes, vector<TypeRef>& paramTypes, ArgumentBinding* argBinding)
 {
+	UnificationResult result;
 	for (auto& boundParam : argBinding->params)
 	{
 		if (boundParam.argCount == 0)
@@ -170,8 +168,6 @@ bool unifyArguments(vector<TypeRef>& argTypes, vector<TypeRef>& paramTypes, Argu
 
 		if (boundParam.isVariadic())
 		{
-			// Wrap the argument types in a tuple, to be able to unify all at once
-			// 	note that we do not clone the types here, we want to ref the args directly
 			vector<TypeRef> types;
 			for (int i = boundParam.argIndex; i < boundParam.argIndex + boundParam.argCount; i++)
 			{
@@ -187,11 +183,14 @@ bool unifyArguments(vector<TypeRef>& argTypes, vector<TypeRef>& paramTypes, Argu
 			boundParam.type = argTypes[boundParam.argIndex];	
 		} 
 
-		const auto result = unifyTypes(boundParam.type, paramType);
-		if (result == CannotUnify)
-			assert(false && "Could not unify function argument");
+		auto paramResult = generateTypeUnification(boundParam.type, paramType);
+		if (!paramResult)
+			return false;
+
+		result.merge(std::move(paramResult));
 	}
 
+	result.apply();
 	return true;
 }
 
@@ -208,12 +207,10 @@ bool unifyFunctionCall(ASTContext* context, AST::Call* call, const FunctionClass
 	{
 		// Important to clone all types so we can do type inference for each
 		//	binding rather than the function itself		
-		argTypes.emplace_back(param.type.clone());
+		paramTypes.emplace_back(param.type.clone());
 	}
 
 	return unifyArguments(argTypes, paramTypes, argBinding);
-
-	// TOOD: Unify out params
 }
 
 bool unifyTemplateArguments(ASTContext* argContext, ASTContext* instanceContext, AST::SymbolExpression* expr, AST::FunctionSignature* signature, ArgumentBinding* argBinding)
