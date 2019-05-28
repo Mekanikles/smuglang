@@ -213,32 +213,38 @@ struct Parser
 		return false;
 	}
 
+	bool parseFunctionExpressionContinuation(AST::Expression** outExpr)
+	{
+		// Optional signature
+		AST::FunctionSignature* signature = nullptr;
+		if (!parseFunctionSignature(&signature))
+		{
+			// Default empty signature
+			signature = createNode<AST::FunctionSignature>();
+		}
+
+		AST::StatementBody* statementBody = nullptr;
+		if (parseStatementBody(&statementBody))
+		{
+			auto* func = createNode<AST::FunctionLiteral>();
+			func->signature = signature;
+			func->body = statementBody;
+
+			*outExpr = func;
+		}
+		else
+		{
+			*outExpr = signature;
+		}
+
+		return true;
+	}
+
 	bool parseFunctionExpression(AST::Expression** outExpr)
 	{
 		if (accept(TokenType::Func))
 		{
-			// Optional signature
-			AST::FunctionSignature* signature = nullptr;
-			if (!parseFunctionSignature(&signature))
-			{
-				// Default empty signature
-				signature = createNode<AST::FunctionSignature>();
-			}
-
-			AST::StatementBody* statementBody = nullptr;
-			if (parseStatementBody(&statementBody))
-			{
-				auto* func = createNode<AST::FunctionLiteral>();
-				func->signature = signature;
-				func->body = statementBody;
-
-				*outExpr = func;
-			}
-			else
-			{
-				*outExpr = signature;
-			}
-
+			parseFunctionExpressionContinuation(outExpr);
 			return true;
 		}
 		
@@ -503,6 +509,18 @@ struct Parser
 			{
 				*outNode = expr;	
 			}
+		}
+		else if (accept(TokenType::Func))
+		{
+			// Optional signature
+			AST::FunctionSignature* signature;
+			if (!parseFunctionSignature(&signature))
+			{
+				// Lone func is shorthand for func() -> ();
+				signature = createNode<AST::FunctionSignature>();
+			}
+
+			*outNode = signature;
 		}
 		else if (parseTypeLiteral(&typeLiteral))
 		{
@@ -918,32 +936,29 @@ struct Parser
 		return false;
 	}
 
-	/*bool parseFunctionDeclaration(AST::FunctionDeclaration** outDeclaration)
+	void parseFunctionDeclarationContinuation(AST::FunctionDeclaration** outDeclaration)
 	{
-		if (accept(TokenType::Func))
+		if (expect(TokenType::Symbol))
 		{
-			auto* node = createNode<AST::FunctionDeclaration>();
-			*outDeclaration = node;
-
-			if (!expect(TokenType::Symbol))
-				return true;
-
-			node->symbol = lastToken().symbol;
-
-			AST::FuncLiteralSignature* signature;
-			if (!parseFuncLiteralSignature(&signature))
+			const string functionName = lastToken().symbol;
+			*outDeclaration = nullptr;
+			
+			AST::FunctionSignature* signature;
+			if (!parseFunctionSignature(&signature))
 			{
-				// TODO: Require parameter list?
-				errorOnExpect("Expected function parameter list");
-				*outDeclaration = nullptr;
-				return true;
+				errorOnAccept("Expected function signature following function declaration");
+				return;
 			}
-
-			AST::StatementBody* statementBody = nullptr;
+			
+			AST::StatementBody* statementBody;
 			if (!parseStatementBody(&statementBody))
 			{
-				errorOnExpect("Expected statement body");
+				errorOnAccept("Expected statement body following function declaration");
+				return;
 			}
+
+			auto node = createNode<AST::FunctionDeclaration>();
+			node->symbol = functionName;
 
 			auto* func = createNode<AST::FunctionLiteral>();
 			func->signature = signature;
@@ -952,16 +967,49 @@ struct Parser
 			node->funcLiteral = func;
 
 			*outDeclaration = node;
+		}
+	}	
+
+	bool parseFunctionDeclaration(AST::FunctionDeclaration** outDeclaration)
+	{
+		if (accept(TokenType::Func))
+		{
+			parseFunctionDeclarationContinuation(outDeclaration);
 			return true;
 		}
 
 		return false;
-	}*/
+	}
+
+	bool parseFunctionDeclarationOrExpression(AST::Statement** outStatement)
+	{
+		if (accept(TokenType::Func))
+		{
+			*outStatement = nullptr;
+			// Short-hand func declaration
+			if (peek(TokenType::Symbol))
+			{
+				AST::FunctionDeclaration* funcDecl;
+				parseFunctionDeclarationContinuation(&funcDecl);
+				*outStatement = funcDecl;
+			}
+			else
+			{
+				AST::Expression* expr;
+				parseFunctionExpressionContinuation(&expr);
+				*outStatement = expr;
+			}
+			return true;
+		}
+
+		return false;
+	}
 
 	// TODO: Should output statement?
 	bool parseDeclarationStatement(AST::Declaration** outDeclaration)
 	{
 		//AST::FunctionDeclaration* funcDecl;
+		AST::FunctionDeclaration* funcDecl;
 		if (accept(TokenType::Var) || accept(TokenType::Def) || accept(TokenType::Const) || accept(TokenType::Extern))
 		{
 			StorageQualifier sq;
@@ -986,12 +1034,11 @@ struct Parser
 			*outDeclaration = symbolDecl;
 			return true;
 		}
-		/*else if (parseFunctionDeclaration(&funcDecl))
+		else if (parseFunctionDeclaration(&funcDecl))
 		{
-
 			*outDeclaration = funcDecl;
 			return true;
-		}*/
+		}
 
 		return false;
 	}
@@ -1115,54 +1162,7 @@ struct Parser
 		AST::StatementBody* statementBody;
 		AST::Expression* expression;
 
-		if (accept(TokenType::Func))
-		{
-			// Short-hand func declaration
-			if (accept(TokenType::Symbol))
-			{
-				const string functionName = lastToken().symbol;
-				*outStatement = nullptr;
-				AST::FunctionSignature* signature;
-				if (!parseFunctionSignature(&signature))
-				{
-					errorOnAccept("Expected function signature following function declaration");
-					return true;
-				}
-				
-				if (!parseStatementBody(&statementBody))
-				{
-					errorOnAccept("Expected statement body following function declaration");
-					return true;
-				}
-
-				auto node = createNode<AST::FunctionDeclaration>();
-				node->symbol = functionName;
-
-				auto* func = createNode<AST::FunctionLiteral>();
-				func->signature = signature;
-				func->body = statementBody;
-
-				node->funcLiteral = func;
-
-				*outStatement = node;
-			}
-			else
-			{
-				// Treat this as an expression
-
-				// Optional signature
-				AST::FunctionSignature* signature;
-				if (!parseFunctionSignature(&signature))
-				{
-					signature = createNode<AST::FunctionSignature>();
-				}
-
-				*outStatement = signature;
-			}
-
-			expect(TokenType::SemiColon, false);
-		}
-		else if (accept(TokenType::Import))
+		if (accept(TokenType::Import))
 		{
 			AST::Import::LinkType linkType = AST::Import::LinkType_Native;
 
@@ -1279,6 +1279,10 @@ struct Parser
 			{
 				errorOnAccept("Cannot parse lone symbol");
 			}
+		}
+		else if (parseFunctionDeclarationOrExpression(outStatement)) // Check this before expression!
+		{
+			expect(TokenType::SemiColon, false);
 		}
 		else if (parseExpression(&expression))
 		{
