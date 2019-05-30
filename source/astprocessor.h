@@ -133,7 +133,8 @@ struct ASTProcessor : AST::Visitor
 			const TypeRef& exprType = value->type;
 
 			assert(exprType->isTypeVariable());
-			type = exprType->getTypeVariable().type;
+			// Note: Clone type here so that any inference is not done on the source
+			type = exprType->getTypeVariable().type.clone();
 		}
 
 		const bool isVariadic = node->isVariadic;
@@ -368,7 +369,8 @@ struct ASTProcessor : AST::Visitor
 			const TypeRef& exprType = value->type;
 
 			assert(exprType->isTypeVariable());
-			symbol->type = exprType->getTypeVariable().type;
+			// Note: Clone type here so that any inference is not done on the source
+			symbol->type = exprType->getTypeVariable().type.clone();
 		}
 
 		// Infer type from init expression

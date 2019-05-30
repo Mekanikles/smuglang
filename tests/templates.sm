@@ -12,15 +12,11 @@ func valueCast(value : T) -> T
 	return value;
 };
 
-/*#template(T : type) 
+#template(T : type) 
 var hej : T;
 
-hej#(#primitives.c.int) = 5;
-*/
-//hej#(int) = valueCast#(int)(667);
-//hej#(f16) = valueCast#(f16)(124.0);
-
-var hej = valueCast#(int)(667);
+hej#(int) = valueCast#(int)(667);
+hej#(f16) = valueCast#(f16)(124.0);
 
 //printf("The Int: %i\n", hej#(#primitives.c.int));
 //printf("The Float: %f\n", hej#(#primitives.f16));
