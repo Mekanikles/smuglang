@@ -10,6 +10,7 @@
 #include "ir.h"
 #include "concretization.h"
 #include "backend/backend.h"
+#include "output.h"
 
 struct EvaluationContext : ConcretizerContext
 {
@@ -29,8 +30,12 @@ bool init(EvaluationContext& context)
 
 unique<IR::Expression> concretizeExpression(EvaluationContext& eContext, ASTContext& astContext, AST::Expression& expr)
 {
+	printLine(string("Concretizing expression at node ") + std::to_string(expr.order) + string("..."));
 	ExpressionConcretizer c(&eContext, &astContext);
-	return c.concretizeExpression(expr);
+	auto irExpr = c.concretizeExpression(expr);
+	printLine("  result:");
+	printIRExpression(*(irExpr.get()), 1);
+	return irExpr;
 }
 
 struct ExpressionEvaluator

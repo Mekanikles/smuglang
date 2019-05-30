@@ -358,7 +358,7 @@ struct LLVMIRGenerator : AST::Visitor
 	void visit(AST::SymbolExpression* node) override
 	{
 		auto dependencyNode = node->getNodeForDependency(m_astContext);
-		dependencyNode->accept(this);
+		visit(dependencyNode);
 
 		Symbol* symbol = node->getSymbol(m_astContext);
 
@@ -543,6 +543,14 @@ struct LLVMIRGenerator : AST::Visitor
 		m_valueStack.pop_back();
 		//printLine("Popped value, stack size: " + std::to_string(m_valueStack.size()));
 		return retVal;
+	}
+
+	void visit(pair<AST::Node*, ASTContext*> node)
+	{
+		auto* oldContext = m_astContext;
+		m_astContext = node.second;
+		node.first->accept(this);
+		m_astContext = oldContext;
 	}
 
 	LLVMIRGenerator(ASTContext* context, std::ostream* out, 

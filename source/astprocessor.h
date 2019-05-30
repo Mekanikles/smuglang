@@ -459,18 +459,18 @@ struct ASTProcessor : AST::Visitor
 
 		// Process dependency until we are dependent on a single symbol
 		//	since we are possibly dependent on a placeholder source
-		auto depSource = dependency->getSymbolSource();
+		auto depSource = dependency->getHookedSymbolSource();
 		while(!depSource->isSingleSymbolSource())
 		{
-			depSource->getNode()->accept(this);
-			auto newDepSource = dependency->getSymbolSource();
+			process(depSource->getNode());
+			auto newDepSource = dependency->getHookedSymbolSource();
 			assert(depSource != newDepSource && "Could not resolve catch-all dependency! (probably a circular dependency on eval)");
 			depSource = newDepSource;
 		}
 
 		// Make sure that symbol source is processed
-		auto* symbolSource = dependency->getSymbolSource();
-		dependency->getSymbolSource()->getNode()->accept(this);
+		auto* symbolSource = dependency->getHookedSymbolSource();
+		process(symbolSource->getNode());
 
 		if (symbolSource->isTemplate())
 		{
@@ -683,6 +683,12 @@ struct ASTProcessor : AST::Visitor
 		}
 
 		//printLine(string("Eval: ") + std::to_string(node->order) + " finished processing");
+	}
+
+	void process(pair<AST::Node*, ASTContext*> node)
+	{
+		ASTProcessor ap(econtext, node.second);
+		node.first->accept(&ap);
 	}
 
 	ASTProcessor(EvaluationContext& econtext, ASTContext* context)

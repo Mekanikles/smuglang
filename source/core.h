@@ -29,6 +29,9 @@ using unique = std::unique_ptr<T>;
 template<typename T>
 using shared = std::shared_ptr<T>;
 
+template<typename T, typename U>
+using pair = std::pair<T, U>;
+
 using uint = unsigned int;
 using u8 = unsigned char;
 using u64 = unsigned long;

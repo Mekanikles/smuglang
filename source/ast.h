@@ -539,11 +539,11 @@ namespace AST
 			return context->getSymbolDependency(this) != nullptr;
 		}
 
-		Node* getNodeForDependency(ASTContext* context)
+		pair<Node*, ASTContext*> getNodeForDependency(ASTContext* context)
 		{
 			auto* symbolDependency = context->getSymbolDependency(this);
 			assert(symbolDependency);
-			auto* symbolSource = symbolDependency->getSymbolSource();
+			auto* symbolSource = symbolDependency->getHookedSymbolSource();
 			assert(symbolSource);
 			return symbolSource->getNode();
 		}
@@ -781,6 +781,10 @@ namespace AST
 				SymbolSource* source;
 				string name;
 			};
+
+			Instance(string debugName)
+				: astContext(debugName)
+			{}
 			
 			vector<LiteralAndSource> literals;
 			ASTContext astContext;
@@ -800,7 +804,9 @@ namespace AST
 
 		Instance& addInstance()
 		{
-			instances.push_back(Instance());
+			string debugName = string("template ") + declaration->getSymbolName() + 
+				string(", instance: ") + std::to_string(instances.size());
+			instances.push_back(Instance(debugName));
 			return instances.back();
 		}
 	};

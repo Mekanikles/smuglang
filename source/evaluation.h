@@ -75,8 +75,11 @@ struct ExpressionEvaluator : AST::Visitor
 	void visit(AST::SymbolExpression* node) override
 	{
 		auto* symbolDep = this->astcontext->getSymbolDependency(node);
-		auto* sourceNode = symbolDep->getSymbolSource()->getNode();
-		sourceNode->accept(this);
+		auto sourceNode = symbolDep->getHookedSymbolSource()->getNode();
+		auto* oldContext = this->astcontext;
+		this->astcontext = sourceNode.second;
+		sourceNode.first->accept(this);
+		this->astcontext = oldContext;
 	}
 
 	void visit(AST::TypeLiteral* node) override

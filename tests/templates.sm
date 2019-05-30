@@ -1,15 +1,26 @@
-/*def cchar = #primitives.c.char;
+def cchar = #primitives.c.char;
 def cint = #primitives.c.int;
-def f16 = #primitives.c.f16;
-def type = #primitives.type;*/
+def int = cint;
+def f16 = #primitives.f16;
+def type = #primitives.type;
 
 //extern printf : func(fmt : #primitives.c.char*, args...) -> errCode : #primitives.c.int;
 
-#template(value : T, T : #primitives.type) 
-var hej : T = value;
+#template(T : type) 
+func valueCast(value : T) -> T
+{
+	return value;
+};
 
-hej#(666, #primitives.c.int) = 667;
-hej#(123.0, #primitives.f32) = 124.0;
+/*#template(T : type) 
+var hej : T;
+
+hej#(#primitives.c.int) = 5;
+*/
+//hej#(int) = valueCast#(int)(667);
+//hej#(f16) = valueCast#(f16)(124.0);
+
+var hej = valueCast#(int)(667);
 
 //printf("The Int: %i\n", hej#(#primitives.c.int));
 //printf("The Float: %f\n", hej#(#primitives.f16));

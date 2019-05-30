@@ -52,7 +52,7 @@ int main(int argc, char** argv)
 	else
 	{
 		LOG("Parse success!");
-		ASTContext astContext;
+		ASTContext astContext("mainAST");
 
 		Backend::Context backend;
 

@@ -91,8 +91,7 @@ struct SymbolSource
 	virtual bool isSingleSymbolSource() = 0;
 	virtual bool isDefine() { return false; }
 	virtual Symbol* getSymbol() const = 0;
-	virtual AST::Node* getNode() = 0;
-	virtual ASTContext* getContext() { assert(context); return context; }
+	virtual pair<AST::Node*, ASTContext*> getNode() = 0;
 	virtual bool isExternal() { return false; }
 	virtual bool isTemplate() { return false; }
 	virtual TemplateSymbolSource* asTemplate() { assert(false); return nullptr; }
@@ -116,7 +115,7 @@ struct DeclarationSymbolSource : SingleSymbolSource
 	bool providesSymbolName(const string& s) override { return s == symbol->name; }
 	void hookDependency(SymbolDependency* dependency) override;
 	Symbol* getSymbol() const override { assert(symbol); return symbol; }
-	AST::Node* getNode() override { assert(node); return node; }
+	pair<AST::Node*, ASTContext*> getNode() override { assert(node && context); return pair<AST::Node*, ASTContext*> { node, context }; }
 	bool isExternal() override { return storageQualifier == StorageQualifier::Extern; }
 };
 
@@ -130,7 +129,7 @@ struct TemplateSymbolSource : SingleSymbolSource
 	bool providesSymbolName(const string& s) override { return s == symbolName; }
 	void hookDependency(SymbolDependency* dependency) override;
 	Symbol* getSymbol() const override { assert(false && "Cannot resolve a single symbol from template source without parameters"); return nullptr; }
-	AST::Node* getNode() override { assert(node); return node; }
+	pair<AST::Node*, ASTContext*> getNode() override { assert(node && context); return pair<AST::Node*, ASTContext*> { node, context }; }
 	bool isTemplate() override { return true; }	
 	virtual TemplateSymbolSource* asTemplate() override { return this; }
 };
@@ -145,8 +144,7 @@ struct CatchAllSymbolSource : SymbolSource
 	void hookDependency(SymbolDependency* dependency) override;
 	bool isSingleSymbolSource() override { return false; }
 	Symbol* getSymbol() const override { assert(false && "Cannot resolve a single symbol from catch-all source"); return nullptr; }
-	AST::Node* getNode() override { assert(node); return node; }
-	ASTContext* getContext() override { assert(context); return context; }
+	pair<AST::Node*, ASTContext*> getNode() override { assert(node && context); return pair<AST::Node*, ASTContext*> { node, context }; }
 };
 
 struct SymbolDependency
@@ -154,7 +152,7 @@ struct SymbolDependency
 	SymbolSource* source = nullptr;
 	string symbolName;
 
-	SymbolSource* getSymbolSource()
+	SymbolSource* getHookedSymbolSource()
 	{
 		assert(source);
 		return source;

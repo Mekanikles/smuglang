@@ -2,8 +2,9 @@
 
 string debugName(SymbolSource* o) 
 {
+	auto node = o->getNode();
 	return string("Symbol Source, node: " +
-		o->getNode()->toString(o->getContext()) + ", order: " + std::to_string(o->getNode()->order));
+		node.first->toString(node.second) + ", order: " + std::to_string(node.first->order));
 	return "Unknown"; 
 }
 

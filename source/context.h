@@ -15,6 +15,11 @@ namespace IR
 struct ASTContext
 {
 	vector<SymbolScope*> symbolScopes;
+	string debugName;
+
+	ASTContext(string debugName)
+		: debugName(debugName)
+	{}
 
 	struct NodeInfo
 	{
