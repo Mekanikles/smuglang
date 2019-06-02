@@ -400,7 +400,8 @@ struct TypeRef
 
 	TypeRef& operator=(const TypeRef& o)
 	{
-		typeWrapper->removeRef(this);
+		if (typeWrapper)
+			typeWrapper->removeRef(this);
 		typeWrapper = o.typeWrapper;
 		typeWrapper->addRef(this);
 		return *this;

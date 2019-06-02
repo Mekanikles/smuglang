@@ -124,16 +124,21 @@ ArgumentBinding* createArgumentBinding(ArgProvider& args, ParamProvider& params)
 ArgumentBinding* createFunctionArgumentBinding(const AST::Call& callNode, const FunctionClass& function)
 {
 	ArgProvider args;
+	int argCount = 0;
 	for (auto* expr : callNode.args)
 	{
-		args.args.push_back(ArgProvider::Arg{ "", expr });
+		args.args.push_back(ArgProvider::Arg{ string("Arg ") + std::to_string(argCount), expr });
+		argCount++;
 	}
 	
 	ParamProvider params;
 	for (auto& inParam : function.inParams)
 	{
-		params.params.push_back(ParamProvider::Param{ "", inParam.type->isTuple() });
+		params.params.push_back(ParamProvider::Param{ inParam.identifier, inParam.type->isTuple() });
 	}
+
+	if (function.isCVariadic)
+		params.params.push_back(ParamProvider::Param{ "__cvarargs", true });
 
 	return createArgumentBinding(args, params);
 }
@@ -209,6 +214,9 @@ bool unifyFunctionCall(ASTContext* context, AST::Call* call, const FunctionClass
 		//	binding rather than the function itself		
 		paramTypes.emplace_back(param.type.clone());
 	}
+
+	if (function.isCVariadic)
+		paramTypes.emplace_back(createTupleType(TypeRef()));
 
 	return unifyArguments(argTypes, paramTypes, argBinding);
 }

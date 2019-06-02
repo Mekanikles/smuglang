@@ -277,25 +277,22 @@ struct ASTProcessor : AST::Visitor
 		assert(node->expr);
 		node->expr->accept(this);
 
-		Value nodeVal;
-		if (!evaluateExpression(this->context, node->expr, &nodeVal))
-		{
-			assert("Cannot evaluate type expression for post fix operator" && false);
-		}
-
-		// TODO: Bubble up types through ops for now
-		const TypeRef& t = nodeVal.type;
-		TypeRef type;
 		if (node->opType == TokenType::Asterisk)
 		{
-			type = createPointerTypeVariable(TypeRef(t.getType().getTypeVariable().type));
+			// Pointer-fication of types requires the internal type to be known at compile time
+			//	TODO: Does this work for generics?
+			unique<IR::Literal> value = Evaluation::createLiteralFromASTExpression(this->econtext, *this->context, *node->expr);
+			const TypeRef& exprType = value->type;
+
+			assert(exprType->isTypeVariable());
+			// Note: Clone type here so that any inference is not done on the source
+			TypeRef type = createPointerTypeVariable(exprType->getTypeVariable().type.clone());
+			this->context->addTypeLiteral(node, std::move(type));
 		}
 		else
 		{
-			type = t;
+			assert(false && "Unknown postfix operator");
 		}
-
-		this->context->addTypeLiteral(node, std::move(type));
 	}
 
 	void visit(AST::FunctionLiteral* node) override

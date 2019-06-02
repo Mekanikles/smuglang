@@ -478,12 +478,10 @@ namespace AST
 		vector<FunctionOutParam*> outParams;
 		bool specifiedInParams = false;
 		bool specifiedOutParams = false;
-		bool isCVariadic = false;
 
 		string toString(ASTContext* context) override 
 		{ 
-			string s = "FunctionSignature(isCVariadic: " + std::to_string(isCVariadic) +
-					", isAny: " + std::to_string(getType(context).getType().isAny()) + ")";
+			string s = "FunctionSignature(isAny: " + std::to_string(getType(context).getType().isAny()) + ")";
 			s += typeString(getType(context));	
 			return s;
 		}
@@ -491,8 +489,7 @@ namespace AST
 		TypeRef createLiteralType(ASTContext* context)
 		{
 			auto func = std::make_unique<FunctionClass>();
-			func->isCVariadic = isCVariadic;
-
+			
 			for (auto* p : inParams)
 			{
 				TypeRef& t = p->getType(context);

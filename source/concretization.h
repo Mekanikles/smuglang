@@ -110,6 +110,15 @@ struct ExpressionConcretizer : AST::Visitor
 		expressionStack.push_back(funcPtr->createLiteral());
 	}
 
+	virtual void visit(AST::FunctionSignature* node) override
+	{
+		auto& type = node->getType(this->astContext);
+
+		assert(type->isTypeVariable());
+
+		expressionStack.push_back(createTypeLiteral(type));
+	}
+
 	virtual void visit(AST::TypeLiteral* node) override
 	{
 		auto& type = node->getType(this->astContext);
@@ -210,6 +219,21 @@ struct ExpressionConcretizer : AST::Visitor
 		memcpy(data.data(), cstr, length);
 
 		expressionStack.push_back(createExpression<IR::Literal>(type, std::move(data)));
+	}
+
+	virtual void visit(AST::UnaryPostfixOp* node) override
+	{
+		if (node->opType == TokenType::Asterisk)
+		{
+			// No need to visit sub-expression, we already know the type
+			auto& type = node->getType(this->astContext);
+			assert(type->isTypeVariable());
+			expressionStack.push_back(createTypeLiteral(type));
+		}
+		else
+		{
+			assert("Unknown postfix operator");
+		}
 	}
 
 	virtual void visit(AST::BinaryOp* node) override
