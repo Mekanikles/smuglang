@@ -1,11 +1,11 @@
 def cchar = #primitives.c.char;
 def cint = #primitives.c.int;
-/*def int = cint;
+def int = cint;
 def f16 = #primitives.f16;
 def type = #primitives.type;
-*/
+
 extern printf : func(fmt : cchar*, args...) -> errCode : cint;
-/*
+
 #template(T : type) 
 func valueCast(value : T) -> T
 {
@@ -13,13 +13,10 @@ func valueCast(value : T) -> T
 };
 
 #template(T : type) 
-var hej : T;
+var hej : T = 0;
 
 hej#(int) = valueCast#(int)(667);
 hej#(f16) = valueCast#(f16)(124.0);
 
-printf("The Int: %i\n", hej#(#primitives.c.int));
-printf("The Float: %f\n", hej#(#primitives.f16));
-*/
-
-printf("Hej %i\n", 5);
+printf("The Int should be 667, was: %i\n", hej#(#primitives.c.int));
+printf("The Float should be 124.0, was: %f\n", hej#(#primitives.f16));

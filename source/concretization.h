@@ -1,6 +1,7 @@
 #pragma once
 #include "core.h"
 #include "ir.h"
+#include "token.h"
 #include "ast.h"
 #include "context.h"
 #include "backend/backend.h"
@@ -31,6 +32,15 @@ unique<IR::Literal> createIntegerLiteral(const TypeRef& type, long long l)
 	// TODO: Use type size instead and verify value is not truncated
 	data.resize(sizeof(l));
 	memcpy(data.data(), &l, sizeof(l));
+
+	return createExpression<IR::Literal>(type, std::move(data));
+}
+
+unique<IR::Literal> createFloatLiteral(const TypeRef& type, double d)
+{
+	vector<u8> data;
+	data.resize(sizeof(d));
+	memcpy(data.data(), &d, sizeof(d));
 
 	return createExpression<IR::Literal>(type, std::move(data));
 }
@@ -139,27 +149,37 @@ struct ExpressionConcretizer : AST::Visitor
 
 		assert(type.getType().isPrimitive());
 		const PrimitiveClass& primitive = type.getType().getPrimitive();
-		assert(primitive.primitiveType == PrimitiveClass::Int);
+		assert(primitive.primitiveType == PrimitiveClass::Int || primitive.primitiveType == PrimitiveClass::Float);
 
-		// Might as well create the value here directly
-		//auto* value = this->context->backend->createIntegerConstantFromText(node->value, primitive.size, primitive.signedType == PrimitiveClass::Signed);
-		long int l;
-		if (node->ltype == AST::IntegerLiteral::Hexadecimal)
+		// TODO: Replace IntegerLiteral with something that can handle floats as well
+		if (primitive.primitiveType == PrimitiveClass::Float)
 		{
-			string s = &node->value[2];
-			l = std::stol(s, nullptr, 16);
-		}
-		else if (node->ltype == AST::IntegerLiteral::Binary)
-		{
-			string s = &node->value[2];
-			l = std::stol(s, nullptr, 2);
+			std::istringstream os(node->value);
+			double d;
+			os >> d;
+
+			expressionStack.push_back(createFloatLiteral(type, d));
 		}
 		else
-		{
-			l = std::stol(node->value, nullptr, 10);
-		}
+		{			
+			long int l;
+			if (node->ltype == AST::IntegerLiteral::Hexadecimal)
+			{
+				string s = &node->value[2];
+				l = std::stol(s, nullptr, 16);
+			}
+			else if (node->ltype == AST::IntegerLiteral::Binary)
+			{
+				string s = &node->value[2];
+				l = std::stol(s, nullptr, 2);
+			}	
+			else
+			{
+				l = std::stol(node->value, nullptr, 10);
+			}
 
-		expressionStack.push_back(createIntegerLiteral(type, l));
+			expressionStack.push_back(createIntegerLiteral(type, l));
+		}
 	}
 
 	void visit(AST::FloatLiteral* node) override
@@ -181,11 +201,7 @@ struct ExpressionConcretizer : AST::Visitor
     	double d;
     	os >> d;
 
-		vector<u8> data;
-		data.resize(sizeof(d));
-		memcpy(data.data(), &d, sizeof(d));
-	
-		expressionStack.push_back(createExpression<IR::Literal>(type, std::move(data)));
+		expressionStack.push_back(createFloatLiteral(type, d));
 	}	
 
 	virtual void visit(AST::StringLiteral* node) override

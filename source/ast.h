@@ -317,7 +317,14 @@ namespace AST
 
 		TypeRef createLiteralType()
 		{
-			return createPrimitiveType(PrimitiveClass::Int);
+			// TODO: Check for size etc, so that we filter out types that won't fit the value
+			TypeRef type = TypeRef(createMultiTypeVariable());
+			auto& multiType = type->getMultiType();
+			multiType.appendType(createPrimitiveType(PrimitiveClass::Int));
+			// Ints can also be floats
+			// TODO: Replace IntegerLiteral with DecimalLiteral (or something)
+			multiType.appendType(createPrimitiveType(PrimitiveClass::Float));
+			return type;
 		}
 
 		string toString(ASTContext* context) override 
