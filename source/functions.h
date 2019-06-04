@@ -160,7 +160,7 @@ ArgumentBinding* createTemplateArgumentBinding(const AST::SymbolExpression& expr
 	return createArgumentBinding(args, params);
 }
 
-bool unifyArguments(vector<TypeRef>& argTypes, vector<TypeRef>& paramTypes, ArgumentBinding* argBinding)
+UnificationResult createArgumentUnification(vector<TypeRef>& argTypes, vector<TypeRef>& paramTypes, ArgumentBinding* argBinding)
 {
 	UnificationResult result;
 	for (auto& boundParam : argBinding->params)
@@ -190,12 +190,20 @@ bool unifyArguments(vector<TypeRef>& argTypes, vector<TypeRef>& paramTypes, Argu
 
 		auto paramResult = generateTypeUnification(boundParam.type, paramType);
 		if (!paramResult)
-			return false;
+			return UnificationResult();
 
 		result.merge(std::move(paramResult));
 	}
 
-	result.apply();
+	return result;
+}
+
+bool unifyArguments(vector<TypeRef>& argTypes, vector<TypeRef>& paramTypes, ArgumentBinding* argBinding)
+{
+	auto result = createArgumentUnification(argTypes, paramTypes, argBinding);
+	if (!result)
+		return false;
+	result.apply();	
 	return true;
 }
 

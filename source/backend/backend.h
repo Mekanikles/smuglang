@@ -220,8 +220,8 @@ struct Context
 			if (argCount > funcArgCount)
 			{
 				assert(isVariadic);
-				// C ABI: Varags cannot handle floats, add a cast to double
-				if (val->getType()->isFloatTy())
+				// C ABI: Varags cannot handle floats < 64bit, add a cast to double
+				if (val->getType()->isFloatTy() || val->getType()->isHalfTy())
 				{
 					val = m_llvmBuilder.CreateFPCast(val, llvm::Type::getDoubleTy(m_llvmContext), "vararg_cast");
 				}

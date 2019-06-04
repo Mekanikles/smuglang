@@ -4,7 +4,7 @@ def int = cint;
 def f16 = #primitives.f16;
 def type = #primitives.type;
 
-extern printf : func(fmt : cchar*, args...) -> errCode : cint;
+extern printf : func(fmt : cchar*, args...) -> cint;
 
 #template(T : type) 
 func valueCast(value : T) -> T

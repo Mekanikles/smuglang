@@ -474,9 +474,11 @@ struct ASTProcessor : AST::Visitor
 		if (symbolSource->isTemplate())
 		{
 			// Process any template arguments we might have
+			vector<TypeRef> argTypes;
 			for (auto tArg : node->templateArgs)
 			{
 				tArg->accept(this);
+				argTypes.push_back(tArg->getType(this->context));
 			}
 
 			TemplateSymbolSource* templateSource = symbolSource->asTemplate();
@@ -486,15 +488,36 @@ struct ASTProcessor : AST::Visitor
 			auto* argBinding = createTemplateArgumentBinding(*node, *declNode);
 			assert(argBinding);			
 
-			// TODO: Match existing instances against args
-			/*for (AST::TemplateDeclaration::Instance& instance : declNode->instances)
+			// Match existing instances against args
 			{
+				using FoundInstance = pair<AST::TemplateDeclaration::Instance&, UnificationResult>;
+				vector<FoundInstance> findings;
+				for (AST::TemplateDeclaration::Instance& instance : declNode->instances)
+				{
+					vector<TypeRef> paramTypes;
+					for (auto litAndSource: instance.literals)
+					{
+						auto& type = litAndSource.literal->getType();
+						paramTypes.push_back(type);
+					}
+					
+					if (auto result = createArgumentUnification(argTypes, paramTypes, argBinding))
+						findings.emplace_back(FoundInstance(instance, result));
+				}
 
+				if (!findings.empty())
+				{
+					// TODO: decide what to do if multiple templates instances apply
+					//	does it matter which one we pick?
 
-
-			}*/
+					// Apply unification
+					findings[0].second.apply();
+					generatedSource = findings[0].first.astContext.getSymbolSource(declNode->declaration);
+				}
+			}
 
 			// Create new template instance
+			if (!generatedSource)
 			{
 				auto* currentScope = this->context->getScope(node);
 				assert(currentScope);
