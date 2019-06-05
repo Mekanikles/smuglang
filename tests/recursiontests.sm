@@ -1,4 +1,4 @@
-extern func printf;
+extern printf : func(fmt : #primitives.c.char*, args...) -> #primitives.c.int;
 
 printf("Recursion tests\n");
 recurse(8);
@@ -6,16 +6,8 @@ recurse(8);
 func recurse(x : #primitives.u8)
 {
 	printf("Recursions left: %i\n", x);
-
-	if (x == 0)
-	{
-	}
-	else
-	{
-		var i : #primitives.u8 = 1;
-		var y = x - i;
-		recurse(y);
-	}
+	if (x > 0)
+		recurse(x - 1);
 };
 
 

@@ -1,13 +1,15 @@
-extern func printf;
+extern printf : func(fmt : #primitives.c.char*, args...) -> #primitives.c.int;
 
 var y : #primitives.u8 = 1;
 
 {
 	{
-		printf("Weirdly scoped y: %i\n", y);
+		// TODO: This prints an undefined value since y has not been initialized yet.
+		//	Maybe only definitions should be allowed to be accessed out of order.
+		printf("Weirdly scoped y, should be 2, was: %i\n", y);
 	}
 
 	var y : #primitives.u8 = 2;
 }
 
-//printf("Value \"%i\"", y);
+printf("Outside scoped y, should be 1, was: %i\n", y);

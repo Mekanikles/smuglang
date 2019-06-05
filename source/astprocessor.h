@@ -195,13 +195,14 @@ struct ASTProcessor : AST::Visitor
 		TypeRef type;
 		if (node->typeExpr)
 		{
-			Value nodeVal;
-			if (!evaluateExpression(this->context, node->typeExpr, &nodeVal))
-			{
-				assert("Cannot evaluate type expression for out-parameter" && false);
-			}
-			
-			type = nodeVal.type->getTypeVariable().type;
+			node->typeExpr->accept(this);
+
+			unique<IR::Literal> value = Evaluation::createLiteralFromASTExpression(this->econtext, *this->context, *node->typeExpr);
+			const TypeRef& exprType = value->type;
+
+			assert(exprType->isTypeVariable());
+			// Note: Clone type here so that any inference is not done on the source
+			type = exprType->getTypeVariable().type.clone();
 		}
 
 		symbol->type = type;			

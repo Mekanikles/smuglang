@@ -439,7 +439,7 @@ namespace AST
 		}
 	};
 
-	struct FunctionOutParam : public NodeImpl<FunctionInParam, Node>
+	struct FunctionOutParam : public NodeImpl<FunctionOutParam, Node>
 	{
 		string name;
 		Expression* typeExpr = nullptr;
