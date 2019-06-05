@@ -19,7 +19,6 @@
 #include "declarationprocessor.h"
 #include "dependencyresolver.h"
 
-#include "evaluation.h"
 #include "evaluation/evaluation.h"
 #include "astprocessor.h"
 
@@ -60,8 +59,6 @@ int main(int argc, char** argv)
 		IR::Module evaluationIrModule;
 		EvaluationContext econtext { &evaluationBackend, &evaluationIrModule };
 
-		// TODO: Remove old eval engine
-		assert(initExpressionEvaluator());
 		assert(Evaluation::init(econtext));
 
 		printLine("Processing AST:");

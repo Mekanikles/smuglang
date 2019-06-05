@@ -6,7 +6,6 @@
 #include "ast.h"
 #include "ir.h"
 #include "evaluation/evaluation.h"
-#include "evaluation.h" // TODO: Remove
 #include "functions.h"
 #include "declarationprocessor.h"
 #include "dependencyresolver.h"
@@ -609,42 +608,13 @@ struct ASTProcessor : AST::Visitor
 
 		node->isGenerated = true;
 
-		// TODO: This happens too early somehow, at this point we might have a multitype
-		//	string for example. We need to concretizie the type here, or at least handle
-		//	all possible types of strings. Either way we need to know the type first before 
-		//	we can evaluate the data (different data depending on zstrings/arrays etc)
-		Value nodeVal;
-		if (!evaluateExpression(this->context, node->expr, &nodeVal))
-		{
-			assert("Cannot evaluate expression for eval statement" && false);
-		}
-
-		if (!isStringType(nodeVal.type))
-		{
-			assert("Expression is not of string type" && false);
-		}
-
-		// TODO: handle other strings
-		assert(nodeVal.type.getType().isPointer());
-		auto& type = nodeVal.type.getType().getPointer().type;
-		assert(type->isPrimitive());
-		assert(type->getPrimitive().isChar());
-		assert(type->getSize() == 8);
-
-		const char** text = (const char**)nodeVal.data.data();
-		const uint length = strnlen(*text, 4096);
-		
-		// TODO: Compare with previous nodeVal
 		string str = Evaluation::evaluateExpressionAsString(econtext, *context, *node->expr);
-		assert(!str.compare(*text));
-
 		printLine("Parsing eval string: "); 
-		printLine(*text, 1);
+		printLine(str, 1);
  
-		BufferSourceInput bufferInput(*text, length);
+		BufferSourceInput bufferInput(str.c_str(), str.size());
 		Parser parser(&bufferInput);
-
-		
+	
 		AST::Statement* statement;
 		while (parser.parseStatement(&statement))
 		{

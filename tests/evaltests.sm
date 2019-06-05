@@ -1,6 +1,9 @@
-extern func printf;
+def cchar = #primitives.c.char;
+def cint = #primitives.c.int;
 
-eval("printf(\"Hello evaled statement!\n\")");
+extern printf : func(fmt : cchar*, args...) -> errCode : cint;	
+
+eval("printf(\"Hello evaled statement!\n\");");
 
 {
 	var x = 32;
@@ -32,7 +35,7 @@ eval(chainedReturnValue());
 
 func innerValue() -> cchar*
 {
-	return "printf(\"Hello chained eval function\")";
+	return "printf(\"Hello chained eval function\");";
 };
 
 func chainedReturnValue() -> cchar*
