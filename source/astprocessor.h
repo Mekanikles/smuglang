@@ -27,6 +27,11 @@ struct ASTProcessor : AST::Visitor
 		TypeRef& t1 = node->left->getType(this->context);
 		TypeRef& t2 = node->right->getType(this->context);
 
+		// TODO: Can we stop trivial tuples form happening?
+		// Strip any tuples we might have
+		t1 = t1.stripTrivialWrapperTypes();
+		t2 = t2.stripTrivialWrapperTypes();
+
 		const auto result = unifyTypes(t1, t2);
 		if (!result)
 			assert("Cannot unify types" && false);
@@ -301,7 +306,7 @@ struct ASTProcessor : AST::Visitor
 		}
 
 		auto type = TypeRef(createTupleType(std::move(types)));
-		type.stripTrivialTuples();
+		type.stripTrivialWrapperTypes();
 
 		this->context->addTypeLiteral(node, std::move(type));
 	}

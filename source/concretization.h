@@ -144,6 +144,13 @@ struct ExpressionConcretizer : AST::Visitor
 
 		// Defaulting rules
 		{
+			if (type->isMultiType())
+			{
+				// Try unifying with int as default to c compatibility
+				auto intType = TypeRef(createPrimitiveType(PrimitiveClass::Int));
+				unifyTypes(type, intType);
+			}
+
 			assert(type.getType().ensureConcrete());
 		}
 

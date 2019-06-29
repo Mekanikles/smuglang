@@ -209,6 +209,10 @@ bool unifyArguments(vector<TypeRef>& argTypes, vector<TypeRef>& paramTypes, Argu
 
 bool unifyFunctionCall(ASTContext* context, AST::Call* call, const FunctionClass& function, ArgumentBinding* argBinding)
 {
+	// Calls without arguments always unify
+	if (argBinding->params.empty())
+		return true;
+
 	vector<TypeRef> argTypes;
 	for (AST::Expression* expr : call->args)
 	{

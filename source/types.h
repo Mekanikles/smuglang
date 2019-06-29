@@ -471,7 +471,7 @@ struct TypeRef
 		}
 	}
 
-	void stripTrivialTuples();
+	TypeRef& stripTrivialWrapperTypes();
 };
 
 TypeRef s_voidType(Type::Kind::Void);
@@ -1545,23 +1545,23 @@ UnificationResult generateMultiTypeUnification(TypeRef& leftType, TypeRef& right
 
 UnificationResult generateTypeUnification(TypeRef& leftType, TypeRef& rightType)
 {
-	if (leftType == rightType || rightType.isSubType(leftType))
+	TypeRef& innerLeftType = leftType.stripTrivialWrapperTypes();
+	TypeRef& innerRightType = rightType.stripTrivialWrapperTypes();
+
+	if (innerLeftType == innerRightType || innerRightType.isSubType(innerLeftType))
 	{
-		return createLeftChange(leftType, rightType);
+		return createLeftChange(innerLeftType, innerRightType);
 	}
-	else if (leftType.isSubType(rightType))
+	else if (innerLeftType.isSubType(innerRightType))
 	{
-		return createRightChange(leftType, rightType);
+		return createRightChange(innerLeftType, innerRightType);
 	}
 
-	return generateMultiTypeUnification(leftType, rightType);
+	return generateMultiTypeUnification(innerLeftType, innerRightType);
 }
 
 bool unifyTypes(TypeRef& leftType, TypeRef& rightType)
 {
-	leftType.stripTrivialTuples();
-	rightType.stripTrivialTuples();
-
 	auto result = generateTypeUnification(leftType, rightType);
 	result.apply();
 	return (bool)result;
@@ -1612,15 +1612,21 @@ bool isStringType(const Type& type)
 	return isCharPointer(type);
 }
 
-void TypeRef::stripTrivialTuples()
+TypeRef& TypeRef::stripTrivialWrapperTypes()
 {
-	while (getType().isTuple())
+	if (getType().isTuple())
 	{
 		auto& tuple = getType().getTuple();
 		if (tuple.types.size() == 1)
-			*this = tuple.types[0];
-		else
-			break;
+			return tuple.types[0].stripTrivialWrapperTypes();
 	}
+	else if(getType().isMultiType())
+	{
+		auto& mtype = getType().getMultiType();
+		if (mtype.types.size() == 1)
+			return mtype.types[0].stripTrivialWrapperTypes();
+	}
+	
+	return *this;
 }
 
