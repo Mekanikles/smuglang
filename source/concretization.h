@@ -378,7 +378,7 @@ struct FunctionConcretizer : AST::Visitor
 
 	virtual void visit(AST::Assignment* node) override
 	{
-		auto assExprs = generateConcreteExpression(node->symExpr);
+		auto assExprs = generateConcreteExpression(node->target);
 		assert(assExprs.size() == 1);
 
 		auto valExprs = generateConcreteExpression(node->expr);

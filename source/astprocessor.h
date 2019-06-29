@@ -54,27 +54,64 @@ struct ASTProcessor : AST::Visitor
 
 		bool success = unifyFunctionCall(this->context, node, function, argBinding);
 		assert(success && "Could not unify function argument");
+	}
 
-		/*
-		auto& inTypes = function.inTypes;
-		auto& args = node->args;
+	// TODO: This is very similar to function/template params
+	void visit(AST::StructField* node) override
+	{
+		if (this->context->processCheck(node))
+			return;
 
-		if (function.isVariadic)
-			assert(args.size() >= inTypes.size());
-		else
- 			assert(inTypes.size() == args.size());
+		Symbol* symbol = node->getSymbol(this->context);
 
-		for (int i = 0, s = inTypes.size(); i < s; ++i)
+		TypeRef type;
+		if (node->typeExpr)
 		{
-			Type& inType = inTypes[i];
-			AST::Expression* arg = args[i];
-			Type& argType = arg->getType();
-			const auto result = unifyTypes(argType, inType);
+			node->typeExpr->accept(this);
+
+			unique<IR::Literal> value = Evaluation::createLiteralFromASTExpression(this->econtext, *this->context, *node->typeExpr);
+			const TypeRef& exprType = value->type;
+
+			assert(exprType->isTypeVariable());
+			// Note: Clone type here so that any inference is not done on the source
+			type = exprType->getTypeVariable().type.clone();
+		}
+
+		// Infer type from init expression
+		if (node->initExpr)
+		{
+			node->initExpr->accept(this);
+
+			TypeRef& exprType = node->initExpr->getType(this->context);
+			const auto result = unifyTypes(type, exprType);
 
 			// TODO: Handle implicit casts?
-			if (result == CannotUnify)
-				assert("Cannot unify function argument" && false);	
-		}*/	
+			if (!result)
+				assert("Cannot unify types" && false);
+
+			// TODO: How to apply unification to expression?
+		}
+
+		// Assign type
+		symbol->getType() = type;
+	}
+
+	// TODO: Remove structdeclaration special node, use symboldeclaration instead
+	void visit(AST::StructDeclaration* node) override
+	{
+		if (this->context->processCheck(node))
+			return;
+
+		// Visit subtree of signature
+		AST::Visitor::visit(node);
+
+		TypeRef literalType = node->createLiteralType(this->context);
+		TypeRef nodeType = node->getSymbol(this->context)->getType();
+
+		// TODO: this feels unnecessary, but stuff might have bound to the node type at decl resolving
+		unifyTypes(nodeType, literalType);
+
+		this->context->addTypeLiteral(node, std::move(nodeType));	
 	}
 
 	// TODO: Remove functiondeclaration special node, use symboldeclaration instead
@@ -429,9 +466,12 @@ struct ASTProcessor : AST::Visitor
 		if (this->context->processCheck(node))
 			return;
 
-		assert(node->symExpr);
-		node->symExpr->accept(this);
-		Symbol* symbol = node->symExpr->getSymbol(this->context);
+		assert(node->target);
+		node->target->accept(this);
+		assert(node->target->isSymbolExpression());
+		AST::SymbolExpression* symExpr = static_cast<AST::SymbolExpression*>(node->target);
+
+		Symbol* symbol = symExpr->getSymbol(this->context);
 
 		if (symbol->firstInitOrder < node->order)
 			symbol->firstInitOrder = node->order;
@@ -585,7 +625,7 @@ struct ASTProcessor : AST::Visitor
 		//	Consider doing this at a later pass, in some execution-order
 		//	based traversal.
 		Symbol* symbol = node->getSymbol(this->context);
-		if (!node->isPartOfAssignment && symbol->firstInitOrder > node->order)
+		if (symbol->firstInitOrder > node->order)
 		{	
 			// TODO: add line/column
 			printLine(string("Warning: Symbol '") + node->symbol + "' is used before initialization" + 

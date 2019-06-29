@@ -251,6 +251,26 @@ struct Parser
 		return false;
 	}
 
+	bool parseStructExpressionContinuation(AST::Expression** outExpr)
+	{
+		// TODO: Create struct expression
+		assert(false);
+		outExpr = nullptr;
+		return true;
+	}
+
+	bool parseStructExpression(AST::Expression** outExpr)
+	{
+		if (accept(TokenType::Struct))
+		{
+			parseStructExpressionContinuation(outExpr);
+			return true;
+		}
+		
+		return false;
+	}
+
+
 	bool parseTypeLiteral(AST::TypeLiteral** outNode)
 	{
 		if (const Token& token = peek(TokenType::CompilerDirective))
@@ -494,7 +514,6 @@ struct Parser
 			if (accept(TokenType::OpenParenthesis))
 			{	
 				auto node = createNode<AST::Call>();
-				node->function = symbol;
 				node->expr = expr;
 
 				if (!parseCallArguments(node))
@@ -529,18 +548,57 @@ struct Parser
 		else if (parseFunctionExpression(outNode))
 		{
 		}
+		else if (parseStructExpression(outNode))
+		{
+		}
 		else
 		{
 			return false;
 		}
 
-		if (acceptUnaryPostfixOperator())
+		// Accept any expression post-modifiers
+		while(true)
 		{
-			auto uop = createNode<AST::UnaryPostfixOp>();
-			uop->opType = lastToken().type;
-			uop->expr = *outNode;
+			if (acceptUnaryPostfixOperator())
+			{
+				// Postfix ops
+				auto uop = createNode<AST::UnaryPostfixOp>();
+				uop->opType = lastToken().type;
+				uop->expr = *outNode;
 
-			*outNode = uop;
+				*outNode = uop;
+			}
+			else if (accept(TokenType::Dot))
+			{
+				// Member access
+				auto ma = createNode<AST::MemberAccess>();
+				ma->expr = *outNode;
+				AST::SymbolExpression* symExpr = nullptr;
+				if (!parseSymbolExpression(&symExpr))
+					errorOnExpect("Expected symbol expression");
+				ma->member = symExpr;
+
+				*outNode = ma;
+			}
+			else if (accept(TokenType::OpenParenthesis))
+			{	
+				// Function call
+				auto call = createNode<AST::Call>();
+				call->expr = *outNode;
+
+				if (!parseCallArguments(call))
+				{
+					errorOnExpect("Call parameter list expected");
+				}
+
+				expect(TokenType::CloseParenthesis);
+
+				*outNode = call;
+			}
+			else
+			{
+				break;
+			}
 		}
 
 		return true;
@@ -968,7 +1026,7 @@ struct Parser
 
 			*outDeclaration = node;
 		}
-	}	
+	}
 
 	bool parseFunctionDeclaration(AST::FunctionDeclaration** outDeclaration)
 	{
@@ -1005,11 +1063,104 @@ struct Parser
 		return false;
 	}
 
+	void parseStructDeclarationContinuation(AST::StructDeclaration** outDeclaration)
+	{
+		if (expect(TokenType::Symbol))
+		{
+			const string structName = lastToken().symbol;
+			*outDeclaration = nullptr;
+
+			auto node = createNode<AST::StructDeclaration>();
+			node->name = structName;
+
+			if (accept(TokenType::OpenBrace))
+			{
+				while(true)
+				{
+					if (accept(TokenType::Symbol))
+					{
+						const string fieldName = lastToken().symbol;
+						expect(TokenType::Colon);
+						
+						// Type expression
+						AST::Expression* typeExpr = nullptr;
+						if (!parseExpression(&typeExpr))
+						{
+							errorOnExpect("Expected type expression");
+						}
+
+						// Optional initialization
+						AST::Expression* initExpr = nullptr;
+						if (accept(TokenType::Equals))
+						{
+							AST::Expression* expr = nullptr;
+							if (!parseExpression(&expr))
+							{
+								errorOnExpect("Expected expression");
+							}
+						}
+
+						auto field = createNode<AST::StructField>();
+						field->name = fieldName;
+						field->typeExpr = typeExpr;
+						field->initExpr = initExpr;
+						node->fields.push_back(field);
+						
+						expect(TokenType::SemiColon);
+
+						continue;
+					}
+
+					break;
+				}
+
+				expect(TokenType::CloseBrace);
+			}
+
+			*outDeclaration = node;
+		}
+	}
+
+	bool parseStructDeclaration(AST::StructDeclaration** outDeclaration)
+	{
+		if (accept(TokenType::Struct))
+		{
+			parseStructDeclarationContinuation(outDeclaration);
+			return true;
+		}
+
+		return false;
+	}
+
+	bool parseStructDeclarationOrExpression(AST::Statement** outStatement)
+	{
+		if (accept(TokenType::Struct))
+		{
+			*outStatement = nullptr;
+			// Short-hand func declaration
+			if (peek(TokenType::Symbol))
+			{
+				AST::StructDeclaration* structDecl;
+				parseStructDeclarationContinuation(&structDecl);
+				*outStatement = structDecl;
+			}
+			else
+			{
+				AST::Expression* expr;
+				parseStructExpressionContinuation(&expr);
+				*outStatement = expr;
+			}
+			return true;
+		}
+
+		return false;
+	}
+
 	// TODO: Should output statement?
 	bool parseDeclarationStatement(AST::Declaration** outDeclaration)
 	{
-		//AST::FunctionDeclaration* funcDecl;
 		AST::FunctionDeclaration* funcDecl;
+		AST::StructDeclaration* structDecl;
 		if (accept(TokenType::Var) || accept(TokenType::Def) || accept(TokenType::Const) || accept(TokenType::Extern))
 		{
 			StorageQualifier sq;
@@ -1037,6 +1188,11 @@ struct Parser
 		else if (parseFunctionDeclaration(&funcDecl))
 		{
 			*outDeclaration = funcDecl;
+			return true;
+		}
+		else if (parseStructDeclaration(&structDecl))
+		{
+			*outDeclaration = structDecl;
 			return true;
 		}
 
@@ -1153,6 +1309,32 @@ struct Parser
 		return false;
 	}
 
+	bool parseSymbolExpression(AST::SymbolExpression** node)
+	{
+		if (accept(TokenType::Symbol))
+		{
+			Token t = lastToken();
+			string symbol = t.symbol;
+
+			*node = createNode<AST::SymbolExpression>(symbol);
+
+			// Template parameters
+			if (accept(TokenType::TemplateParameterOpener))
+			{
+				if (!parseTemplateArguments(*node))
+				{
+					errorOnExpect("Template parameter list expected");
+				}
+
+				expect(TokenType::CloseParenthesis);
+			}
+
+			return true;
+		}
+
+		return false;
+	}
+
 	bool parseStatement(AST::Statement** outStatement)
 	{
 		AST::Declaration* declaration;
@@ -1205,63 +1387,20 @@ struct Parser
 			expect(TokenType::SemiColon, false);
 			*outStatement = node;
 		}
-		// TODO: Parse expression properly
-		else if (accept(TokenType::Symbol))
+		else if (parseFunctionDeclarationOrExpression(outStatement)) // Check this before expression!
 		{
-			Token t = lastToken();
-			string symbol = t.symbol;
-
-			AST::SymbolExpression* expr = nullptr;
-
-			// Template parameters
-			if (accept(TokenType::TemplateParameterOpener))
+			expect(TokenType::SemiColon, false);
+		}
+		else if (parseStructDeclarationOrExpression(outStatement))
+		{
+			expect(TokenType::SemiColon, false);
+		}
+		else if (parseExpression(&expression))
+		{
+			if (accept(TokenType::Equals))
 			{
-				expr = createNode<AST::SymbolExpression>(symbol);
-				if (!parseTemplateArguments(expr))
-				{
-					errorOnExpect("Template parameter list expected");
-				}
-
-				expect(TokenType::CloseParenthesis);
-			}
-
-			// TODO: accept expression instead
-			//	Will allow assigning to function return values
-			// Function call
-			if (accept(TokenType::OpenParenthesis))
-			{	
-				auto node = createNode<AST::Call>();
-				node->function = symbol;
-
-				if (!expr)
-					expr = createNode<AST::SymbolExpression>(symbol);
-				node->expr = expr;
-
-				if (!parseCallArguments(node))
-				{
-					errorOnExpect("Call parameter list expected");
-				}
-
-				if (!getNewErrors())
-				{
-					expect(TokenType::CloseParenthesis);
-					expect(TokenType::SemiColon);
-
-					*outStatement = node;
-				}
-				else
-				{
-					skipToNextStatement();
-				}		
-			}
-			else if (accept(TokenType::Equals))
-			{
-				auto* node = createNode<AST::Assignment>();
-				*outStatement = node;
-				
-				if (!expr)
-					expr = createNode<AST::SymbolExpression>(symbol);
-				expr->isPartOfAssignment = true;
+				auto* assignment = createNode<AST::Assignment>();
+				*outStatement = assignment;
 
 				// Assignment
 				AST::Expression* assignExpr;
@@ -1270,25 +1409,18 @@ struct Parser
 					errorOnExpect("Expected expression");
 				}
 
-				node->symExpr = expr;
-				node->expr = assignExpr;
+				assignment->target = expression;
+				assignment->expr = assignExpr;
 
-				expect(TokenType::SemiColon, false);
+				*outStatement = assignment;
 			}
 			else
 			{
-				errorOnAccept("Cannot parse lone symbol");
+				*outStatement = expression;
 			}
-		}
-		else if (parseFunctionDeclarationOrExpression(outStatement)) // Check this before expression!
-		{
-			expect(TokenType::SemiColon, false);
-		}
-		else if (parseExpression(&expression))
-		{
-			expect(TokenType::SemiColon, false);
-			*outStatement = expression;
-		}	
+
+			expect(TokenType::SemiColon);
+		}		
 		else if (parseTemplatedDeclarationStatement(&templateDeclaration))
 		{
 			// TODO: Should declarations ending in bodies require semi colon?

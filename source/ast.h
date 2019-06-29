@@ -21,6 +21,8 @@ namespace AST
 	struct TemplateDeclaration;
 	struct SymbolDeclaration;
 	struct FunctionDeclaration;
+	struct StructField;
+	struct StructDeclaration;
 	struct SymbolExpression;
 	struct Tuple;
 	struct StringLiteral;
@@ -64,7 +66,9 @@ namespace AST
 		virtual void visit(IfStatement* node) { visit((Statement*)node); }
 		virtual void visit(TemplateDeclaration* node) { visit((Statement*)node); }
 		virtual void visit(SymbolDeclaration* node) { visit((Declaration*)node);}	
-		virtual void visit(FunctionDeclaration* node) { visit((Declaration*)node);}	
+		virtual void visit(FunctionDeclaration* node) { visit((Declaration*)node);}
+		virtual void visit(StructField* node) { visit((Node*)node);}
+		virtual void visit(StructDeclaration* node) { visit((Declaration*)node);}
 		virtual void visit(Expression* node) { visit((Node*)node); }
 		virtual void visit(SymbolExpression* node) { visit((Expression*)node);}
 		virtual void visit(StringLiteral* node) { visit((Expression*)node);}
@@ -529,7 +533,6 @@ namespace AST
 	struct SymbolExpression : public NodeImpl<SymbolExpression, Expression>
 	{
 		string symbol;
-		bool isPartOfAssignment = false;
 		vector<Expression*> templateArgs;
 
 		SymbolExpression(string symbol)
@@ -610,15 +613,14 @@ namespace AST
 	//	for funcs that can act as an expression/operand
 	struct Call : public NodeImpl<Call, Expression>
 	{
-		string function; // TODO: Remove?
-		SymbolExpression* expr = nullptr; // TODO: Can be any expression
+		Expression* expr = nullptr;
 		vector<Expression*> args;
 
 		ArgumentBinding* argBinding = nullptr;
 
 		string toString(ASTContext* context) override 
 		{ 
-			string s = "Call(" + function + ")";
+			string s = "Call";
 			if (hasSymbol(context))
 				s += typeString(getType(context));
 			return s; 
@@ -663,12 +665,11 @@ namespace AST
 
 	struct Assignment : public NodeImpl<Assignment, Statement>
 	{
-		SymbolExpression* symExpr;
+		Expression* target;
 		Expression* expr = nullptr;
 
 		string toString(ASTContext* context) override 
 		{ 
-			assert(symExpr);
 			string s = "Assigment";
 			return s; 
 		}
@@ -677,7 +678,7 @@ namespace AST
 		{
 			vector<Node*> ret;
 			ret.reserve(2);
-			ret.push_back(symExpr);
+			ret.push_back(target);
 			ret.push_back(expr);
 			return ret;
 		}	
@@ -861,6 +862,28 @@ namespace AST
 		}		
 	};
 
+	struct MemberAccess : public NodeImpl<MemberAccess, Expression>
+	{
+		Expression* expr;
+		SymbolExpression* member;
+		TypeRef type;
+
+		MemberAccess()
+		{}	
+
+		string toString(ASTContext* context) override 
+		{ 
+			string s;
+			s = "MemberAccess";
+			return s; 
+		}
+
+		TypeRef& getType(ASTContext* context) override
+		{
+			return type;
+		}
+	};
+
 	struct FunctionLiteral : public NodeImpl<FunctionLiteral, Expression>
 	{
 		FunctionSignature* signature = nullptr;
@@ -925,6 +948,93 @@ namespace AST
 			auto ret =  vector<Node*>();
 			if (funcLiteral)
 				ret.push_back(funcLiteral);
+			return ret;
+		}
+	};
+
+	struct StructField : public NodeImpl<StructField, Node>
+	{
+		string name;
+		Expression* typeExpr = nullptr;
+		Expression* initExpr = nullptr;
+
+		Symbol* getSymbol(ASTContext* context)
+		{
+			auto* symbolSource = context->getSymbolSource(this);
+			assert(symbolSource);
+			return symbolSource->getSymbol();
+		}
+
+		TypeRef& getType(ASTContext* context)
+		{
+			return getSymbol(context)->getType();
+		}
+
+		const string& getName(ASTContext* context)
+		{
+			return getSymbol(context)->name;
+		}
+
+		string toString(ASTContext* context) override 
+		{ 	
+			string s = "StructField(" + symbolString(name) + ")";
+			s += typeString(getType(context));
+			return s;
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			auto ret =  vector<Node*>();
+			if (typeExpr)
+				ret.push_back(typeExpr);
+			if (initExpr)
+				ret.push_back(initExpr);
+			return ret;
+		}
+	};	
+
+	// TODO: Replace with normal symbol declaration/definition
+	struct StructDeclaration : public NodeImpl<StructDeclaration, Declaration>
+	{
+		string name;
+		vector<StructField*> fields;
+
+		TypeRef createLiteralType(ASTContext* context)
+		{
+			auto structType = std::make_unique<StructClass>(name);
+			
+			for (auto* f : fields)
+			{
+				TypeRef& t = f->getType(context);
+				structType->addField(TypeRef(t), f->getName(context));
+			}
+
+			return createTypeVariable(Type(std::move(structType)));
+		}
+
+		virtual string getSymbolName() override
+		{
+			return name;
+		}
+
+		string toString(ASTContext* context) override 
+		{ 
+			string s;
+			s += "StructDeclaration(" + symbolString(name) + ")";
+			return s;
+		}
+
+		Symbol* getSymbol(ASTContext* context)
+		{
+			auto* symbolSource = context->getSymbolSource(this);
+			assert(symbolSource);
+			return symbolSource->getSymbol();
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.insert(ret.end(), fields.begin(), fields.end());
 			return ret;
 		}
 	};

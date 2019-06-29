@@ -312,8 +312,11 @@ struct LLVMIRGenerator : AST::Visitor
 	{
 		// NOTE: Do NOT evaluate symbol expr, we don't want a load here
 		// TODO: Handle expressions that return assignable "values"
-		assert(node->symExpr);
-		Symbol* symbol = node->symExpr->getSymbol(m_astContext);
+		assert(node->target);
+		assert(node->target->isSymbolExpression());
+		AST::SymbolExpression* symExpr = static_cast<AST::SymbolExpression*>(node->target);
+
+		Symbol* symbol = symExpr->getSymbol(m_astContext);
 
 		// TODO: This relies on decl node being parsed first,
 		// 	make sure IR is arranged in correct order

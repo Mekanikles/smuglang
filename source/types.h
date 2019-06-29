@@ -6,6 +6,7 @@
 struct Type;
 struct PrimitiveClass;
 struct FunctionClass;
+struct StructClass;
 struct PointerClass;
 struct TypeVariableClass;
 struct ArrayClass;
@@ -31,6 +32,7 @@ struct TypeClass
 		Array,
 		Tuple,
 		Function,
+		Struct,
 		Pointer,
 	};
 
@@ -224,6 +226,11 @@ struct Type
 		return kind == Value && typeClass->type == TypeClass::Function;
 	}
 
+	bool isStruct() const
+	{
+		return kind == Value && typeClass->type == TypeClass::Struct;
+	}
+
 	bool isTuple() const
 	{
 		return kind == Value && typeClass->type == TypeClass::Tuple;
@@ -239,6 +246,18 @@ struct Type
 	{
 		assert(isFunction());
 		return typeClass->as<FunctionClass>();
+	}
+
+	const StructClass& getStruct() const
+	{
+		assert(isStruct());
+		return typeClass->as<StructClass>();
+	}
+
+	StructClass& getStruct()
+	{
+		assert(isStruct());
+		return typeClass->as<StructClass>();
 	}
 
 	const TupleClass& getTuple() const
@@ -1037,6 +1056,97 @@ struct FunctionClass : TypeClass
 	}
 };
 
+struct StructClass : TypeClass
+{
+	struct Field
+	{
+		string name;
+		TypeRef type;
+
+		Field clone() const
+		{
+			return Field{name, type.clone()};
+		}
+
+		string toString() const
+		{
+			string s;
+			if (!name.empty())
+			{
+				s += name;
+				s += " : ";
+			}
+			s += type.toString();
+			return s;
+		}
+	};
+
+	string name;
+	vector<Field> fields;
+
+	StructClass(string name)
+		: TypeClass(TypeClass::Struct)
+		, name(name)
+	{}
+
+	void addField(TypeRef&& _type, const string name)
+	{
+		fields.push_back({name, std::move(_type)});
+	}
+
+	virtual std::unique_ptr<TypeClass> clone() const override
+	{
+		auto structObj = new StructClass(name);
+		for (auto& f : fields)
+		{
+			structObj->fields.push_back(f.clone());
+		}
+
+		return std::unique_ptr<StructClass>(structObj);
+	}
+
+	virtual string toString() const override
+	{
+		string s = "Struct ";
+		s += name;
+		s += "(";
+		for (int i = 0, e = fields.size(); i < e; ++i)
+		{
+			auto& p = fields[i];
+			s += p.toString();
+			if (i < e - 1)
+				s += ", ";
+		}	
+		s += ")";
+		return s;
+	}
+
+	virtual bool isConcrete() const override
+	{
+		return true;
+	}
+
+	virtual bool ensureConcrete() override
+	{
+		return true;
+	}
+
+	virtual int getSize() const override
+	{
+		return 0;
+	}	
+
+	bool operator==(const StructClass& o) const
+	{
+		return true;
+	}
+
+	bool isSubClass(const StructClass& o) const
+	{
+		return true;
+	}
+};
+
 struct PointerClass : TypeClass
 {
 	TypeRef type;
@@ -1340,6 +1450,11 @@ Type createTupleType(vector<TypeRef>&& types)
 Type createFunctionType()
 {
 	return Type(std::make_unique<FunctionClass>());
+}
+
+Type createStructType(string name)
+{
+	return Type(std::make_unique<StructClass>(name));
 }
 
 Type createMultiTypeVariable()

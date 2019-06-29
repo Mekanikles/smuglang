@@ -172,6 +172,21 @@ struct Context
 				return getFloatType(size);
 			}
 		}
+		else if (type.isStruct())
+		{
+			const auto& structType = type.getStruct();
+
+			vector<llvm::Type*> llvmMembers;
+			for (const StructClass::Field& field : structType.fields)
+			{
+				auto llvmType = resolveType(field.type.getType());
+				llvmMembers.push_back(llvmType);
+			}
+
+			auto* llvmStruct = llvm::StructType::create(m_llvmContext, structType.name);
+			llvmStruct->setBody(llvmMembers);
+			return llvmStruct;
+		}
 
 		assert("Cannot resolve type" && false);
 		return nullptr;

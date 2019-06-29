@@ -101,6 +101,38 @@ struct DeclarationProcessor : public AST::Visitor
 		AST::Visitor::visit(node);
 	}
 
+	// TODO: Copy paste code, generalize declarations somehow
+	void visit(AST::StructDeclaration* node) override
+	{
+		// Make sure symbol is not declared in same scope
+		// 	It is okay to overshadow parent scope declarations.		
+		auto existingDeclaration = this->currentScope->lookUpDeclarationInScope(node->name);
+		if (existingDeclaration)
+		{
+			assert(false && "Struct already declared");
+		}
+
+		Symbol* symbol = createSymbol(node->name);
+		// InitOrder of functions is 0 since they are initialized at compile time
+		symbol->firstInitOrder = 0;
+
+		auto symbolSource = createDeclarationSymbolSource(this->context, symbol, node, StorageQualifier::Def);
+		this->currentScope->addSymbolSource(symbolSource);
+		this->context->setSymbolSource(node, symbolSource);
+
+		// Hm, fields should probably not be symbolsources
+		//	they are only used for being able to store types
+		for (AST::StructField* field : node->fields)
+		{
+			Symbol* symbol = createSymbol(field->name);
+
+			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, field, StorageQualifier::Var);
+			this->context->setSymbolSource(field, symbolSource);	
+		}
+
+		AST::Visitor::visit(node);
+	}
+
 	void visit(AST::SymbolDeclaration* node) override
 	{
 		// Make sure symbol is not declared in same scope

@@ -372,6 +372,8 @@ public:
 					*outToken = Token(TokenType::Def);
 				else if (w == "func")
 					*outToken = Token(TokenType::Func);
+				else if (w == "struct")
+					*outToken = Token(TokenType::Struct);
 				else if (w == "eval")
 					*outToken = Token(TokenType::Eval);
 				else if (w == "return")

@@ -19,6 +19,7 @@ enum class TokenType
 	Const,
 	Def,
 	Func,
+	Struct,
 	Eval,
 	Return,
 	If,
@@ -91,6 +92,7 @@ string toString(TokenType type)
 		case TokenType::Const: return "Const";
 		case TokenType::Def: return "Def";
 		case TokenType::Func: return "Func";
+		case TokenType::Struct: return "Struct";
 		case TokenType::Eval: return "Eval";
 		case TokenType::Return: return "Return";
 		case TokenType::If: return "If";
