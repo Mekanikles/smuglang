@@ -108,3 +108,11 @@ func chainedReturnValue() -> cchar*
 {
 	return innerValue();
 };
+
+#template(a : s32)
+func templatedFunc()
+{
+	printf("Hello templated parameter: %i\n", a);
+};
+
+templatedFunc#(666)();

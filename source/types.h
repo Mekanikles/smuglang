@@ -1094,6 +1094,38 @@ struct StructClass : TypeClass
 		fields.push_back({name, std::move(_type)});
 	}
 
+	const Field* getFieldByName(const string& name) const
+	{
+		for (auto& f : fields)
+		{
+			if (f.name == name)
+				return &f;
+		}
+		return nullptr;
+	}
+
+	Field* getFieldByName(const string& name)
+	{
+		for (auto& f : fields)
+		{
+			if (f.name == name)
+				return &f;
+		}
+		return nullptr;
+	}
+
+	int getFieldIndexByName(const string& name) const
+	{
+		int c = 0;
+		for (auto& f : fields)
+		{
+			if (f.name == name)
+				return c;
+			c++;
+		}
+		return -1;
+	}
+
 	virtual std::unique_ptr<TypeClass> clone() const override
 	{
 		auto structObj = new StructClass(name);

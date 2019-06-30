@@ -36,6 +36,7 @@ namespace IR
 		{
 			Literal,
 			Reference,
+			MemberAccess,
 			BinaryOp,
 			Call,
 		};
@@ -48,7 +49,7 @@ namespace IR
 		{}
 	
 		virtual ~Expression() = default;
-		virtual string toString() = 0;
+		virtual string toString() const = 0;
 		virtual const vector<Expression*> getSubExpressions() { return {}; }
 	};
 
@@ -82,7 +83,7 @@ namespace IR
 		{
 		}
 
-		virtual string toString() override
+		virtual string toString() const override
 		{
 			switch (opType)
 			{
@@ -136,7 +137,7 @@ namespace IR
 		}		
 
 		template<typename T>
-		T& readValue()
+		T& readValue() const
 		{
 			assert(data.size() == sizeof(T));
 			return *(T*)data.data();
@@ -147,7 +148,7 @@ namespace IR
 			return std::make_unique<Literal>(type, data);
 		}
 
-		virtual string toString() override
+		virtual string toString() const override
 		{
 			string s = "Literal";
 			return s;
@@ -205,14 +206,43 @@ namespace IR
 			, referenceable(referenceable)
 		{}
 
-		virtual const Referenceable* getReferenceable() { return referenceable; }
+		const Referenceable* getReferenceable() { return referenceable; }
 
-		virtual string toString() override
+		virtual string toString() const override
 		{
 			return prettyString(referenceable->getName(), FGTextColor::Blue, true);
 		}
 
 		virtual const TypeRef& getType() const override { return referenceable->getType(); }			
+	};
+
+	struct MemberAccess : Expression
+	{
+		unique<Expression> expression;
+		string name;
+
+		MemberAccess(unique<Expression> expression, string name) 
+			: Expression(Expression::MemberAccess) 
+			, expression(std::move(expression))
+			, name(name)
+		{}
+
+		virtual string toString() const override
+		{
+			string s = expression->toString();
+			s += ".";
+			s += name;
+			return s;
+		}
+
+		virtual const TypeRef& getType() const override 
+		{ 
+			const TypeRef& exprType = expression->getType(); 
+			assert(exprType->isStruct());
+			auto* field = exprType->getStruct().getFieldByName(name);
+			assert(field);
+			return field->type;
+		}
 	};
 
 	struct Variable : Referenceable
@@ -342,7 +372,7 @@ namespace IR
 			, type(type)
 		{}
 
-		virtual string toString() override
+		virtual string toString() const override
 		{
 			string s = "Call";
 			return s;

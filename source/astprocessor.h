@@ -473,24 +473,63 @@ struct ASTProcessor : AST::Visitor
 
 		assert(node->target);
 		node->target->accept(this);
-		assert(node->target->isSymbolExpression());
-		AST::SymbolExpression* symExpr = static_cast<AST::SymbolExpression*>(node->target);
 
-		Symbol* symbol = symExpr->getSymbol(this->context);
-
-		if (symbol->firstInitOrder < node->order)
-			symbol->firstInitOrder = node->order;
-
-		// Infer type from assignment
 		assert(node->expr);
 		node->expr->accept(this);
 
-		TypeRef& exprType = node->expr->getType(this->context);
-		const auto result = unifyTypes(symbol->type, exprType);
+		if (node->target->isSymbolExpression())
+		{
+			AST::SymbolExpression* symExpr = static_cast<AST::SymbolExpression*>(node->target);
 
-		// TODO: Handle implicit casts?
-		if (!result)
-			assert("Cannot unify types" && false);	
+			Symbol* symbol = symExpr->getSymbol(this->context);
+
+			if (symbol->firstInitOrder < node->order)
+				symbol->firstInitOrder = node->order;
+
+			// Infer type from assignment
+			TypeRef& exprType = node->expr->getType(this->context);
+			const auto result = unifyTypes(symbol->type, exprType);
+
+			// TODO: Handle implicit casts?
+			if (!result)
+				assert("Cannot unify types" && false);
+		}
+		else if (node->target->isMemberAccess())
+		{
+			AST::MemberAccess* maccess = static_cast<AST::MemberAccess*>(node->target);
+			assert(maccess->expr->isSymbolExpression());
+			{
+				AST::SymbolExpression* symExpr = static_cast<AST::SymbolExpression*>(maccess->expr);
+				Symbol* symbol = symExpr->getSymbol(this->context);
+
+				TypeRef& targetType = symbol->getType();
+				if (targetType->isStruct())
+				{
+					StructClass& structType = targetType->getStruct();
+					string& memberName = maccess->member->symbol;
+
+					auto* field = structType.getFieldByName(memberName);
+					assert(field && "No member found by specified name");
+
+					// TODO: Should not be able to infer types for struct members?
+					// Infer type from assignment
+					TypeRef& exprType = node->expr->getType(this->context);
+					const auto result = unifyTypes(field->type, exprType);
+
+					// TODO: Handle implicit casts?
+					if (!result)
+						assert("Cannot unify types" && false);	
+				}
+				else
+				{
+					assert(false);
+				}
+			}
+		}
+		else
+		{
+			assert(false && "Left of assignment needs to be member access or symbol expression");
+		}
 	}
 
 	void visit(AST::SymbolExpression* node) override

@@ -250,9 +250,9 @@ struct Context
 
 	llvm::Value* createValuePtr(llvm::Value* val)
 	{
-    	llvm::Value *zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_llvmContext), 0);
-    	llvm::Value *Args[] = { zero, zero };
-    	return m_llvmBuilder.CreateInBoundsGEP(nullptr, val, Args);
+    	llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_llvmContext), 0);
+    	llvm::Value* args[] = { zero, zero };
+    	return m_llvmBuilder.CreateInBoundsGEP(nullptr, val, args);
 	}
 
 	llvm::Value* createBinaryOp(const TypeRef& type, IR::BinaryOp::OpType opType, llvm::Value* leftVal, llvm::Value* rightVal)
@@ -311,7 +311,23 @@ struct Context
 				const llvm::Type* valType = val.backendValue->getType();
 				assert(valType->isPointerTy() && "Can only get ptr from ptr type");
 				return val.backendValue;
-			}
+			}	
+			case IR::Expression::MemberAccess:
+			{
+				auto* maccess = static_cast<IR::MemberAccess*>(&expr);
+				auto* leftSidePtr = createPtrFromExpression(*maccess->expression);
+
+				const TypeRef& type = maccess->expression->getType();
+				int index = type->getStruct().getFieldIndexByName(maccess->name);
+
+				llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_llvmContext), 0);
+				llvm::Value* indexVal = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_llvmContext), index);
+				llvm::Value* gepIndices[] = { zero, indexVal };
+
+				auto* val = m_llvmBuilder.CreateGEP(leftSidePtr, gepIndices, maccess->name);
+				return val;
+				break;
+			}	
 			case IR::Expression::Literal:
 			case IR::Expression::Call:
 			case IR::Expression::BinaryOp:
@@ -409,6 +425,22 @@ struct Context
 					return m_llvmBuilder.CreateLoad(val.backendValue);
 				break;
 			}
+			case IR::Expression::MemberAccess:
+			{
+				auto* maccess = static_cast<IR::MemberAccess*>(&expr);
+				auto* leftSidePtr = createPtrFromExpression(*maccess->expression);
+
+				const TypeRef& type = maccess->expression->getType();
+				int index = type->getStruct().getFieldIndexByName(maccess->name);
+
+				llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_llvmContext), 0);
+				llvm::Value* indexVal = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_llvmContext), index);
+				llvm::Value* gepIndices[] = { zero, indexVal };
+
+				auto* val = m_llvmBuilder.CreateGEP(leftSidePtr, gepIndices, maccess->name);
+				return m_llvmBuilder.CreateLoad(val);
+				break;
+			}	
 			case IR::Expression::Literal:
 			{
 				auto* literal = static_cast<IR::Literal*>(&expr);

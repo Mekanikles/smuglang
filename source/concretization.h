@@ -104,6 +104,17 @@ struct ExpressionConcretizer : AST::Visitor
 		}
 	}
 
+	virtual void visit(AST::MemberAccess* node) override
+	{
+		node->expr->accept(this);
+		// TODO: How to handle multiple value expressions?
+		assert(expressionStack.size() == 1);
+		auto expr = std::move(expressionStack.back());
+		expressionStack.pop_back();
+
+		expressionStack.push_back(createExpression<IR::MemberAccess>(std::move(expr), node->getMemberName()));
+	}
+
 	string generateUniqueFunctionName(AST::FunctionLiteral* node)
 	{
 		return string("lambda<") + std::to_string(node->order) + ">";

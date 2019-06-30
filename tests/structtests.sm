@@ -1,4 +1,4 @@
-//extern printf : func(fmt : #primitives.c.char*, args...) -> #primitives.c.int;	
+extern printf : func(fmt : #primitives.c.char*, args...) -> #primitives.c.int;	
 
 struct Data
 {
@@ -7,6 +7,11 @@ struct Data
 };
 
 var s : Data;
+s.a = 66;
+s.b = 67;
+
+printf("Field a should be 66, was: %i\n", s.a);
+printf("Field b should be 67, was: %i\n", s.b);
 
 /*func create(ain : #primitives.c.int, bin : #primitives.c.int) -> Data
 {
@@ -15,10 +20,4 @@ var s : Data;
 	out.b = bin;
 	return out;
 };
-
-var s : Data = create();
-s.a = 66;
-s.b = 67;
-
-printf("Field a should be 66, was: %i\n", s.a);
-printf("Field b should be 67, was: %i\n", s.a);*/
+*/

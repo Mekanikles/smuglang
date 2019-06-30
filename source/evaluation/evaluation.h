@@ -85,6 +85,10 @@ struct ExpressionEvaluator
 				const IR::Constant& constant = ref.referenceable->asConstant();
 				return std::make_unique<IR::Literal>(constant.getType(), constant.literal->data);
 			}
+			case IR::Expression::MemberAccess:
+			{
+				assert(false);
+			}
 			case IR::Expression::BinaryOp:
 			{
 				assert(false && "BinaryOp evaluation not supported yet");

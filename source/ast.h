@@ -38,6 +38,7 @@ namespace AST
 	struct BinaryOp;
 	struct EvalStatement;
 	struct ReturnStatement;
+	struct MemberAccess;
 
 	//struct FuncLiteralSignature;
 	struct StatementBody;
@@ -71,6 +72,7 @@ namespace AST
 		virtual void visit(StructDeclaration* node) { visit((Declaration*)node);}
 		virtual void visit(Expression* node) { visit((Node*)node); }
 		virtual void visit(SymbolExpression* node) { visit((Expression*)node);}
+		virtual void visit(MemberAccess* node) { visit((Expression*)node);}
 		virtual void visit(StringLiteral* node) { visit((Expression*)node);}
 		virtual void visit(IntegerLiteral* node) { visit((Expression*)node); }
 		virtual void visit(FloatLiteral* node) { visit((Expression*)node); }
@@ -135,6 +137,7 @@ namespace AST
 		virtual TypeRef& getType(ASTContext* context) = 0;
 
 		virtual bool isSymbolExpression() { return false; }
+		virtual bool isMemberAccess() { return false; }
 	};
 
 	void visitChildren(Expression* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
@@ -869,7 +872,17 @@ namespace AST
 		TypeRef type;
 
 		MemberAccess()
-		{}	
+		{}
+
+		virtual bool isMemberAccess() override
+		{
+			return true;
+		}
+
+		string getMemberName() const
+		{
+			return member->symbol;
+		}
 
 		string toString(ASTContext* context) override 
 		{ 
@@ -882,6 +895,14 @@ namespace AST
 		{
 			return type;
 		}
+
+		const vector<Node*> getChildren() override
+		{
+			assert(expr);
+			auto ret =  vector<Node*>();
+			ret.push_back(expr);
+			return ret;
+		}		
 	};
 
 	struct FunctionLiteral : public NodeImpl<FunctionLiteral, Expression>
