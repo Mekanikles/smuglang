@@ -6,18 +6,15 @@ struct Data
 	b : #primitives.c.int;
 };
 
-var s : Data;
-s.a = 66;
-s.b = 67;
+var s : Data = create(66,67);
 
 printf("Field a should be 66, was: %i\n", s.a);
 printf("Field b should be 67, was: %i\n", s.b);
 
-/*func create(ain : #primitives.c.int, bin : #primitives.c.int) -> Data
+func create(ain : #primitives.c.int, bin : #primitives.c.int) -> Data
 {
 	var out : Data;
 	out.a = ain;
 	out.b = bin;
 	return out;
 };
-*/

@@ -116,3 +116,24 @@ func templatedFunc()
 };
 
 templatedFunc#(666)();
+
+struct Data
+{
+	a : #primitives.c.int;
+	b : #primitives.c.int;
+};
+
+var data : Data = createData(66, 67);
+
+printf("Field a should be 66, was: %i\n", data.a);
+printf("Field b should be 67, was: %i\n", data.b);
+
+func createData(ain : #primitives.c.int, bin : #primitives.c.int) -> Data
+{
+	var out : Data;
+	out.a = ain;
+	out.b = bin;
+	return out;
+};
+
+

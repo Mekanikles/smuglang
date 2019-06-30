@@ -1,7 +1,10 @@
 #pragma once
+#include <unordered_map>
+
 #include "core.h"
 #include "value.h"
 #include "ir.h"
+#include "types.h"
 
 #include "llvm/ADT/APFloat.h"
 #include "llvm/ADT/Optional.h"
@@ -174,17 +177,22 @@ struct Context
 		}
 		else if (type.isStruct())
 		{
-			const auto& structType = type.getStruct();
-
-			vector<llvm::Type*> llvmMembers;
-			for (const StructClass::Field& field : structType.fields)
+			auto* llvmStruct = this->m_structTypeMap[type.typeId()];
+			if (!llvmStruct)
 			{
-				auto llvmType = resolveType(field.type.getType());
-				llvmMembers.push_back(llvmType);
-			}
+				const auto& structType = type.getStruct();
 
-			auto* llvmStruct = llvm::StructType::create(m_llvmContext, structType.name);
-			llvmStruct->setBody(llvmMembers);
+				vector<llvm::Type*> llvmMembers;
+				for (const StructClass::Field& field : structType.fields)
+				{
+					auto llvmType = resolveType(field.type.getType());
+					llvmMembers.push_back(llvmType);
+				}
+
+				llvmStruct = llvm::StructType::create(m_llvmContext, structType.name);
+				llvmStruct->setBody(llvmMembers);
+				this->m_structTypeMap[type.typeId()] = llvmStruct;
+			}
 			return llvmStruct;
 		}
 
@@ -545,7 +553,9 @@ struct Context
 
 	llvm::LLVMContext m_llvmContext;
 	llvm::IRBuilder<llvm::NoFolder> m_llvmBuilder;
-	std::unique_ptr<llvm::Module> m_llvmModule;	
+	std::unique_ptr<llvm::Module> m_llvmModule;
+
+	std::unordered_map<TypeId, llvm::StructType*> m_structTypeMap;
 };
 
 struct Generator
