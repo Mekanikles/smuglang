@@ -38,6 +38,7 @@ namespace IR
 			Reference,
 			MemberAccess,
 			BinaryOp,
+			UnaryOp,
 			Call,
 		};
 
@@ -108,6 +109,42 @@ namespace IR
 		}
 
 		virtual const TypeRef& getType() const override { return this->type; }
+	};
+
+	struct UnaryOp : Expression
+	{
+		enum OpType
+		{
+			Neg,
+		};
+
+		const TypeRef type;
+
+		OpType opType;
+		unique<Expression> expr;
+
+		UnaryOp(const TypeRef type, OpType opType, unique<Expression> expr) 
+			: Expression(Expression::UnaryOp)
+			, type(type)
+			, opType(opType)
+			, expr(std::move(expr))
+		{
+		}
+
+		virtual string toString() const override
+		{
+			switch (opType)
+			{
+				case Neg: return "Neg";
+			}
+		}
+
+		virtual const vector<Expression*> getSubExpressions() override
+		{ 
+			return { &*expr }; 
+		}
+
+		virtual const TypeRef& getType() const override { return this->type; }		
 	};
 
 	struct Literal final : Expression

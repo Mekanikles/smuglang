@@ -93,6 +93,10 @@ struct ExpressionEvaluator
 			{
 				assert(false && "BinaryOp evaluation not supported yet");
 			}
+			case IR::Expression::UnaryOp:
+			{
+				assert(false && "UnaryOp evaluation not supported yet");
+			}			
 			case IR::Expression::Call:
 			{
 				auto& call = static_cast<IR::Call&>(expr);

@@ -270,6 +270,30 @@ struct ExpressionConcretizer : AST::Visitor
 		}
 	}
 
+	virtual void visit(AST::UnaryOp* node) override
+	{
+		node->expr->accept(this);
+		// TODO: How to handle multiple value expressions?
+		assert(expressionStack.size() == 1);
+		auto expr = std::move(expressionStack.back());
+		expressionStack.pop_back();
+
+		IR::UnaryOp::OpType opType;
+		switch (node->opType)
+		{
+			case TokenType::Minus: opType = IR::UnaryOp::Neg; break;
+			default: assert(false && "Invalid op type");
+		}
+
+		auto& type = node->getType(this->astContext);		
+
+		expressionStack.push_back(createExpression<IR::UnaryOp>(
+				type,
+				opType,
+				std::move(expr)
+			));
+	}
+
 	virtual void visit(AST::BinaryOp* node) override
 	{
 		node->left->accept(this);

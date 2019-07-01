@@ -320,6 +320,28 @@ struct Context
 		}
 	}
 
+	llvm::Value* createUnaryOp(const TypeRef& type, IR::UnaryOp::OpType opType, llvm::Value* val)
+	{
+		assert(type->isPrimitive());
+		const auto& primitive = type->getPrimitive();
+		if (primitive.isInteger() || primitive.isChar())
+		{
+			switch (opType)
+			{
+				case IR::UnaryOp::Neg: return m_llvmBuilder.CreateNeg(val, "ineg");
+				default: assert(false);
+			}
+		}
+		else
+		{
+			switch (opType)
+			{
+				case IR::UnaryOp::Neg: return m_llvmBuilder.CreateFNeg(val, "fneg");
+				default: assert(false);
+			}
+		}
+	}
+
 	llvm::Value* createPtrFromExpression(IR::Expression& expr)
 	{
 		switch (expr.exprType)
@@ -353,9 +375,7 @@ struct Context
 				return val;
 				break;
 			}	
-			case IR::Expression::Literal:
-			case IR::Expression::Call:
-			case IR::Expression::BinaryOp:
+			default:
 				assert(false && "Only variable pointers, for now");
 		}
 
@@ -487,6 +507,14 @@ struct Context
 				return createBinaryOp(binaryOp->getType(), binaryOp->opType, leftVal, rightVal);
 				break;
 			}
+			case IR::Expression::UnaryOp:
+			{
+				auto* unaryOp = static_cast<IR::UnaryOp*>(&expr);
+				auto* val = createValueFromExpression(*unaryOp->expr);
+
+				return createUnaryOp(unaryOp->getType(), unaryOp->opType, val);
+				break;
+			}		
 		}
 
 		assert(false);
