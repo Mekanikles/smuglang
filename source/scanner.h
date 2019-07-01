@@ -496,6 +496,12 @@ public:
 				*outToken = Token(TokenType::Slash);
 				return true;
 			}
+			else if (n == '%')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::Modulo);
+				return true;
+			}
 			else if (n == '&')
 			{
 				m_inStream.ignore();

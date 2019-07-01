@@ -43,6 +43,7 @@ enum class TokenType
 	Minus,
 	Asterisk,
 	Slash,
+	Modulo,
 	IncrementOp,
 	DecrementOp,
 	Ellipsis,
@@ -117,6 +118,7 @@ string toString(TokenType type)
 		case TokenType::Minus: return "Minus";
 		case TokenType::Asterisk: return "Asterisk";
 		case TokenType::Slash: return "Slash";
+		case TokenType::Modulo: return "Modulo";
 		case TokenType::IncrementOp: return "Operator increment";
 		case TokenType::DecrementOp: return "Operator decrement";
 		case TokenType::Ellipsis: return "Ellipsis";

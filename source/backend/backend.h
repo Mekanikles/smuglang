@@ -263,6 +263,21 @@ struct Context
     	return m_llvmBuilder.CreateInBoundsGEP(nullptr, val, args);
 	}
 
+	// Use "Floored Division" modulo algorithm, to avoid common pitfalls
+	//	with using modulo for keeping indices in range
+	llvm::Value* createIntegerModulo(llvm::Value* leftVal, llvm::Value* rightVal)
+	{
+		auto* rem = m_llvmBuilder.CreateSRem(leftVal, rightVal, "srem");
+		return rem;
+	}
+
+	// Natively support float modulo, use same definition as integer modulo
+	llvm::Value* createFloatModulo(llvm::Value* leftVal, llvm::Value* rightVal)
+	{
+
+		assert(false);
+	}
+
 	llvm::Value* createBinaryOp(const TypeRef& type, IR::BinaryOp::OpType opType, llvm::Value* leftVal, llvm::Value* rightVal)
 	{
 		assert(type->isPrimitive());
@@ -276,6 +291,7 @@ struct Context
 				case IR::BinaryOp::Sub: return m_llvmBuilder.CreateSub(leftVal, rightVal, "isub"); 
 				case IR::BinaryOp::Mul: return m_llvmBuilder.CreateMul(leftVal, rightVal, "imul"); 
 				case IR::BinaryOp::Div: return m_llvmBuilder.CreateSDiv(leftVal, rightVal, "idiv"); 
+				case IR::BinaryOp::Mod: return createIntegerModulo(leftVal, rightVal); 
 				case IR::BinaryOp::LT: return m_llvmBuilder.CreateICmpSLT(leftVal, rightVal, "ilt"); 
 				case IR::BinaryOp::GT: return m_llvmBuilder.CreateICmpSGT(leftVal, rightVal, "igt"); 
 				case IR::BinaryOp::LTE: return m_llvmBuilder.CreateICmpSLE(leftVal, rightVal, "ilte"); 
@@ -292,7 +308,8 @@ struct Context
 				case IR::BinaryOp::Add: return m_llvmBuilder.CreateFAdd(leftVal, rightVal, "iadd"); 
 				case IR::BinaryOp::Sub: return m_llvmBuilder.CreateFSub(leftVal, rightVal, "isub"); 
 				case IR::BinaryOp::Mul: return m_llvmBuilder.CreateFMul(leftVal, rightVal, "imul"); 
-				case IR::BinaryOp::Div: return m_llvmBuilder.CreateFDiv(leftVal, rightVal, "idiv"); 
+				case IR::BinaryOp::Div: return m_llvmBuilder.CreateFDiv(leftVal, rightVal, "idiv");
+				case IR::BinaryOp::Mod: return createFloatModulo(leftVal, rightVal); 
 				case IR::BinaryOp::LT: return m_llvmBuilder.CreateFCmpOLT(leftVal, rightVal, "ilt"); 
 				case IR::BinaryOp::GT: return m_llvmBuilder.CreateFCmpOGT(leftVal, rightVal, "igt"); 
 				case IR::BinaryOp::LTE: return m_llvmBuilder.CreateFCmpOLE(leftVal, rightVal, "ilte"); 

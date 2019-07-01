@@ -61,6 +61,7 @@ namespace IR
 			Sub,
 			Mul,
 			Div,
+			Mod,
 			Eq,
 			LT,
 			GT,
@@ -91,6 +92,7 @@ namespace IR
 				case Sub: return "Sub";
 				case Mul: return "Mul";
 				case Div: return "Div";
+				case Mod: return "Mod";
 				case Eq: return "Eq";
 				case LT: return "LT";
 				case GT: return "GT";	

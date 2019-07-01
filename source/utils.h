@@ -55,20 +55,40 @@ static char getEscapeCharacter(char c)
 	return c;
 }
 
+static u8 hexToDec(char c)
+{
+	if (c >= '0' && c <= '9')
+		return c;
+	else if (c >= 'A' && c <= 'F')
+		return (c - 'A') + 10;
+	assert(false && "Invalid hex character");
+	return 0; 
+}
+
 string processQuotedInputString(string in)
 {
 	string out;
 	uint length = in.length();
-	assert(*in.begin() == '\"');
-	assert(*(in.end() - 1) == '\"');
-	char* cp = &in.begin()[1];
-	while (cp != &in.begin()[length - 1])
+	const char* buffer = in.data();
+	assert(buffer[0] == '\"');
+	assert(buffer[length - 1] == '\"');
+	const char* cp = &buffer[1];
+	while (cp < &buffer[length - 1])
 	{
 		char c = *cp;
-		if (c == '\\' && cp + 1 != &in.begin()[length - 1])
+		if (c == '\\' && cp + 1 < &buffer[length - 1])
 		{
 			cp++;
-			c = getEscapeCharacter(*cp);
+			if (*cp == 'x' && cp + 2 < &buffer[length - 1])
+			{
+				u8 hex = hexToDec(*++cp) * 16;
+				hex += hexToDec(*++cp);
+				c = hex;
+			}
+			else
+			{
+				c = getEscapeCharacter(*cp);
+			}
 		}
 
 		out += c;

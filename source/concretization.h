@@ -291,6 +291,7 @@ struct ExpressionConcretizer : AST::Visitor
 			case TokenType::Minus: opType = IR::BinaryOp::Sub; break;
 			case TokenType::Asterisk: opType = IR::BinaryOp::Mul; break;
 			case TokenType::Slash: opType = IR::BinaryOp::Div; break;
+			case TokenType::Modulo: opType = IR::BinaryOp::Mod; break;
 			case TokenType::EqualsOp: opType = IR::BinaryOp::Eq; break;
 			case TokenType::LessThanOp: opType = IR::BinaryOp::LT; break;
 			case TokenType::GreaterThanOp: opType = IR::BinaryOp::GT; break;

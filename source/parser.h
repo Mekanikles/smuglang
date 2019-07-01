@@ -199,6 +199,7 @@ struct Parser
 					 TokenType::Minus,
 					 TokenType::Asterisk,
 					 TokenType::Slash,
+					 TokenType::Modulo,
 					 TokenType::LessThanOp,
 					 TokenType::GreaterThanOp,
 					 TokenType::LessThanOrEqualsOp,
@@ -610,6 +611,7 @@ struct Parser
 		{
 			case TokenType::Asterisk:
 			case TokenType::Slash:
+			case TokenType::Modulo:
 				return 10;
 			case TokenType::Plus:
 			case TokenType::Minus:
@@ -1105,7 +1107,7 @@ struct Parser
 						field->typeExpr = typeExpr;
 						field->initExpr = initExpr;
 						node->fields.push_back(field);
-						
+
 						expect(TokenType::SemiColon);
 
 						continue;
