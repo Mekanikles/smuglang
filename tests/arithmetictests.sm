@@ -1,0 +1,42 @@
+extern printf : func(fmt : #primitives.c.char*, args...) -> #primitives.c.int;	
+
+func testIntModulo(a : #primitives.c.int, b : #primitives.c.int, expected : #primitives.c.int)
+{
+	var r = a % b;
+	if (r == expected)
+		printf("\x1B[32;1m");
+	else
+		printf("\x1B[31;1m");
+	printf("Int Modulo: %i %% %i should be %i, was: %i\n", a, b, expected, r);
+	printf("\x1B[0m");
+};
+
+testIntModulo(5, -5, 0);	
+testIntModulo(5, -4, -3);
+testIntModulo(5, -3, -1);
+testIntModulo(5, -2, -1);
+testIntModulo(5, -1, 0);
+testIntModulo(5, 1, 0);
+testIntModulo(5, 2, 1);
+testIntModulo(5, 3, 2);
+testIntModulo(5, 4, 1);
+testIntModulo(5, 5, 0);
+
+testIntModulo(0, 3, 0);
+testIntModulo(0, -3, 0);	
+
+testIntModulo(1, 3, 1);
+testIntModulo(2, 3, 2);
+testIntModulo(3, 3, 0);
+
+testIntModulo(-3, 3, 0);
+testIntModulo(-2, 3, 1);
+testIntModulo(-1, 3, 2);
+
+testIntModulo(1, -3, -2);
+testIntModulo(2, -3, -1);
+testIntModulo(3, -3, 0);
+
+testIntModulo(-3, -3, 0);	
+testIntModulo(-2, -3, -2);
+testIntModulo(-1, -3, -1);

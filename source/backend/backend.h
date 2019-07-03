@@ -265,17 +265,88 @@ struct Context
 
 	// Use "Floored Division" modulo algorithm, to avoid common pitfalls
 	//	with using modulo for keeping indices in range
-	llvm::Value* createIntegerModulo(llvm::Value* leftVal, llvm::Value* rightVal)
+	llvm::Value* createIntegerModulo(llvm::Value* xVal, llvm::Value* yVal)
 	{
-		auto* rem = m_llvmBuilder.CreateSRem(leftVal, rightVal, "srem");
-		return rem;
+    	llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_llvmContext), 0);
+
+
+		// Base modulo on srem adjusted for 2 case where sgn(x) != sgn(y)
+		// llvm optimized code, %0 is x, %1 is y, %9 is result:
+		//	%3 = srem i32 %0, %1
+		//	%4 = icmp ne i32 %3, 0
+		//	%5 = mul nsw i32 %1, %0
+		//	%6 = icmp slt i32 %5, 0
+		//	%7 = and i1 %6, %4
+		//	%8 = select i1 %7, i32 %1, i32 0
+		//	%9 = add nsw i32 %8, %3
+		auto* val3 = m_llvmBuilder.CreateSRem(xVal, yVal, "imod_srem");
+		auto* val4 = m_llvmBuilder.CreateICmpNE(val3, zero, "imod_ine");
+		auto* val5 = m_llvmBuilder.CreateNSWMul(yVal, xVal, "imod_mul");
+		auto* val6 = m_llvmBuilder.CreateICmpSLT(val5, zero, "imod_ilt");
+		auto* val7 = m_llvmBuilder.CreateAnd(val6, val4, "imod_and");
+		auto* val8 = m_llvmBuilder.CreateSelect(val7, yVal, zero);
+		auto* val13 = m_llvmBuilder.CreateNSWAdd(val8, val3, "imod_add");
+
+		return val13;
+
+/*
+		// Base modulo on srem adjusted for 2 special cases
+		// llvm optimized code, %0 is leftVal, %1 is rightVal, %13 is result:
+		//	%3 = srem i32 %0, %1
+		//	%4 = icmp sgt i32 %0, 0
+		//	%5 = icmp sgt i32 %1, 0
+		//	%6 = and i1 %4, %5
+		//	br i1 %6, label %7, label %9
+		//
+		//	; <label>:7:
+		//	%8 = sub nsw i32 %3, %1
+		//	ret i32 %8
+
+		//	; <label>:9:
+		//	%10 = and i32 %1, %0
+		//	%11 = icmp slt i32 %10, 0
+		//	%12 = select i1 %11, i32 %1, i32 0
+		//	%13 = add nsw i32 %3, %12
+
+		llvm::BasicBlock* bb7 = llvm::BasicBlock::Create(m_llvmContext, "imod_bb7");
+		llvm::BasicBlock* bb9 = llvm::BasicBlock::Create(m_llvmContext, "imod_bb9");
+		llvm::BasicBlock* bbcont = llvm::BasicBlock::Create(m_llvmContext, "imod_bbcont");
+
+		auto parentBlock = m_llvmBuilder.GetInsertBlock()->getParent();
+		parentBlock->getBasicBlockList().push_back(bb7);
+		parentBlock->getBasicBlockList().push_back(bb9);
+		parentBlock->getBasicBlockList().push_back(bbcont);
+
+		auto* val3 = m_llvmBuilder.CreateSRem(leftVal, rightVal, "imod_srem");
+		auto* val4 = m_llvmBuilder.CreateICmpSGT(leftVal, zero, "imod_igt");
+		auto* val5 = m_llvmBuilder.CreateICmpSGT(rightVal, zero, "imod_igt");
+		auto* val6 = m_llvmBuilder.CreateAnd(val4, val5, "imod_and");
+		m_llvmBuilder.CreateCondBr(val6, bb7, bb9);
+
+		m_llvmBuilder.SetInsertPoint(bb7);
+		auto* val8 = m_llvmBuilder.CreateNSWSub(val3, rightVal, "imod_sub");
+		m_llvmBuilder.CreateBr(bbcont);
+
+		m_llvmBuilder.SetInsertPoint(bb9);
+		auto* val10 = m_llvmBuilder.CreateNSWSub(rightVal, leftVal, "imod_and");
+		auto* val11 = m_llvmBuilder.CreateICmpSLT(val10, zero);
+		auto* val12 = m_llvmBuilder.CreateSelect(val11, rightVal, zero);
+		auto* val13 = m_llvmBuilder.CreateNSWAdd(val3, val12, "imod_add");
+		m_llvmBuilder.CreateBr(bbcont);
+
+		m_llvmBuilder.SetInsertPoint(bbcont);
+		llvm::PHINode* phiResult = m_llvmBuilder.CreatePHI(rem->getType(), 2, "imod_phi");
+		phiResult->addIncoming(val8, bb7);
+		phiResult->addIncoming(val13, bb9);
+
+		return phiResult;
+		*/
 	}
 
 	// Natively support float modulo, use same definition as integer modulo
 	llvm::Value* createFloatModulo(llvm::Value* leftVal, llvm::Value* rightVal)
 	{
-
-		assert(false);
+		assert(false && "Float modulo not yet implemented!");
 	}
 
 	llvm::Value* createBinaryOp(const TypeRef& type, IR::BinaryOp::OpType opType, llvm::Value* leftVal, llvm::Value* rightVal)
