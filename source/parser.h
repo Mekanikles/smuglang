@@ -1337,6 +1337,27 @@ struct Parser
 		return false;
 	}
 
+	bool parseLoopStatement(AST::LoopStatement** outStatement)
+	{
+		if (accept(TokenType::Loop))
+		{
+			AST::Statement* statement = nullptr;
+			if (!parseStatement(&statement))
+			{
+				errorOnExpect("Expected Statement");
+			}
+
+			auto node = createNode<AST::LoopStatement>();
+			node->statement = statement;
+
+			*outStatement = node;
+
+			return true;
+		}
+
+		return false;
+	}
+
 	bool parseStatement(AST::Statement** outStatement)
 	{
 		AST::Declaration* declaration;
@@ -1345,6 +1366,7 @@ struct Parser
 		AST::EvalStatement* evalStatement;
 		AST::StatementBody* statementBody;
 		AST::Expression* expression;
+		AST::LoopStatement* loopStatement;
 
 		if (accept(TokenType::Import))
 		{
@@ -1386,6 +1408,25 @@ struct Parser
 				node->expr = expr;
 			}
 
+			expect(TokenType::SemiColon, false);
+			*outStatement = node;
+		}
+		else if (parseLoopStatement(&loopStatement))
+		{
+			expect(TokenType::SemiColon, false);
+			*outStatement = loopStatement;
+		}
+		else if (accept(TokenType::Continue))
+		{
+			auto* node = createNode<AST::ContinueStatement>();
+			// TODO: Optional label
+			expect(TokenType::SemiColon, false);
+			*outStatement = node;
+		}
+		else if (accept(TokenType::Break))
+		{
+			auto* node = createNode<AST::BreakStatement>();
+			// TODO: Optional label
 			expect(TokenType::SemiColon, false);
 			*outStatement = node;
 		}

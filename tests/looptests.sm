@@ -1,0 +1,73 @@
+extern printf : func(fmt : #primitives.c.char*, args...) -> #primitives.c.int;	
+
+// Loop breaks
+{
+	loop
+	{
+		loop
+		{
+			printf("Break inner loop 1\n");
+			break;
+		};
+
+		printf("Break outer loop 1\n");
+		break;
+	};
+}
+
+// Loop continuations
+{
+	var i = 0;
+	loop
+	{
+		loop
+		{
+			i = i + 1;
+			if (i < 2)
+			{
+				printf("Continue inner loop 2\n");
+				continue;
+			}
+
+			printf("Break inner loop 2\n");
+			break;
+		};
+
+		i = i + 1;
+		if (i < 4)
+		{
+			printf("Continue outer loop 2\n");
+			continue;
+		}
+
+		printf("Break outer loop 2\n");
+		break;
+	};
+}
+
+
+// Loop
+{
+	var i = 0;
+	var end = 10;
+	loop
+	{
+		var i2 = i;
+		i = i + 1;
+
+		if (i2 % 2 == 0)
+		{
+			printf("Even number! %i\n", i2);
+			continue;
+		}
+		
+		if (i2 > end)
+		{
+			printf("Reached end!\n");
+			break;
+		}
+	};
+}
+
+
+

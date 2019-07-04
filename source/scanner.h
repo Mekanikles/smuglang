@@ -381,7 +381,13 @@ public:
 				else if (w == "true")
 					*outToken = Token(TokenType::True);
 				else if (w == "false")
-					*outToken = Token(TokenType::False);				
+					*outToken = Token(TokenType::False);
+				else if (w == "loop")
+					*outToken = Token(TokenType::Loop);
+				else if (w == "break")
+					*outToken = Token(TokenType::Break);
+				else if (w == "continue")
+					*outToken = Token(TokenType::Continue);																	
 				else
 					*outToken = Token(TokenType::Symbol, w);
 				return true;

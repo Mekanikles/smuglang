@@ -27,6 +27,9 @@ enum class TokenType
 	Equals,
 	True,
 	False,
+	Loop,
+	Break,
+	Continue,
 	CompilerDirective,
 	TemplateParameterOpener,
 	SemiColon,
@@ -101,6 +104,9 @@ string toString(TokenType type)
 		case TokenType::Equals: return "Equals";
 		case TokenType::True: return "True";
 		case TokenType::False: return "False";
+		case TokenType::Loop: return "Loop";
+		case TokenType::Break: return "Break";
+		case TokenType::Continue: return "Continue";
 		// TODO: # should be its own token, compiler directive should be on parser level
 		case TokenType::CompilerDirective: return "CompilerDirective";
 		case TokenType::TemplateParameterOpener: return "TemplateParameterOpener";	

@@ -361,7 +361,10 @@ namespace IR
 			Assignment,
 			Call,
 			Conditional,
-			Return
+			Return,
+			Loop,
+			Continue,
+			Break
 		};
 
 		StatementType statementType;
@@ -470,6 +473,28 @@ namespace IR
 			, expr(std::move(expr))
 		{}
 	};
+
+	struct Loop : Statement
+	{
+		Block loopBlock;
+		Loop()
+			: Statement(Statement::Loop)
+		{}
+	};
+
+	struct Continue : Statement
+	{
+		Continue()
+			: Statement(Statement::Continue)
+		{}
+	};
+
+	struct Break : Statement
+	{
+		Break()
+			: Statement(Statement::Break)
+		{}
+	};		
 
 	struct Scope : Statement
 	{

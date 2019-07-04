@@ -163,6 +163,28 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 		printIRExpression(*ret->expr, indent + 1);
 		break;
 	}
+
+	case IR::Statement::Loop:
+	{
+		auto* loop = static_cast<IR::Loop*>(statement);
+		printLine("Loop", indent);
+		printLine("  loopBlock:", indent);
+		printIRBlock(&loop->loopBlock, indent + 1);
+		break;
+	}
+
+	case IR::Statement::Continue:
+	{
+		printLine("continue", indent);
+		break;
+	}
+
+	case IR::Statement::Break:
+	{
+		printLine("break", indent);
+		break;
+	}		
+
 	}
 }
 

@@ -39,6 +39,9 @@ namespace AST
 	struct EvalStatement;
 	struct ReturnStatement;
 	struct MemberAccess;
+	struct LoopStatement;
+	struct ContinueStatement;
+	struct BreakStatement;
 
 	//struct FuncLiteralSignature;
 	struct StatementBody;
@@ -65,6 +68,9 @@ namespace AST
 		virtual void visit(Call* node) { visit((Statement*)node); }
 		virtual void visit(Assignment* node) { visit((Statement*)node); }
 		virtual void visit(IfStatement* node) { visit((Statement*)node); }
+		virtual void visit(LoopStatement* node) { visit((Statement*)node); }
+		virtual void visit(ContinueStatement* node) { visit((Statement*)node); }
+		virtual void visit(BreakStatement* node) { visit((Statement*)node); }
 		virtual void visit(TemplateDeclaration* node) { visit((Statement*)node); }
 		virtual void visit(SymbolDeclaration* node) { visit((Declaration*)node);}	
 		virtual void visit(FunctionDeclaration* node) { visit((Declaration*)node);}
@@ -210,7 +216,7 @@ namespace AST
 				ret.push_back(elseStatement);
 
 			return ret;
-		}	
+		}
 	};
 
 	struct Import : public NodeImpl<Import, Statement>
@@ -225,6 +231,43 @@ namespace AST
 
 		string file;
 		string toString(ASTContext* context) override { return string("Import(file:") + file + ")"; }	
+	};
+
+	struct LoopStatement : public NodeImpl<LoopStatement, Statement>
+	{
+		Statement* statement = nullptr;
+
+		string toString(ASTContext* context) override 
+		{ 
+			string s = "LoopStatement";
+			return s; 
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			ret.push_back(statement);
+
+			return ret;
+		}
+	};
+
+	struct ContinueStatement : public NodeImpl<ContinueStatement, Statement>
+	{
+		string toString(ASTContext* context) override 
+		{ 
+			string s = "ContinueStatement";
+			return s; 
+		}
+	};
+
+	struct BreakStatement : public NodeImpl<BreakStatement, Statement>
+	{
+		string toString(ASTContext* context) override 
+		{ 
+			string s = "BreakStatement";
+			return s; 
+		}
 	};
 
 	struct EvalStatement : public NodeImpl<EvalStatement, StatementBody>
@@ -252,7 +295,7 @@ namespace AST
 		}
 	};
 
-	struct ReturnStatement : public NodeImpl<ReturnStatement, StatementBody>
+	struct ReturnStatement : public NodeImpl<ReturnStatement, Statement>
 	{
 		Expression* expr = nullptr;
 

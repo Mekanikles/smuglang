@@ -450,7 +450,31 @@ struct FunctionConcretizer : AST::Visitor
 		this->currentBlock = prevBlock;
 
 		this->currentBlock->addStatement(std::move(cond));				
-	}	
+	}
+
+	virtual void visit(AST::LoopStatement* node) override
+	{
+		auto irLoop = std::make_unique<IR::Loop>();
+
+		auto* prevBlock = this->currentBlock;
+		this->currentBlock = &irLoop->loopBlock;
+		node->statement->accept(this);
+		this->currentBlock = prevBlock;
+
+		this->currentBlock->addStatement(std::move(irLoop));				
+	}
+
+	virtual void visit(AST::ContinueStatement* node) override
+	{
+		auto cont = std::make_unique<IR::Continue>();
+		this->currentBlock->addStatement(std::move(cont));			
+	}
+
+	virtual void visit(AST::BreakStatement* node) override
+	{
+		auto br = std::make_unique<IR::Break>();
+		this->currentBlock->addStatement(std::move(br));				
+	}
 
 	virtual void visit(AST::StatementBody* node) override
 	{

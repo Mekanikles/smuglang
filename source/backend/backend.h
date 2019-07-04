@@ -222,6 +222,14 @@ struct Context
 		m_llvmBuilder.CreateRet(val);
 	}
 
+	void createDummyBlock()
+	{
+		auto* dummyBlock = llvm::BasicBlock::Create(m_llvmContext, "dummy");
+		auto parentBlock = m_llvmBuilder.GetInsertBlock()->getParent();
+		parentBlock->getBasicBlockList().push_back(dummyBlock);
+		m_llvmBuilder.SetInsertPoint(dummyBlock);
+	}
+
 	llvm::Value* createValueFromCall(IR::Call& call)
 	{
 		auto* val = createValueFromExpression(*call.callable);
@@ -288,59 +296,6 @@ struct Context
 		auto* val13 = m_llvmBuilder.CreateNSWAdd(val8, val3, "imod_add");
 
 		return val13;
-
-/*
-		// Base modulo on srem adjusted for 2 special cases
-		// llvm optimized code, %0 is leftVal, %1 is rightVal, %13 is result:
-		//	%3 = srem i32 %0, %1
-		//	%4 = icmp sgt i32 %0, 0
-		//	%5 = icmp sgt i32 %1, 0
-		//	%6 = and i1 %4, %5
-		//	br i1 %6, label %7, label %9
-		//
-		//	; <label>:7:
-		//	%8 = sub nsw i32 %3, %1
-		//	ret i32 %8
-
-		//	; <label>:9:
-		//	%10 = and i32 %1, %0
-		//	%11 = icmp slt i32 %10, 0
-		//	%12 = select i1 %11, i32 %1, i32 0
-		//	%13 = add nsw i32 %3, %12
-
-		llvm::BasicBlock* bb7 = llvm::BasicBlock::Create(m_llvmContext, "imod_bb7");
-		llvm::BasicBlock* bb9 = llvm::BasicBlock::Create(m_llvmContext, "imod_bb9");
-		llvm::BasicBlock* bbcont = llvm::BasicBlock::Create(m_llvmContext, "imod_bbcont");
-
-		auto parentBlock = m_llvmBuilder.GetInsertBlock()->getParent();
-		parentBlock->getBasicBlockList().push_back(bb7);
-		parentBlock->getBasicBlockList().push_back(bb9);
-		parentBlock->getBasicBlockList().push_back(bbcont);
-
-		auto* val3 = m_llvmBuilder.CreateSRem(leftVal, rightVal, "imod_srem");
-		auto* val4 = m_llvmBuilder.CreateICmpSGT(leftVal, zero, "imod_igt");
-		auto* val5 = m_llvmBuilder.CreateICmpSGT(rightVal, zero, "imod_igt");
-		auto* val6 = m_llvmBuilder.CreateAnd(val4, val5, "imod_and");
-		m_llvmBuilder.CreateCondBr(val6, bb7, bb9);
-
-		m_llvmBuilder.SetInsertPoint(bb7);
-		auto* val8 = m_llvmBuilder.CreateNSWSub(val3, rightVal, "imod_sub");
-		m_llvmBuilder.CreateBr(bbcont);
-
-		m_llvmBuilder.SetInsertPoint(bb9);
-		auto* val10 = m_llvmBuilder.CreateNSWSub(rightVal, leftVal, "imod_and");
-		auto* val11 = m_llvmBuilder.CreateICmpSLT(val10, zero);
-		auto* val12 = m_llvmBuilder.CreateSelect(val11, rightVal, zero);
-		auto* val13 = m_llvmBuilder.CreateNSWAdd(val3, val12, "imod_add");
-		m_llvmBuilder.CreateBr(bbcont);
-
-		m_llvmBuilder.SetInsertPoint(bbcont);
-		llvm::PHINode* phiResult = m_llvmBuilder.CreatePHI(rem->getType(), 2, "imod_phi");
-		phiResult->addIncoming(val8, bb7);
-		phiResult->addIncoming(val13, bb9);
-
-		return phiResult;
-		*/
 	}
 
 	// Natively support float modulo, use same definition as integer modulo
@@ -738,6 +693,64 @@ struct Generator
 			break;
 		}
 
+		case IR::Statement::Loop:
+		{
+			auto* irLoop = static_cast<IR::Loop*>(&irstatement);
+			auto* loopBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "loop_entry");
+			auto* contBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "loop_exit");
+
+			auto parentBlock = m_context.m_llvmBuilder.GetInsertBlock()->getParent();
+
+			// Enter loop block
+			m_context.m_llvmBuilder.CreateBr(loopBlock);
+
+			// Loop block
+			{
+				parentBlock->getBasicBlockList().push_back(loopBlock);
+				m_context.m_llvmBuilder.SetInsertPoint(loopBlock);
+
+				// Push loop entry/exit for continue/break statements
+				m_loopContinuationStack.push_back(pair<llvm::BasicBlock*, llvm::BasicBlock*>(loopBlock, contBlock));
+
+				generateBlock(irLoop->loopBlock);
+
+				// Pop entry/exit
+				m_loopContinuationStack.pop_back();
+
+				m_context.m_llvmBuilder.CreateBr(loopBlock);
+			}
+
+			// Continue block
+			parentBlock->getBasicBlockList().push_back(contBlock);
+			m_context.m_llvmBuilder.SetInsertPoint(contBlock);			
+
+			break;
+		}
+
+		case IR::Statement::Continue:
+		{
+			assert(!m_loopContinuationStack.empty());
+
+			// Jump to loop entry
+			m_context.m_llvmBuilder.CreateBr(m_loopContinuationStack.back().first);
+
+			// Need to add an dummy block here since the branch instruction is a terminator
+			m_context.createDummyBlock();
+			break;
+		}
+
+		case IR::Statement::Break:
+		{
+			assert(!m_loopContinuationStack.empty());
+
+			// Jump to loop exit
+			m_context.m_llvmBuilder.CreateBr(m_loopContinuationStack.back().second);
+
+			// Need to add an dummy block here since the branch instruction is a terminator
+			m_context.createDummyBlock();
+			break;
+		}				
+
 		case IR::Statement::Return:
 		{
 			auto* ret = static_cast<IR::Return*>(&irstatement);
@@ -925,6 +938,7 @@ struct Generator
 	}
 
 	Context& m_context;
+	vector<pair<llvm::BasicBlock*, llvm::BasicBlock*>> m_loopContinuationStack;
 };
 
 }
