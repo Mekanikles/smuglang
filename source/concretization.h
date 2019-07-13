@@ -449,7 +449,13 @@ struct FunctionConcretizer : AST::Visitor
 
 		this->currentBlock = prevBlock;
 
-		this->currentBlock->addStatement(std::move(cond));				
+		auto* condptr = cond.get();
+		this->currentBlock->addStatement(std::move(cond));
+
+		// Manually propagate statement index to sub scopes
+		// TODO: Improve this
+		condptr->trueScope.scopeLocalIndex = condptr->scopeLocalIndex;
+		condptr->falseScope.scopeLocalIndex = condptr->scopeLocalIndex;
 	}
 
 	virtual void visit(AST::DeferStatement* node) override
@@ -467,7 +473,12 @@ struct FunctionConcretizer : AST::Visitor
 		
 		this->currentScope = prevScope;
 
+		auto* deferptr = irDefer.get();
 		this->currentBlock->addStatement(std::move(irDefer));
+
+		// Manually propagate statement index to sub scopes
+		// TODO: Improve this
+		deferptr->scope.scopeLocalIndex = deferptr->scopeLocalIndex;
 	}
 
 	virtual void visit(AST::LoopStatement* node) override
@@ -484,7 +495,12 @@ struct FunctionConcretizer : AST::Visitor
 		
 		this->currentScope = prevScope;
 
-		this->currentBlock->addStatement(std::move(irLoop));		
+		auto* loopptr = irLoop.get();
+		this->currentBlock->addStatement(std::move(irLoop));
+
+		// Manually propagate statement index to sub scopes
+		// TODO: Improve this
+		loopptr->scope.scopeLocalIndex = loopptr->scopeLocalIndex;
 	}
 
 	virtual void visit(AST::ContinueStatement* node) override

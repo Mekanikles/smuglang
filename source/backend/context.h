@@ -277,7 +277,7 @@ struct Context
 		auto* val5 = m_llvmBuilder.CreateNSWMul(yVal, xVal, "imod_mul");
 		auto* val6 = m_llvmBuilder.CreateICmpSLT(val5, zero, "imod_ilt");
 		auto* val7 = m_llvmBuilder.CreateAnd(val6, val4, "imod_and");
-		auto* val8 = m_llvmBuilder.CreateSelect(val7, yVal, zero);
+		auto* val8 = m_llvmBuilder.CreateSelect(val7, yVal, zero, "imod_sel");
 		auto* val13 = m_llvmBuilder.CreateNSWAdd(val8, val3, "imod_add");
 
 		return val13;

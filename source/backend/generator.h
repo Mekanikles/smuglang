@@ -134,7 +134,54 @@ struct FunctionGenerator
 
 		case IR::Statement::Continue:
 		{
-			assert(currentScope().loopContinueBlock);
+			auto* cnt = static_cast<IR::Continue*>(&irstatement);
+			auto* loopContinueBlock = currentScope().loopContinueBlock;
+			assert(loopContinueBlock);
+
+			// Finalizers
+			{
+				ScopeInfo* scope = &currentScope();
+				int scopeLocalIndex = cnt->scopeLocalIndex;
+				auto* currentBlock = m_context.m_llvmBuilder.GetInsertBlock();
+				auto* finalizerBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, scope->irScope->getScopeBlockName("_finalizer"));
+				m_context.m_llvmBuilder.SetInsertPoint(finalizerBlock);
+
+				// Only generate finalizers within the current loop
+				while (scope && scope->loopContinueBlock == loopContinueBlock)
+				{
+					IR::Scope* irScope = scope->irScope;
+					// Generate defer statements in reverse order
+					for (auto it = irScope->deferStatements.rbegin(); it != irScope->deferStatements.rend(); ++it)
+					{
+						IR::Defer* deferStatement = *it;
+						// Only generate finalizers for defers that are before us, chronologically
+						if (deferStatement->scopeLocalIndex <= scopeLocalIndex)
+						{
+							ScopeInfo scopeInfo;
+							scopeInfo.parent = &currentScope();
+							scopeInfo.irScope = &deferStatement->scope;
+							generateScope(scopeInfo);
+						}
+					}
+
+					scopeLocalIndex = scope->irScope->scopeLocalIndex;
+					scope = scope->parent;
+				}
+
+				if (!finalizerBlock->empty())
+				{
+					auto parentBlock = currentBlock->getParent();
+					parentBlock->getBasicBlockList().push_back(finalizerBlock);
+					m_context.m_llvmBuilder.SetInsertPoint(currentBlock);
+					m_context.m_llvmBuilder.CreateBr(finalizerBlock);
+					m_context.m_llvmBuilder.SetInsertPoint(finalizerBlock);
+				}
+				else
+				{
+					m_context.m_llvmBuilder.SetInsertPoint(currentBlock);
+					delete finalizerBlock;
+				}
+			}
 
 			// Jump to loop entry
 			m_context.m_llvmBuilder.CreateBr(currentScope().loopContinueBlock);
@@ -146,10 +193,57 @@ struct FunctionGenerator
 
 		case IR::Statement::Break:
 		{
-			assert(currentScope().loopBreakBlock);
+			auto* brk = static_cast<IR::Break*>(&irstatement);
+			auto* loopBreakBlock = currentScope().loopBreakBlock;
+			assert(loopBreakBlock);
+
+			// Finalizers
+			{
+				ScopeInfo* scope = &currentScope();
+				int scopeLocalIndex = brk->scopeLocalIndex;
+				auto* currentBlock = m_context.m_llvmBuilder.GetInsertBlock();
+				auto* finalizerBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, scope->irScope->getScopeBlockName("_finalizer"));
+				m_context.m_llvmBuilder.SetInsertPoint(finalizerBlock);
+
+				// Only generate finalizers within the current loop
+				while (scope && scope->loopBreakBlock == loopBreakBlock)
+				{
+					IR::Scope* irScope = scope->irScope;
+					// Generate defer statements in reverse order
+					for (auto it = irScope->deferStatements.rbegin(); it != irScope->deferStatements.rend(); ++it)
+					{
+						IR::Defer* deferStatement = *it;
+						// Only generate finalizers for defers that are before us, chronologically
+						if (deferStatement->scopeLocalIndex <= scopeLocalIndex)
+						{
+							ScopeInfo scopeInfo;
+							scopeInfo.parent = &currentScope();
+							scopeInfo.irScope = &deferStatement->scope;
+							generateScope(scopeInfo);
+						}
+					}
+
+					scopeLocalIndex = scope->irScope->scopeLocalIndex;
+					scope = scope->parent;
+				}
+
+				if (!finalizerBlock->empty())
+				{
+					auto parentBlock = currentBlock->getParent();
+					parentBlock->getBasicBlockList().push_back(finalizerBlock);
+					m_context.m_llvmBuilder.SetInsertPoint(currentBlock);
+					m_context.m_llvmBuilder.CreateBr(finalizerBlock);
+					m_context.m_llvmBuilder.SetInsertPoint(finalizerBlock);
+				}
+				else
+				{
+					m_context.m_llvmBuilder.SetInsertPoint(currentBlock);
+					delete finalizerBlock;
+				}
+			}
 
 			// Jump to loop exit
-			m_context.m_llvmBuilder.CreateBr(currentScope().loopBreakBlock);
+			m_context.m_llvmBuilder.CreateBr(loopBreakBlock);
 
 			// Need to add an dummy block here since the branch instruction is a terminator
 			//	in case there are more statements after the break

@@ -1,6 +1,6 @@
 extern printf : func(fmt : #primitives.c.char*, args...) -> #primitives.c.int;	
 
-// Loop breaks
+// Loop break
 {
 	loop
 	{
@@ -15,7 +15,7 @@ extern printf : func(fmt : #primitives.c.char*, args...) -> #primitives.c.int;
 	};
 }
 
-// Loop continuations
+// Loop continue
 {
 	var i = 0;
 	loop
