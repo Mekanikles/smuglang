@@ -21,6 +21,7 @@ enum class TokenType
 	Func,
 	Struct,
 	Eval,
+	Defer,
 	Return,
 	If,
 	Else,
@@ -98,6 +99,7 @@ string toString(TokenType type)
 		case TokenType::Func: return "Func";
 		case TokenType::Struct: return "Struct";
 		case TokenType::Eval: return "Eval";
+		case TokenType::Defer: return "Defer";
 		case TokenType::Return: return "Return";
 		case TokenType::If: return "If";
 		case TokenType::Else: return "Else";

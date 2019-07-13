@@ -148,10 +148,10 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 		printLine("Conditional", indent);	
 		printLine("  expression:", indent);
 		printIRExpression(*cond->expr, indent + 1);
-		printLine("  trueBlock:", indent);
-		printIRBlock(&cond->trueBlock, indent + 1);
-		printLine("  falseBlock:", indent);
-		printIRBlock(&cond->falseBlock, indent + 1);
+		printLine("  trueScope:", indent);
+		printIRScope(&cond->trueScope, indent + 1);
+		printLine("  falseScope:", indent);
+		printIRScope(&cond->falseScope, indent + 1);
 		break;
 	}
 
@@ -159,8 +159,11 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 	{
 		auto* ret = static_cast<IR::Return*>(statement);
 		printLine("return", indent);
-		printLine("  expression:", indent);
-		printIRExpression(*ret->expr, indent + 1);
+		if (ret->expr)
+		{
+			printLine("  expression:", indent);
+			printIRExpression(*ret->expr, indent + 1);
+		}
 		break;
 	}
 
@@ -168,8 +171,7 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 	{
 		auto* loop = static_cast<IR::Loop*>(statement);
 		printLine("Loop", indent);
-		printLine("  loopBlock:", indent);
-		printIRBlock(&loop->loopBlock, indent + 1);
+		printIRScope(&loop->scope, indent + 1);
 		break;
 	}
 
@@ -184,6 +186,14 @@ void printIRStatement(IR::Statement* statement, int indent = 0)
 		printLine("break", indent);
 		break;
 	}		
+
+	case IR::Statement::Defer:
+	{
+		auto* defer = static_cast<IR::Defer*>(statement);
+		printLine("Defer", indent);
+		printIRScope(&defer->scope, indent + 1);
+		break;
+	}
 
 	}
 }
@@ -248,7 +258,7 @@ void printIRModule(IR::Module* module, int indent = 0)
 		printIRConstant(*constant, indent + 1);
 	}
 	printLine("");
-	printIRFunction(*module->main, indent + 1);
+	printIRFunction(*module->localMain, indent + 1);
 
 	for (auto& func : module->functions)
 	{

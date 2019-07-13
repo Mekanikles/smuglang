@@ -53,6 +53,7 @@ int main(int argc, char** argv)
 		LOG("Parse success!");
 		ASTContext astContext("mainAST");
 
+		Backend::ensureBackendIsInitialized();
 		Backend::Context backend;
 
 		Backend::Context evaluationBackend;

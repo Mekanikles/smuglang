@@ -9,6 +9,11 @@
 // TODO: Rename to "MIR"? Mid-level intermediate representation
 namespace IR
 {
+	struct Scope;
+	int getCurrentScopeOrder(Scope* scope);
+
+	struct Defer;
+
 	struct Value
 	{
 		enum class ValueType
@@ -364,9 +369,11 @@ namespace IR
 			Return,
 			Loop,
 			Continue,
-			Break
+			Break,
+			Defer
 		};
 
+		int scopeLocalIndex = -1;
 		StatementType statementType;
 
 		Statement(StatementType statementType) 
@@ -380,9 +387,11 @@ namespace IR
 	struct Block
 	{
 		uint id;
+		Scope* scope;
 		vector<std::unique_ptr<Statement>> statements;
 
-		Block()
+		Block(Scope* scope)
+			: scope(scope)
 		{
 			static uint blockId = 0;
 			this->id = ++blockId;
@@ -392,6 +401,7 @@ namespace IR
 		T* addStatement(std::unique_ptr<T> statement)
 		{
 			T* ret = statement.get();
+			ret->scopeLocalIndex = getCurrentScopeOrder(scope);
 			this->statements.push_back(std::move(statement));
 			return ret;
 		}
@@ -453,18 +463,6 @@ namespace IR
 		{}	
 	};
 
-	struct Conditional : Statement
-	{
-		unique<Expression> expr;
-		Block trueBlock;
-		Block falseBlock;
-
-		Conditional(unique<Expression> expr) 
-			: Statement(Statement::Conditional)
-			, expr(std::move(expr))
-		{}
-	};
-
 	struct Return : Statement
 	{
 		unique<Expression> expr;
@@ -472,11 +470,76 @@ namespace IR
 			: Statement(Statement::Return)
 			, expr(std::move(expr))
 		{}
+
+		Return()
+			: Statement(Statement::Return)
+		{}		
+	};
+
+	struct Scope : Statement
+	{
+		uint id;
+		int statementCount = 0;
+		vector<unique<Variable>> variables;
+		vector<unique<Block>> blocks;
+
+		vector<struct Defer*> deferStatements;		
+
+		Scope()
+			: Statement(Statement::Scope)
+		{
+			static uint scopeId = 0;
+			this->id = ++scopeId;
+		}
+
+		bool isEmpty() const
+		{
+			return blocks.empty();
+		}
+
+		void trackDeferStatement(struct Defer* deferStatement)
+		{
+			this->deferStatements.push_back(deferStatement);
+		}
+
+		string getScopeBlockName(string suffix = "")
+		{
+			return string("scope") + std::to_string(id) + suffix;
+		}
+
+		Block* addBlock()
+		{
+			this->blocks.push_back(std::make_unique<IR::Block>(this));
+			return this->blocks.back().get();
+		}
+
+		Variable* addVariable(unique<Variable> variable)
+		{
+			this->variables.push_back(std::move(variable));
+			return this->variables.back().get();
+		}
+	};
+
+	int getCurrentScopeOrder(Scope* scope)
+	{
+		return scope->statementCount++;
+	}
+
+	struct Conditional : Statement
+	{
+		unique<Expression> expr;
+		struct Scope trueScope;
+		struct Scope falseScope;
+
+		Conditional(unique<Expression> expr) 
+			: Statement(Statement::Conditional)
+			, expr(std::move(expr))
+		{}
 	};
 
 	struct Loop : Statement
 	{
-		Block loopBlock;
+		struct Scope scope;
 		Loop()
 			: Statement(Statement::Loop)
 		{}
@@ -494,33 +557,15 @@ namespace IR
 		Break()
 			: Statement(Statement::Break)
 		{}
-	};		
-
-	struct Scope : Statement
-	{
-		uint id;	
-		vector<unique<Variable>> variables;
-		vector<unique<Block>> blocks;
-
-		Scope()
-			: Statement(Statement::Scope)
-		{
-			static uint scopeId = 0;
-			this->id = ++scopeId;
-		}
-
-		Block* addBlock()
-		{
-			this->blocks.push_back(std::make_unique<IR::Block>());
-			return this->blocks.back().get();
-		}
-
-		Variable* addVariable(unique<Variable> variable)
-		{
-			this->variables.push_back(std::move(variable));
-			return this->variables.back().get();
-		}
 	};
+
+	struct Defer : Statement
+	{
+		struct Scope scope;
+		Defer()
+			: Statement(Statement::Defer)
+		{}
+	};	
 
 	// TODO: Param can only be of Variable type
 	//	Should maybe inherit from Variable instead, but that means that
@@ -611,8 +656,9 @@ namespace IR
 
 	struct Module
 	{
-		// Main is a "lambda" since it cannot be recerenced :)
-		unique<Function> main;
+		// Main functions are "lambdas" since they cannot be recerenced :)
+		unique<Function> localMain;
+
 		vector<unique<External>> externals;
 		vector<unique<Constant>> constants;
 		vector<unique<Function>> functions;

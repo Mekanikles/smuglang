@@ -37,6 +37,7 @@ namespace AST
 	struct UnaryPostfixOp;
 	struct BinaryOp;
 	struct EvalStatement;
+	struct DeferStatement;
 	struct ReturnStatement;
 	struct MemberAccess;
 	struct LoopStatement;
@@ -92,6 +93,7 @@ namespace AST
 		virtual void visit(UnaryPostfixOp* node) { visit((Expression*)node); }
 		virtual void visit(BinaryOp* node) { visit((Expression*)node); }
 		virtual void visit(EvalStatement* node) { visit((StatementBody*)node); }
+		virtual void visit(DeferStatement* node) { visit((Statement*)node); }
 		virtual void visit(ReturnStatement* node) { visit((Statement*)node); }
 
 		virtual void visit(StatementBody* node) { visit((Statement*)node); }
@@ -292,6 +294,25 @@ namespace AST
 
 			// Wtf?
 			return StatementBody::getChildren();
+		}
+	};
+
+	struct DeferStatement : public NodeImpl<DeferStatement, Statement>
+	{
+		Statement* statement;
+
+		string toString(ASTContext* context) override
+		{
+			string s = "DeferStatement";
+			return s;
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			vector<Node*> ret;
+			if (statement)
+				ret.push_back(statement);
+			return ret;
 		}
 	};
 

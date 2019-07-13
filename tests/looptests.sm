@@ -20,27 +20,29 @@ extern printf : func(fmt : #primitives.c.char*, args...) -> #primitives.c.int;
 	var i = 0;
 	loop
 	{
+		defer i = i + 1;
+
 		loop
 		{
-			i = i + 1;
-			if (i < 2)
+			defer i = i + 1;
+			
+			if (i < 1)
 			{
-				printf("Continue inner loop 2\n");
+				printf("Continue inner loop 2, i was: %i\n", i);
 				continue;
 			}
 
-			printf("Break inner loop 2\n");
+			printf("Break inner loop 2, i was %i\n", i);
 			break;
 		};
 
-		i = i + 1;
-		if (i < 4)
+		if (i < 2)
 		{
-			printf("Continue outer loop 2\n");
+			printf("Continue outer loop 2, i was %i\n", i);
 			continue;
 		}
 
-		printf("Break outer loop 2\n");
+		printf("Break outer loop 2, i was %i\n", i);
 		break;
 	};
 }
@@ -52,16 +54,15 @@ extern printf : func(fmt : #primitives.c.char*, args...) -> #primitives.c.int;
 	var end = 10;
 	loop
 	{
-		var i2 = i;
-		i = i + 1;
+		defer i = i + 1;
 
-		if (i2 % 2 == 0)
+		if (i % 2 == 0)
 		{
-			printf("Even number! %i\n", i2);
+			printf("Even number! %i\n", i);
 			continue;
 		}
 		
-		if (i2 > end)
+		if (i > end)
 		{
 			printf("Reached end!\n");
 			break;

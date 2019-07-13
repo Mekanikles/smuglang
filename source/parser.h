@@ -1397,6 +1397,19 @@ struct Parser
 			node->linkType = linkType;
 			*outStatement = node;
 		}
+		if (accept(TokenType::Defer))
+		{
+			auto* node = createNode<AST::DeferStatement>();
+			AST::Statement* deferStatement;
+			if (!parseStatement(&deferStatement))
+			{
+				errorOnExpect("Expected Statement");
+			}
+
+			node->statement = deferStatement;
+
+			*outStatement = node;
+		}
 		else if (accept(TokenType::Return))
 		{
 			auto* node = createNode<AST::ReturnStatement>();

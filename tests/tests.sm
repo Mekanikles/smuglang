@@ -136,4 +136,14 @@ func createData(ain : #primitives.c.int, bin : #primitives.c.int) -> Data
 	return out;
 };
 
+var loopCount = 0;
+loop
+{
+	if (loopCount > 9)
+		break;
+
+	loopCount = loopCount + 1;
+};
+
+printf("Loop count should be 10, was: %i\n", loopCount);
 

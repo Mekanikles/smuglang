@@ -438,12 +438,12 @@ struct FunctionConcretizer : AST::Visitor
 		auto cond = std::make_unique<IR::Conditional>(std::move(condExprs.back()));
 
 		auto* prevBlock = this->currentBlock;
-		this->currentBlock = &cond->trueBlock;
+		this->currentBlock = cond->trueScope.addBlock();
 		node->statement->accept(this);
 
 		if (node->elseStatement)
 		{
-			this->currentBlock = &cond->falseBlock;
+			this->currentBlock = cond->falseScope.addBlock();
 			node->elseStatement->accept(this);
 		}
 
@@ -452,16 +452,39 @@ struct FunctionConcretizer : AST::Visitor
 		this->currentBlock->addStatement(std::move(cond));				
 	}
 
+	virtual void visit(AST::DeferStatement* node) override
+	{
+		auto irDefer = std::make_unique<IR::Defer>();
+		this->currentScope->trackDeferStatement(irDefer.get());
+
+		auto* prevScope = this->currentScope;
+		this->currentScope = &irDefer->scope;
+
+		auto* prevBlock = this->currentBlock;
+		this->currentBlock = this->currentScope->addBlock();
+		node->statement->accept(this);
+		this->currentBlock = prevBlock;
+		
+		this->currentScope = prevScope;
+
+		this->currentBlock->addStatement(std::move(irDefer));
+	}
+
 	virtual void visit(AST::LoopStatement* node) override
 	{
 		auto irLoop = std::make_unique<IR::Loop>();
 
+		auto* prevScope = this->currentScope;
+		this->currentScope = &irLoop->scope;
+
 		auto* prevBlock = this->currentBlock;
-		this->currentBlock = &irLoop->loopBlock;
+		this->currentBlock = this->currentScope->addBlock();
 		node->statement->accept(this);
 		this->currentBlock = prevBlock;
+		
+		this->currentScope = prevScope;
 
-		this->currentBlock->addStatement(std::move(irLoop));				
+		this->currentBlock->addStatement(std::move(irLoop));		
 	}
 
 	virtual void visit(AST::ContinueStatement* node) override
@@ -480,17 +503,24 @@ struct FunctionConcretizer : AST::Visitor
 	{
 		auto* scope = this->currentBlock->addStatement(std::make_unique<IR::Scope>());
 		
-		generateConcreteStatementBody(scope, node);
+		generateScopedStatement(scope, node);
 	}
 
 	virtual void visit(AST::ReturnStatement* node) override
 	{
-		auto exprs = generateConcreteExpression(node->expr);
+		if (node->expr)
+		{
+			auto exprs = generateConcreteExpression(node->expr);
 
-		// TODO: How to handle multiple return values?
-		assert(exprs.size() == 1);
+			// TODO: How to handle multiple return values?
+			assert(exprs.size() == 1);
 
-		this->currentBlock->addStatement(std::make_unique<IR::Return>(std::move(exprs.back())));
+			this->currentBlock->addStatement(std::make_unique<IR::Return>(std::move(exprs.back())));
+		}
+		else
+		{
+			this->currentBlock->addStatement(std::make_unique<IR::Return>());
+		}
 	}
 
 	virtual void visit(AST::Call* node) override
@@ -606,9 +636,9 @@ struct FunctionConcretizer : AST::Visitor
 		node->accept(this);
 	}
 
-	void generateConcreteStatementBody(IR::Scope* scope, AST::StatementBody* node)
+	void generateScopedStatement(IR::Scope* scope, AST::Statement* statement)
 	{
-		SymbolScope* symbolScope = this->astContext->getScope(node);
+		SymbolScope* symbolScope = this->astContext->getScope(statement);
 		assert(symbolScope);
 		handleSymbolScope(*scope, *symbolScope);
 
@@ -617,7 +647,7 @@ struct FunctionConcretizer : AST::Visitor
 
 		auto* prevBlock = this->currentBlock;
 		this->currentBlock = scope->addBlock();
-		AST::visitChildren(node, this);
+		AST::visitChildren(statement, this);
 		this->currentBlock = prevBlock;
 		
 		this->currentScope = prevScope;
@@ -678,24 +708,13 @@ IR::Function* generateConcreteFunction(ConcretizerContext* context, ASTContext* 
 	c.handleSignature(func, *funcLiteral);
 	
 	// Handle body
-	c.generateConcreteStatementBody(&func.getScope(), funcLiteral->body);
+	c.generateScopedStatement(&func.getScope(), funcLiteral->body);
 	return &func;
 }
 
-TypeRef createMainType()
+TypeRef createLocalMainType()
 {
 	Type funcType = createFunctionType();
-	FunctionClass& func = funcType.getFunction();
-
-	auto ccharptrclass = std::make_unique<PrimitiveClass>(PrimitiveClass::Char, 8, PrimitiveClass::Signed);
-	TypeRef cinttype = TypeRef(Type(std::make_unique<PrimitiveClass>(PrimitiveClass::Int, 32, PrimitiveClass::Signed)));
-	TypeRef ccharptrtype = TypeRef(createPointerType(TypeRef(
-			Type(std::make_unique<PrimitiveClass>(PrimitiveClass::Char, 8, PrimitiveClass::Signed)))));
-
-	func.appendInParam(TypeRef(cinttype), "argc");
-	func.appendInParam(TypeRef(ccharptrtype), "argv");
-	func.appendOutParam(TypeRef(cinttype), "err");
-
 	return TypeRef(std::move(funcType));
 }
 
@@ -705,17 +724,15 @@ IR::Module concretizeASTModule(Backend::Context* backend, ASTContext* astContext
 	IR::Module module;
 	ConcretizerContext context { backend, &module };
 
-	auto mainType = createMainType();
-	module.main = std::make_unique<IR::Function>(mainType, "main");
+	// Local main
+	{
+		auto localMainType = createLocalMainType();
+		module.localMain = std::make_unique<IR::Function>(localMainType, "__localmain");
 
-	FunctionConcretizer c(&context, astContext);
-	// TODO: Handle signature
-	c.generateConcreteStatementBody(&module.main->scope, astModule->body);
- 
-	// Add return instruction
-	auto& returnType = mainType->getFunction().outParams.back().type;
-	module.main->scope.blocks.back()->addStatement(
-		std::make_unique<IR::Return>(createIntegerLiteral(returnType, 0)));
+		FunctionConcretizer c(&context, astContext);
+		// TODO: Handle signature
+		c.generateScopedStatement(&module.localMain->scope, astModule->body);
+	}
 
 	return module;
 }

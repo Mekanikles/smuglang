@@ -376,6 +376,8 @@ public:
 					*outToken = Token(TokenType::Struct);
 				else if (w == "eval")
 					*outToken = Token(TokenType::Eval);
+				else if (w == "defer")
+					*outToken = Token(TokenType::Defer);					
 				else if (w == "return")
 					*outToken = Token(TokenType::Return);
 				else if (w == "true")

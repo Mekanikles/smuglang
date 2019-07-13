@@ -1,0 +1,53 @@
+extern printf : func(fmt : #primitives.c.char*, args...) -> #primitives.c.int;	
+
+// topLevelDefer
+{
+	func topLevelDefer(i : #primitives.c.int) -> #primitives.c.int
+	{
+		printf("Message (topLevelDefer) 1!\n");
+
+		defer printf("Message (topLevelDefer) 4!\n");
+		defer printf("Message (topLevelDefer) 3!\n");
+
+		printf("Message (topLevelDefer) 2!\n");
+
+		return i;
+	};
+
+	var i = topLevelDefer(666);
+	printf("topLevelDefer should return 666, returned: %i\n", i);
+}
+
+// nestedDefer
+{
+	func nestedDefer(i : #primitives.c.int) -> #primitives.c.int
+	{
+		printf("Message (nestedDefer) 1!\n");
+
+		defer printf("Message (nestedDefer) 4!\n");
+
+		{
+			defer printf("Message (nestedDefer) 3!\n");
+
+			printf("Message (nestedDefer) 2!\n");
+
+			return i;
+		}
+
+		defer printf("Should never reach this!\n");
+		printf("Should definitely never reach this!\n");
+		
+		return 0;
+	};
+
+	var i = nestedDefer(123);
+	printf("nestedDefer should return 123, returned: %i\n", i);
+}
+
+
+printf("Message (main) 1!\n");
+
+defer printf("Message (main) 4!\n");
+defer printf("Message (main) 3!\n");
+
+printf("Message (main) 2!\n");
