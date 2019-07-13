@@ -12,14 +12,6 @@ struct ScopeInfo
 	IR::Scope* irScope = nullptr;
 	llvm::BasicBlock* loopContinueBlock = nullptr;
 	llvm::BasicBlock* loopBreakBlock = nullptr;
-
-	/*llvm::Value* returnVal = nullptr;
-	vector<pair<llvm::BasicBlock*, llvm::Value*>> returnPoints;
-
-	void addReturnPoint(llvm::BasicBlock* block, llvm::Value* val)
-	{
-		returnPoints.push_back(pair<llvm::BasicBlock*, llvm::Value*>(block, val));
-	}*/
 };
 
 struct FunctionGenerator
@@ -173,7 +165,6 @@ struct FunctionGenerator
 			//	so we can add the correct instruction later
 			//currentScope().addReturnPoint(m_context.m_llvmBuilder.GetInsertBlock(), val);
 
-
 			// First resolve return value, in case finalizers affect it
 			auto* val = ret->expr ? m_context.createValueFromExpression(*(ret->expr)) : nullptr;
 
@@ -272,81 +263,38 @@ struct FunctionGenerator
 
 		m_scopeStack.pop_back();
 
-		/*
-		// Create finalizers
+		// Finalizers
 		{
-			auto prevScope = m_context.m_llvmBuilder.GetInsertBlock();
+			auto* currentBlock = m_context.m_llvmBuilder.GetInsertBlock();
+			auto* finalizerBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, irscope.getScopeBlockName("_finalizer"));
+			m_context.m_llvmBuilder.SetInsertPoint(finalizerBlock);
 
-			// If we have any returns, potentially insert merge block
-			if (!scopeInfo.returnPoints.empty())
+			// Generate defer statements in reverse order
+			for (auto it = irscope.deferStatements.rbegin(); it != irscope.deferStatements.rend(); ++it)
 			{
-				// Hack, assume first return type represents all of them
-				auto* returnType = scopeInfo.returnPoints.back().second ? scopeInfo.returnPoints.back().second->getType() : nullptr;
+				IR::Defer* deferStatement = *it;
 
-				if (returnType)
-				{
-					auto* mergeBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, irscope.getScopeBlockName("_merge_return"));
-					auto parentBlock = m_context.m_llvmBuilder.GetInsertBlock()->getParent();
-					parentBlock->getBasicBlockList().push_back(mergeBlock);
-					m_context.m_llvmBuilder.SetInsertPoint(mergeBlock);
-
-					llvm::PHINode* returnValPhi = m_context.m_llvmBuilder.CreatePHI(returnType, scopeInfo.returnPoints.size(), irscope.getScopeBlockName("_return_val"));
-
-					m_context.m_llvmBuilder.CreateBr(exitBlock);
-
-					// Generate the correct instructions for return points
-					//	and add incoming phi value
-					for (auto& returnPoint : scopeInfo.returnPoints)
-					{
-						m_context.m_llvmBuilder.SetInsertPoint(returnPoint.first);
-						m_context.m_llvmBuilder.CreateBr(mergeBlock);
-						if (returnValPhi)
-							returnValPhi->addIncoming(returnPoint.second, returnPoint.first);
-					}
-
-					scopeInfo.returnVal = returnValPhi;
-				}
-				else
-				{
-					for (auto& returnPoint : scopeInfo.returnPoints)
-					{
-						m_context.m_llvmBuilder.SetInsertPoint(returnPoint.first);
-						m_context.m_llvmBuilder.CreateBr(exitBlock);
-					}
-				}
+				ScopeInfo scopeInfo;
+				scopeInfo.parent = &scopeInfo;
+				scopeInfo.irScope = &deferStatement->scope;
+				generateScope(scopeInfo);
 			}
-
-			// Create exit path
+			
+			if (!finalizerBlock->empty())
 			{
-				auto parentBlock = m_context.m_llvmBuilder.GetInsertBlock()->getParent();
-				parentBlock->getBasicBlockList().push_back(exitBlock);
-				m_context.m_llvmBuilder.SetInsertPoint(exitBlock);
-
-				// Generate deferred statements in reverse order
-				for (auto it = irscope.deferBlocks.rbegin(); it != irscope.deferBlocks.rend(); ++it) 
-				{
-					generateBlock(*it->get());
-				}
-
-				for (auto it = irscope.cleanupBlocks.rbegin(); it != irscope.cleanupBlocks.rend(); ++it) 
-				{
-					generateBlock(*it->get());
-				}
-
-				// If we were the top scope, we need to return the value from the scope
-				if (m_scopeStack.empty())
-				{
-					if (scopeInfo.returnVal)
-						m_context.m_llvmBuilder.CreateRet(scopeInfo.returnVal);
-					else
-						m_context.m_llvmBuilder.CreateRetVoid();
-				}				
+				auto parentBlock = currentBlock->getParent();
+				parentBlock->getBasicBlockList().push_back(finalizerBlock);
+				m_context.m_llvmBuilder.SetInsertPoint(currentBlock);
+				m_context.m_llvmBuilder.CreateBr(finalizerBlock);
+				m_context.m_llvmBuilder.SetInsertPoint(finalizerBlock);
 			}
-
-			// Restore scope
-			m_context.m_llvmBuilder.SetInsertPoint(prevScope);
+			else
+			{
+				m_context.m_llvmBuilder.SetInsertPoint(currentBlock);
+				delete finalizerBlock;
+			}
 		}
-		*/
+
 	}
 
 	void generateFunction(IR::Function& irfunction)

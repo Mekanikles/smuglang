@@ -147,3 +147,9 @@ loop
 
 printf("Loop count should be 10, was: %i\n", loopCount);
 
+{
+	printf("Should print 3 messages in order:\n");
+	defer printf("    Message 3\n");
+	defer printf("    Message 2\n");
+	printf("    Message 1\n");
+}
