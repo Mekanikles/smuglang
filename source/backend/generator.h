@@ -35,6 +35,8 @@ struct FunctionGenerator
 			ScopeInfo scopeInfo;
 			scopeInfo.parent = &currentScope();
 			scopeInfo.irScope = scope;
+			scopeInfo.loopContinueBlock = scopeInfo.parent->loopContinueBlock;
+			scopeInfo.loopBreakBlock = scopeInfo.parent->loopBreakBlock;
 			generateScope(scopeInfo);
 
 			break;
@@ -75,6 +77,8 @@ struct FunctionGenerator
 			ScopeInfo scopeInfo;
 			scopeInfo.parent = &currentScope();
 			scopeInfo.irScope = &cond->trueScope;
+			scopeInfo.loopContinueBlock = scopeInfo.parent->loopContinueBlock;
+			scopeInfo.loopBreakBlock = scopeInfo.parent->loopBreakBlock;			
 			generateScope(scopeInfo);
 
 			m_context.m_llvmBuilder.CreateBr(contBlock);
@@ -88,6 +92,8 @@ struct FunctionGenerator
 				ScopeInfo scopeInfo;
 				scopeInfo.parent = &currentScope();
 				scopeInfo.irScope = &cond->falseScope;
+				scopeInfo.loopContinueBlock = scopeInfo.parent->loopContinueBlock;
+				scopeInfo.loopBreakBlock = scopeInfo.parent->loopBreakBlock;			
 				generateScope(scopeInfo);
 
 				m_context.m_llvmBuilder.CreateBr(contBlock);
