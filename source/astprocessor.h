@@ -399,7 +399,6 @@ struct ASTProcessor : AST::Visitor
 		Symbol* symbol = node->getSymbol(this->context);
 
 		// Check explicit type
-
 		if (node->typeExpr)
 		{
 			node->typeExpr->accept(this);
@@ -454,6 +453,7 @@ struct ASTProcessor : AST::Visitor
 				auto source = context->getSymbolSource(node);
 				assert(source);
 				assert(node->initExpr);
+				
 				Evaluation::storeConstantFromExpression(econtext, *context, *node->initExpr, *source);	
 			}
 		}

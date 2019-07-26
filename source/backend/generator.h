@@ -496,6 +496,15 @@ struct Generator
 		constant.backendValue = m_context.createValueFromLiteral(*constant.literal);
 	}
 
+	void generateGlobal(IR::Variable& variable)
+	{
+		assert(!variable.backendValue);
+		auto* type = m_context.resolveType(variable.getType());
+		auto* global = (llvm::GlobalVariable*)m_context.m_llvmModule->getOrInsertGlobal(variable.getName(), type);
+		global->setInitializer(llvm::Constant::getNullValue(type));
+		variable.backendValue = global;
+	}
+
 	void generateExternal(IR::External& external)
 	{
 		assert(external.getType()->isFunction() && "Only supports external functions for now");
@@ -540,13 +549,17 @@ struct Generator
 			generateConstant(*constant);
 		}
 
+		// Generate globals
+		for (auto& variable : irmodule.globals)
+		{
+			generateGlobal(*variable);
+		}
+
 		// Generate all function bodies
 		for (auto* func : funcs)
 		{	
 			generateFunctionBody(*func);
 		}
-
-		// Generate all constants
 
 		// No-one can reference main, so generate it last
 		generateLocalMain(irmodule);

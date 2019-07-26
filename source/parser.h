@@ -309,9 +309,14 @@ struct Parser
 					else if (lastToken().symbol == "char")
 					{
 						type = PrimitiveClass::Char;
-						sign = PrimitiveClass::Signed;
+						sign = PrimitiveClass::Unsigned;
 						size = 8;
 					}
+					else if (lastToken().symbol == "float")
+					{
+						type = PrimitiveClass::Float;
+						size = 32;
+					}		
 					else
 					{
 						errorOnAccept("Unknown c primitive");

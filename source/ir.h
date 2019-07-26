@@ -234,6 +234,11 @@ namespace IR
 			return refType == RefType::Constant;
 		}
 
+		const bool isExternal() const
+		{
+			return refType == RefType::External;
+		}
+
 		const struct Constant& asConstant() const
 		{
 			assert(refType == RefType::Constant);
@@ -662,6 +667,7 @@ namespace IR
 		vector<unique<External>> externals;
 		vector<unique<Constant>> constants;
 		vector<unique<Function>> functions;
+		vector<unique<Variable>> globals;	
 
 		// TODO: Build the correct scopes directly from AST to avoid searching for symbols
 		std::unordered_map<const SymbolSource*, Referenceable*> refMap;
@@ -690,6 +696,13 @@ namespace IR
 		Function* getFunction(FunctionId id)
 		{
 			return functionMap[id];
+		}
+
+		Variable* addGlobal(unique<Variable> variable)
+		{
+			globals.push_back(std::move(variable));
+			cacheReferenceable(&*globals.back());
+			return &*globals.back();
 		}
 
 		Constant* addConstant(unique<Constant> constant)

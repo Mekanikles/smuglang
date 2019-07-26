@@ -475,11 +475,16 @@ struct Context
 				// We should have generated values for all referenceables already
 				assert(val.backendValue);
 
-				// Hm, constants does not have storage, so use the value directly
-				if (llvm::isa<llvm::Constant>(val.backendValue))	
+				// Hm, constants and externals does not have storage, so use the value directly
+				// TODO: This likely does not apply to external non-functions, fix
+				if (val.isConstant() || val.isExternal())
+				{
 					return val.backendValue;
+				}
 				else
+				{
 					return m_llvmBuilder.CreateLoad(val.backendValue);
+				}
 				break;
 			}
 			case IR::Expression::MemberAccess:

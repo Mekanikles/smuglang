@@ -231,7 +231,7 @@ void printIRScope(IR::Scope* scope, int indent)
 
 void printIRFunction(IR::Function& function, int indent)
 {
-	print("func ", indent); 
+	print("function ", indent); 
 	print(prettyString(function.name, FGTextColor::Blue, true));
 	printLine(typeString(function.getType()));
 
@@ -240,9 +240,16 @@ void printIRFunction(IR::Function& function, int indent)
 
 void printIRConstant(IR::Constant& constant, int indent)
 {
-	print("def ", indent); 
+	print("constant ", indent); 
 	print(prettyString(constant.getName(), FGTextColor::Blue, true));
 	printLine(typeString(constant.getType()));
+}
+
+void printIRGlobal(IR::Variable& variable, int indent)
+{
+	print("global ", indent); 
+	print(prettyString(variable.getName(), FGTextColor::Blue, true));
+	printLine(typeString(variable.getType()));
 }
 
 void printIRModule(IR::Module* module, int indent = 0)
@@ -257,6 +264,11 @@ void printIRModule(IR::Module* module, int indent = 0)
 			
 		printIRConstant(*constant, indent + 1);
 	}
+	printLine(prettyString(string("// Globals"), FGTextColor::Green), indent + 1);
+	for (auto& variable : module->globals)
+	{
+		printIRGlobal(*variable, indent + 1);
+	}	
 	printLine("");
 	printIRFunction(*module->localMain, indent + 1);
 
