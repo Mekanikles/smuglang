@@ -1,155 +1,257 @@
+///////////////////////////////////////////////////////////////////////////////
+// Test basics
+
 def cchar = #primitives.c.char;
 def cint = #primitives.c.int;
+def cfloat = #primitives.c.float;
 def s32 = #primitives.s32;
 def u8 = #primitives.u8;
+def type = #primitives.type;
 
 extern printf : func(fmt : cchar*, args...) -> errCode : cint;	
+def successFormatStr = "\x1B[32;1m";
+def failFormatStr = "\x1B[31;1m";
+def clearFormatStr = "\x1B[0m";
 
-printf("Hello %s\n", "string");
-
-printf("Hello integers %i, %i, %i\n", 1, 12, 123);
-
-printf("Hello special integer %u, %i\n", 0xFFF16, 0b1111101);
-
-printf("Hello floats %f, %f, %f, %f, %f\n", 1.0, 1.2, .2, .2e2, .3E2);
-
-printf("Hello integer expressions %i, %i\n", 5 * 4 - 3 / 2, 1 + 2 * 3);
-
-printf("Hello float expressions %f, %f\n", 5.1 * 4.4 - .33 / 2.22, 1.0 + 2.1 * .3);
-
-printf("Hello sub expression %i\n", (5 + 4) - (3 + 2) - (((1))));
-
-var i : s32 = 5;
+func testIntEquality(exprStr : cchar*, val : cint, expected : cint)
 {
-	var i : u8 = 10;
-	printf("Hello variable should be 10: %i\n", i);
-}
-printf("Hello variable should be 5: %i\n", i);
+	if (val == expected)
+		printf(successFormatStr);
+	else
+		printf(failFormatStr);
+	printf("Expression `%s` should be %i was: %i\n", exprStr, expected, val);
+	printf(clearFormatStr);
+};
 
-printf("Hello garbage forward ref: %i\n", b);
-var b : u8 = 3;
-
-if (b == 3)
-	printf("Hello if-conditional\n");
-
-if (b == 4)
-	printf("ERROR");
-else
-	printf("Hello else condition\n");
-
-b = 3 + 1;
-
-if (b == 3)
-	printf("ERROR");
-else if (b == 5)
-	printf("ERROR");
-else 
-{	
-	if (b == 4)
-		printf("Hello if-else conditional\n");
-}
-
-if (b == 3)
+func testFloatEquality(exprStr : cchar*, val : cfloat, expected : cfloat)
 {
+	if (val == expected)
+		printf(successFormatStr);
+	else
+		printf(failFormatStr);
+	printf("Expression `%s` should be %f was: %f\n", exprStr, expected, val);
+	printf(clearFormatStr);
+};
+
+///////////////////////////////////////////////////////////////////////////////
+// Integer Literals
+
+testIntEquality("123", 123, 123);
+testIntEquality("0xFFF16", 0xFFF16, 1048342);
+testIntEquality("0b1111101", 0b1111101, 125);
+testIntEquality("5 * 4 - 3 / 2", 5 * 4 - 3 / 2, 19);
+testIntEquality("1 + 2 * 3", 1 + 2 * 3, 7);
+testIntEquality("(5 + 4) - (3 + 2) - (((1)))", (5 + 4) - (3 + 2) - (((1))), 3);
+
+///////////////////////////////////////////////////////////////////////////////
+// Float Literals
+
+testFloatEquality("123.4", 123.4, 123.4);
+testFloatEquality("1", 1, 1.0);
+testFloatEquality(".2", .2, 0.2);
+testFloatEquality(".2e2", .2e2, 20.0);
+testFloatEquality(".3E2", .3E2, 30.0);
+testFloatEquality("5.1 * 4.4 - .33 / 2.22", 5.1 * 4.4 - .33 / 2.22, 22.291351);
+testFloatEquality("1.0 + 2.1 * .3", 1.0 + 2.1 * .3, 1.630000);
+
+///////////////////////////////////////////////////////////////////////////////
+// Scoping
+
+func testScopedVariable(useInner : u8) -> cint
+{
+	var i : cint = 0;
 	{
-		func doNoParamFunc()
+		var i : cint = 1;
+		if (useInner == 1)
+			return i;
+	}
+	return i;
+};
+
+testIntEquality("testScopedVariable(0)", testScopedVariable(0), 0);
+testIntEquality("testScopedVariable(1)", testScopedVariable(1), 1);
+
+func testScopedFunctions(useInner : u8) -> cint
+{
+	var x = 0;
+	var y = 1;
+	{
+		func scopedFunc(x : cint, y : cint) -> cint
 		{
-			localFunc();	
-			func localFunc()
-			{
-				printf("Hello inner local function!\n");
-			};
+			return x;
 		};
 
-		doNoParamFunc();	
+		if (useInner == 0)
+			return scopedFunc(x, y);
 	}
 
-	doNoParamFunc();
-}
+	return scopedFunc(x, y);
 
-doMultiParamFunc(42, 123);
-
-func doNoParamFunc()
-{
-	printf("Hello outer function!\n");
+	func scopedFunc(x : cint, y : cint) -> cint
+	{
+		return y;
+	};
 };
 
-func doMultiParamFunc(p : u8, q : u8)
+testIntEquality("testScopedFunctions(0)", testScopedFunctions(0), 0);
+testIntEquality("testScopedFunctions(1)", testScopedFunctions(1), 1);
+
+///////////////////////////////////////////////////////////////////////////////
+// Conditionals
+
+func testConditional(branchId : s32) -> cint
 {
-	printf("Hello integer parameter 1: %i, 2: %i\n", p, q);
+	if (branchId == 0)
+		return 0;
+	else if (branchId == 1)
+		return 1;
+	else
+		return 2;		
+
+	return -1;
 };
 
-crossCallFunc1(1);
+testIntEquality("testConditional(0)", testConditional(0), 0);
+testIntEquality("testConditional(1)", testConditional(1), 1);
+testIntEquality("testConditional(2)", testConditional(2), 2);
 
-func crossCallFunc1(whatCall : u8)  
+///////////////////////////////////////////////////////////////////////////////
+// Out of order usages
+
+func testCrossCall(test : u8) -> cint
 {
-	printf("cross call func 1 called!\n");
-	if (whatCall == 1)
-		crossCallFunc1(2);
-	else if (whatCall == 2)
-		crossCallFunc2(1);
+	return crossCallFunc1(test);
+
+	func crossCallFunc1(shouldCall : u8) -> cint
+	{
+		if (shouldCall == 1)
+			return crossCallFunc2();
+
+		if (shouldCall == 123)
+			return 666;
+
+		return -1;	
+	};
+	
+	func crossCallFunc2() -> cint
+	{
+		return crossCallFunc1(123);
+	};
 };
 
-func crossCallFunc2(shouldCall : u8)
+testIntEquality("testCrossCall(1)", testCrossCall(1), 666);
+testIntEquality("testCrossCall(0)", testCrossCall(0), -1);
+
+///////////////////////////////////////////////////////////////////////////////
+// Evals
+
+func testEval(test : u8) -> cint
 {
-	printf("cross call func 2 called!\n");
-	if (shouldCall == 1)
-		crossCallFunc1(0);
+	var val : s32 = 0;
+
+	if (test == 1)
+		eval(chainedReturnValue());
+
+	func innerValue() -> cchar*
+	{
+		return "val = 999;";
+	};
+	
+	func chainedReturnValue() -> cchar*
+	{
+		return innerValue();
+	};
+
+	return val;
 };
 
-eval(chainedReturnValue());
+testIntEquality("testEval(1)", testEval(1), 999);
+testIntEquality("testEval(0)", testEval(0), 0);
 
-func innerValue() -> cchar*
+///////////////////////////////////////////////////////////////////////////////
+// Templates
+
+func testTemplate(test : u8) -> cint
 {
-	return "printf(\"Hello chained eval function\\n\")";
+	#template(a : s32)
+	func templatedFunc() -> cint
+	{
+		return a;
+	};
+	
+	if (test == 1)
+		return templatedFunc#(456)();
+
+	return templatedFunc#(123)();
 };
 
-func chainedReturnValue() -> cchar*
+testIntEquality("testTemplate(1)", testTemplate(1), 456);
+testIntEquality("testTemplate(0)", testTemplate(0), 123);
+
+///////////////////////////////////////////////////////////////////////////////
+// Structs
+
+func testStruct(test : u8) -> cint
 {
-	return innerValue();
+	struct Data
+	{
+		a : #primitives.c.int;
+		b : #primitives.c.int;
+	};
+	
+	var data : Data = createData(66, 67);
+	
+	func createData(ain : #primitives.c.int, bin : #primitives.c.int) -> Data
+	{
+		var out : Data;
+		out.a = ain;
+		out.b = bin;
+		return out;
+	};
+
+	if (test == 1)
+		return data.a;
+	
+	return data.b;
 };
 
-#template(a : s32)
-func templatedFunc()
+testIntEquality("testStruct(1)", testStruct(1), 66);
+testIntEquality("testStruct(0)", testStruct(0), 67);
+
+///////////////////////////////////////////////////////////////////////////////
+// Loops
+
+func testLoops(test : cint) -> cint
 {
-	printf("Hello templated parameter: %i\n", a);
+	var loopCount = 0;
+	var result = 0;
+	loop
+	{
+		if (loopCount > 9)
+			break;
+	
+		loopCount = loopCount + 1;
+		result = result + test;
+	};
+
+	return result;
 };
 
-templatedFunc#(666)();
+testIntEquality("testLoops(1)", testLoops(1), 10);
+testIntEquality("testLoops(2)", testLoops(2), 20);
 
-struct Data
+///////////////////////////////////////////////////////////////////////////////
+// Defers
+
+// TODO: This test needs some way of tracking defers.
+//	Also needs some way of tracking order of executed defers
+func testDefer(test : cint) -> cint
 {
-	a : #primitives.c.int;
-	b : #primitives.c.int;
+	var result = 0;
+	defer result = 66;
+
+	return result;
 };
 
-var data : Data = createData(66, 67);
-
-printf("Field a should be 66, was: %i\n", data.a);
-printf("Field b should be 67, was: %i\n", data.b);
-
-func createData(ain : #primitives.c.int, bin : #primitives.c.int) -> Data
-{
-	var out : Data;
-	out.a = ain;
-	out.b = bin;
-	return out;
-};
-
-var loopCount = 0;
-loop
-{
-	if (loopCount > 9)
-		break;
-
-	loopCount = loopCount + 1;
-};
-
-printf("Loop count should be 10, was: %i\n", loopCount);
-
-{
-	printf("Should print 3 messages in order:\n");
-	defer printf("    Message 3\n");
-	defer printf("    Message 2\n");
-	printf("    Message 1\n");
-}
+testIntEquality("testDefer(0)", testDefer(0), 0);
+testIntEquality("testDefer(1)", testDefer(1), 0);
