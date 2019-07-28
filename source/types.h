@@ -450,6 +450,11 @@ struct TypeRef
 		return typeWrapper->getType().getSize();
 	}
 
+	bool operator!=(const TypeRef& o) const
+	{
+		return !(getType() == o.getType());
+	}
+
 	bool operator==(const TypeRef& o) const
 	{
 		return getType() == o.getType();

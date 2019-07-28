@@ -6,17 +6,21 @@ def type = #primitives.type;
 
 extern printf : func(fmt : cchar*, args...) -> cint;
 
-#template(T : type) 
-func valueCast(value : T) -> T
+#template(T : #primitives.type, value : T) 
+func createValue() -> T
 {
 	return value;
 };
 
-#template(T : type) 
+#template(T : #primitives.type) 
 var hej : T = 0;
 
-hej#(int) = valueCast#(int)(667);
-hej#(f16) = valueCast#(f16)(124.0);
+hej#(int) = createValue#(int, 667)();
+hej#(f16) = createValue#(f16, 124)();
 
 printf("The Int should be 667, was: %i\n", hej#(#primitives.c.int));
 printf("The Float should be 124.0, was: %f\n", hej#(#primitives.f16));
+
+hej#(int) = createValue#(int, 666)();
+
+printf("The Int should be 666, was: %i\n", hej#(int));

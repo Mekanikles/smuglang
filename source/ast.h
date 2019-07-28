@@ -854,12 +854,13 @@ namespace AST
 				string name;
 			};
 
-			Instance(string debugName)
-				: astContext(debugName)
+			Instance(ASTContext&& astContext, vector<Instance::LiteralAndSource>&& literals, string debugName)
+				: astContext(std::move(astContext))
+				, literals(std::move(literals))
 			{}
 			
-			vector<LiteralAndSource> literals;
 			ASTContext astContext;
+			vector<LiteralAndSource> literals;			
 		};
 
 		vector<Instance> instances;
@@ -874,11 +875,11 @@ namespace AST
 			return s; 
 		}
 
-		Instance& addInstance()
+		Instance& addInstance(ASTContext&& astContext, vector<Instance::LiteralAndSource>&& literals)
 		{
 			string debugName = string("template ") + declaration->getSymbolName() + 
 				string(", instance: ") + std::to_string(instances.size());
-			instances.push_back(Instance(debugName));
+			instances.push_back(Instance(std::move(astContext), std::move(literals), debugName));
 			return instances.back();
 		}
 	};

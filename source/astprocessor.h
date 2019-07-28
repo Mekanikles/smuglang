@@ -558,24 +558,19 @@ struct ASTProcessor : AST::Visitor
 		if (symbolSource->isTemplate())
 		{
 			// Process any template arguments we might have
-			vector<TypeRef> argTypes;
 			for (auto tArg : node->templateArgs)
 			{
 				tArg->accept(this);
-				argTypes.push_back(tArg->getType(this->context));
 			}
 
 			TemplateSymbolSource* templateSource = symbolSource->asTemplate();
-			SymbolSource* generatedSource = nullptr;
 
 			auto* declNode = (AST::TemplateDeclaration*)templateSource->node;
 			auto* argBinding = createTemplateArgumentBinding(*node, *declNode);
 			assert(argBinding);			
 
-			// Match existing instances against args
+			/*// Match existing instances against args
 			{
-				using FoundInstance = pair<AST::TemplateDeclaration::Instance&, UnificationResult>;
-				vector<FoundInstance> findings;
 				for (AST::TemplateDeclaration::Instance& instance : declNode->instances)
 				{
 					vector<TypeRef> paramTypes;
@@ -584,9 +579,24 @@ struct ASTProcessor : AST::Visitor
 						auto& type = litAndSource.literal->getType();
 						paramTypes.push_back(type);
 					}
-					
+
+					// Clone arg types for inferences/comparison since multiple templates might match
+					//	 on unification, but not on literal comparison
+					vector<TypeRef> argTypes;
+					for (auto tArg : node->templateArgs)
+					{
+						tArg->accept(this);
+						argTypes.push_back(tArg->getType(this->context));
+					}
+
 					if (auto result = createArgumentUnification(argTypes, paramTypes, argBinding))
-						findings.emplace_back(FoundInstance(instance, result));
+					{
+						result.apply();
+
+						// Create
+						if (
+
+					}
 				}
 
 				if (!findings.empty())
@@ -598,20 +608,23 @@ struct ASTProcessor : AST::Visitor
 					findings[0].second.apply();
 					generatedSource = findings[0].first.astContext.getSymbolSource(declNode->declaration);
 				}
-			}
+			}*/
 
 			// Create new template instance
-			if (!generatedSource)
+			SymbolSource* generatedSource = nullptr;		
 			{
 				auto* currentScope = this->context->getScope(node);
 				assert(currentScope);
 
-				AST::TemplateDeclaration::Instance& instance = declNode->addInstance();		
-				ASTProcessor instanceAp(this->econtext, &instance.astContext);
+				const int instanceId = declNode->instances.size();
+				vector<AST::TemplateDeclaration::Instance::LiteralAndSource> instanceLiterals;
+				string debugName = string("template ") + declNode->declaration->getSymbolName() + 
+				string(", instance: ") + std::to_string(instanceId);
+				ASTContext instanceContext(debugName);
 
 				// Run declaration/dependency steps on signature, 
-				processDeclarations(&instance.astContext, declNode->signature, currentScope);
-				resolveDependencies(&instance.astContext, declNode->signature);
+				processDeclarations(&instanceContext, declNode->signature, currentScope);
+				resolveDependencies(&instanceContext, declNode->signature);
 
 				// Match template arguments and assign expressions to parameters
 				for (ArgumentBinding::Param& tArgBinding : argBinding->params)
@@ -620,38 +633,82 @@ struct ASTProcessor : AST::Visitor
 					assert(tArgBinding.argIndex < node->templateArgs.size());
 					AST::FunctionInParam* param = declNode->signature->inParams[tArgBinding.paramIndex];
 					AST::Expression* expr = node->templateArgs[tArgBinding.argIndex];
-					instance.astContext.addTemplateExpression(param, expr, this->context);
+					instanceContext.addTemplateExpression(param, expr, this->context);
 				}
 
 				// Process signature
+				ASTProcessor instanceAp(this->econtext, &instanceContext);
 				declNode->signature->accept(&instanceAp);
 
 				// Save the resulting literals from processing
 				for (AST::FunctionInParam* param : declNode->signature->inParams)
 				{
-					string name = string("tConst_") + declNode->declaration->getSymbolName() + string("_") + param->name;
-					shared<IR::Literal> literal = instance.astContext.getTemplateLiteral(param);
+					string name = string("tConst_") + declNode->declaration->getSymbolName() + string("_") + std::to_string(instanceId) + string("_") + param->name;
+					shared<IR::Literal> literal = instanceContext.getTemplateLiteral(param);
 					assert(literal);
-					SymbolSource* paramSource = instance.astContext.getSymbolSource(param);
+					SymbolSource* paramSource = instanceContext.getSymbolSource(param);
 					assert(paramSource);
-					instance.literals.emplace_back(AST::TemplateDeclaration::Instance::LiteralAndSource { literal, paramSource, name});
+					instanceLiterals.emplace_back(AST::TemplateDeclaration::Instance::LiteralAndSource { literal, paramSource, name});
 				}
 
 				// Type checking has already been done in signature processing
-				//	assert on it, for safety
-				assert(unifyTemplateArguments(this->context, &instance.astContext, node, declNode->signature, argBinding));
+				//	assert on it, to be sure
+				assert(unifyTemplateArguments(this->context, &instanceContext, node, declNode->signature, argBinding));
 
-				// Signature scope should be a parent scope for the declaration
-				auto* signatureScope = instance.astContext.getScope(declNode->signature);
-				assert(signatureScope);		
+				// Before we proceed with generating the actual template declaration
+				//	we can now check if there is already an identical template instance
+				//	that we can/should reuse.
+				{
+					int literalCount = instanceLiterals.size();
+					for (AST::TemplateDeclaration::Instance& existingInstance : declNode->instances)
+					{
+						if (existingInstance.literals.size() != literalCount)
+							continue;
+						
+						bool foundInstance = true;
+						for (int i = 0; i < literalCount; ++i)
+						{
+							auto& literal1 = instanceLiterals[i];
+							auto& literal2 = existingInstance.literals[i];
 
-				// Process declaration
-				processDeclarations(&instance.astContext, declNode->declaration, signatureScope);
-				resolveDependencies(&instance.astContext, declNode->declaration);
-				declNode->declaration->accept(&instanceAp);
+							// Hack: don't compare data for type variables since the same types can have 
+							//	different ids
+							if (literal1.literal->getType() != literal2.literal->getType() ||
+								(!literal1.literal->getType()->isTypeVariable() &&
+									literal1.literal->data != literal2.literal->data))
+							{
+								foundInstance = false;
+								break;
+							}
+						}
 
-				generatedSource = instance.astContext.getSymbolSource(declNode->declaration);
-				assert(generatedSource);
+						if (foundInstance)
+						{
+							generatedSource = existingInstance.astContext.getSymbolSource(declNode->declaration);
+							assert(generatedSource);
+							break;
+						}
+					}
+				}
+
+				// If no source existed, generate a new one
+				if (!generatedSource)
+				{
+					// Signature scope should be a parent scope for the declaration
+					auto* signatureScope = instanceContext.getScope(declNode->signature);
+					assert(signatureScope);		
+
+					// Process declaration
+					processDeclarations(&instanceContext, declNode->declaration, signatureScope);
+					resolveDependencies(&instanceContext, declNode->declaration);
+					declNode->declaration->accept(&instanceAp);
+
+					generatedSource = instanceContext.getSymbolSource(declNode->declaration);
+					assert(generatedSource);
+
+					// Add instance for future usages
+					declNode->addInstance(std::move(instanceContext), std::move(instanceLiterals));
+				}
 			}
 
 			// Re-assign depedency to generated template

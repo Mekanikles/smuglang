@@ -173,20 +173,24 @@ testIntEquality("testEval(0)", testEval(0), 0);
 
 func testTemplate(test : u8) -> cint
 {
-	#template(a : s32)
-	func templatedFunc() -> cint
+	#template(T : type, a : T)
+	func templatedFunc() -> T
 	{
 		return a;
 	};
 	
 	if (test == 1)
-		return templatedFunc#(456)();
+		return templatedFunc#(cint, 456)();
 
-	return templatedFunc#(123)();
+	if (test == 2)
+		return templatedFunc#(cint, 456)();
+
+	return templatedFunc#(cint, 123)();
 };
 
-testIntEquality("testTemplate(1)", testTemplate(1), 456);
 testIntEquality("testTemplate(0)", testTemplate(0), 123);
+testIntEquality("testTemplate(1)", testTemplate(1), 456);
+testIntEquality("testTemplate(2)", testTemplate(2), 456);
 
 ///////////////////////////////////////////////////////////////////////////////
 // Structs
