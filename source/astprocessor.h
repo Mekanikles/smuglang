@@ -347,18 +347,20 @@ struct ASTProcessor : AST::Visitor
 
 		if (node->signature->outParams.empty())
 		{
-			m_expectedReturnType = std::optional<TypeRef>();
+			m_expectedReturnTypeStack.push_back(std::optional<TypeRef>());
 		}
 		else
 		{
 			assert(node->signature->outParams.size() == 1);
 			auto* pnode = node->signature->outParams[0];
 			Symbol* symbol = pnode->getSymbol(this->context);
-			m_expectedReturnType = symbol->type;
+			m_expectedReturnTypeStack.push_back(symbol->type);
 		}
 		
 		assert(node->body);		
 		node->body->accept(this);
+
+		m_expectedReturnTypeStack.pop_back();
 	}
 
 	void visit(AST::ReturnStatement* node) override
@@ -369,11 +371,11 @@ struct ASTProcessor : AST::Visitor
 		// TODO: This is super similiar to an assignment, maybe convert
 		if (node->expr)
 		{
-			assert(m_expectedReturnType && "Return expression in void function");
+			assert(m_expectedReturnTypeStack.back() && "Return expression in void function");
 
 			node->expr->accept(this);
 			TypeRef& exprType = node->expr->getType(this->context);
-			const auto result = unifyTypes(*m_expectedReturnType, exprType);
+			const auto result = unifyTypes(*m_expectedReturnTypeStack.back(), exprType);
 
 			// TODO: Handle implicit casts?
 			if (!result)
@@ -382,7 +384,7 @@ struct ASTProcessor : AST::Visitor
 		else
 		{
 			// TODO: Is this true?
-			assert(!m_expectedReturnType && "Missing return expression in non-void function");
+			assert(!m_expectedReturnTypeStack.back() && "Missing return expression in non-void function");
 		}
 	}
 
@@ -457,12 +459,24 @@ struct ASTProcessor : AST::Visitor
 				Evaluation::storeConstantFromExpression(econtext, *context, *node->initExpr, *source);	
 			}
 		}
+		else if (node->isStatic)
+		{
+			// TODO: Hm, we probably want to store a value for types as well, a hash/id maybe?
+			if (!symbol->getType()->isTypeVariable())
+			{
+				auto source = context->getSymbolSource(node);
+				assert(source);
+				assert(node->initExpr);
+				
+				Evaluation::storeGlobal(econtext, symbol->getType(), *source);	
+			}
+		}
 		else if (node->isExternal())
 		{
 			assert(symbol->getType()->isFunction());
 			auto source = context->getSymbolSource(node);
 			assert(source);
-			Evaluation::storeExternal(econtext, *context, symbol->getType(), *source);
+			Evaluation::storeExternal(econtext, symbol->getType(), *source);
 		}
 	}
 
@@ -831,7 +845,7 @@ struct ASTProcessor : AST::Visitor
 	{
 	}
 
-	std::optional<TypeRef> m_expectedReturnType;
+	vector<std::optional<TypeRef>> m_expectedReturnTypeStack;
 	EvaluationContext& econtext;
 	ASTContext* context;
 };

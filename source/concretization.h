@@ -354,6 +354,13 @@ struct ExpressionConcretizer : AST::Visitor
 	vector<std::unique_ptr<IR::Expression>> expressionStack;
 };
 
+void createAndAddGlobal(ConcretizerContext& context, const TypeRef& type, SymbolSource& source)
+{
+	Symbol* symbol = source.getSymbol();
+	auto variable = std::make_unique<IR::Variable>(type, symbol->name, &source);
+	context.module->addGlobal(std::move(variable));
+}
+
 void createAndAddExternal(ConcretizerContext& context, const TypeRef& type, SymbolSource& source)
 {
 	Symbol* symbol = source.getSymbol();
@@ -592,15 +599,21 @@ struct FunctionConcretizer : AST::Visitor
 			else
 			{
 				// TODO: For now, treat defs as global variables, until we enfore conversion to literals for all defs
-				auto variable = std::make_unique<IR::Variable>(type, symbol->name, &source);
-				this->context->module->addGlobal(std::move(variable));
+				createAndAddGlobal(*this->context, type, source);
 			}	
 		}
 		else
-		{
-			auto variable = std::make_unique<IR::Variable>(type, symbol->name, &source);
-			auto* ref = scope.addVariable(std::move(variable));
-			this->context->module->cacheReferenceable(ref);	
+		{	
+			if (source.isStatic)
+			{
+				createAndAddGlobal(*this->context, type, source);
+			}
+			else
+			{
+				auto variable = std::make_unique<IR::Variable>(type, symbol->name, &source);
+				auto* ref = scope.addVariable(std::move(variable));
+				this->context->module->cacheReferenceable(ref);
+			}
 		}
 	}
 

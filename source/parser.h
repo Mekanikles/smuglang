@@ -1168,6 +1168,12 @@ struct Parser
 	{
 		AST::FunctionDeclaration* funcDecl;
 		AST::StructDeclaration* structDecl;
+
+		// Optional static declaration
+		bool declaredAsStatic = false;
+		if (accept(TokenType::Static))
+			declaredAsStatic = true;
+
 		if (accept(TokenType::Var) || accept(TokenType::Def) || accept(TokenType::Const) || accept(TokenType::Extern))
 		{
 			StorageQualifier sq;
@@ -1180,6 +1186,11 @@ struct Parser
 			else
 				sq = StorageQualifier::Extern;
 
+			if (sq == StorageQualifier::Extern && declaredAsStatic)
+			{
+				errorOnAccept("Functions should not be declared static, all functions are static");
+			}
+
 			AST::SymbolDeclaration* symbolDecl;
 			if (!parseSymbolDeclaration(&symbolDecl, sq))
 			{
@@ -1188,17 +1199,23 @@ struct Parser
 				return true;
 			}
 
+			symbolDecl->isStatic = declaredAsStatic;
+
 			// TODO: Set storage qualifier
 			*outDeclaration = symbolDecl;
 			return true;
 		}
 		else if (parseFunctionDeclaration(&funcDecl))
 		{
+			if (declaredAsStatic)
+				errorOnAccept("Functions should not be declared static, all functions are static");
 			*outDeclaration = funcDecl;
 			return true;
 		}
 		else if (parseStructDeclaration(&structDecl))
 		{
+			if (declaredAsStatic)
+				errorOnAccept("Structs should not be declared static, all structs are static");			
 			*outDeclaration = structDecl;
 			return true;
 		}

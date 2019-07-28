@@ -365,7 +365,9 @@ public:
 				else if (w == "if")
 					*outToken = Token(TokenType::If);
 				else if (w == "else")
-					*outToken = Token(TokenType::Else);									
+					*outToken = Token(TokenType::Else);
+				else if (w == "static")
+					*outToken = Token(TokenType::Static);
 				else if (w == "var")
 					*outToken = Token(TokenType::Var);
 				else if (w == "def")
@@ -377,7 +379,7 @@ public:
 				else if (w == "eval")
 					*outToken = Token(TokenType::Eval);
 				else if (w == "defer")
-					*outToken = Token(TokenType::Defer);					
+					*outToken = Token(TokenType::Defer);
 				else if (w == "return")
 					*outToken = Token(TokenType::Return);
 				else if (w == "true")
@@ -389,7 +391,7 @@ public:
 				else if (w == "break")
 					*outToken = Token(TokenType::Break);
 				else if (w == "continue")
-					*outToken = Token(TokenType::Continue);																	
+					*outToken = Token(TokenType::Continue);
 				else
 					*outToken = Token(TokenType::Symbol, w);
 				return true;

@@ -890,6 +890,7 @@ namespace AST
 		StorageQualifier storageQualifier = StorageQualifier::Var;
 		Expression* typeExpr = nullptr;
 		Expression* initExpr = nullptr;
+		bool isStatic = false;
 
 		virtual string getSymbolName() override
 		{

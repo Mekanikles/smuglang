@@ -160,7 +160,12 @@ void storeConstantFromExpression(EvaluationContext& eContext, ASTContext& astCon
 	storeConstantFromLiteral(eContext, astContext, std::move(literal), source);
 }
 
-void storeExternal(EvaluationContext& eContext, ASTContext& astContext, const TypeRef& type, SymbolSource& source)
+void storeGlobal(EvaluationContext& eContext, const TypeRef& type, SymbolSource& source)
+{
+	createAndAddGlobal(eContext, type, source);
+}
+
+void storeExternal(EvaluationContext& eContext, const TypeRef& type, SymbolSource& source)
 {
 	createAndAddExternal(eContext, type, source);
 }

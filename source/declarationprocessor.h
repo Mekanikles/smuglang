@@ -40,7 +40,7 @@ struct DeclarationProcessor : public AST::Visitor
 			Symbol* symbol = createSymbol(param->name);
 			symbol->isParam = true;
 
-			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, param, param->storageQualifier);
+			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, param, param->storageQualifier, false);
 			paramScope.addSymbolSource(symbolSource);
 			this->context->setSymbolSource(param, symbolSource);
 
@@ -52,7 +52,7 @@ struct DeclarationProcessor : public AST::Visitor
 			Symbol* symbol = createSymbol(param->name);
 			symbol->isParam = true;
 
-			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, param, param->storageQualifier);
+			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, param, param->storageQualifier, false);
 			paramScope.addSymbolSource(symbolSource);
 			this->context->setSymbolSource(param, symbolSource);
 
@@ -93,7 +93,7 @@ struct DeclarationProcessor : public AST::Visitor
 		// InitOrder of functions is 0 since they are initialized at compile time
 		symbol->firstInitOrder = 0;
 
-		auto symbolSource = createDeclarationSymbolSource(this->context, symbol, node, StorageQualifier::Def);
+		auto symbolSource = createDeclarationSymbolSource(this->context, symbol, node, StorageQualifier::Def, true);
 		this->currentScope->addSymbolSource(symbolSource);
 		this->context->setSymbolSource(node, symbolSource);
 
@@ -116,7 +116,7 @@ struct DeclarationProcessor : public AST::Visitor
 		// InitOrder of functions is 0 since they are initialized at compile time
 		symbol->firstInitOrder = 0;
 
-		auto symbolSource = createDeclarationSymbolSource(this->context, symbol, node, StorageQualifier::Def);
+		auto symbolSource = createDeclarationSymbolSource(this->context, symbol, node, StorageQualifier::Def, true);
 		this->currentScope->addSymbolSource(symbolSource);
 		this->context->setSymbolSource(node, symbolSource);
 
@@ -126,7 +126,7 @@ struct DeclarationProcessor : public AST::Visitor
 		{
 			Symbol* symbol = createSymbol(field->name);
 
-			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, field, StorageQualifier::Var);
+			auto symbolSource = createDeclarationSymbolSource(this->context, symbol, field, StorageQualifier::Var, true);
 			this->context->setSymbolSource(field, symbolSource);	
 		}
 
@@ -147,7 +147,7 @@ struct DeclarationProcessor : public AST::Visitor
 		//	Can it lead to an infinite recursion when inferring types?
 		Symbol* symbol = createSymbol(node->symbol);
 
-		auto symbolSource = createDeclarationSymbolSource(this->context, symbol, node, node->storageQualifier);
+		auto symbolSource = createDeclarationSymbolSource(this->context, symbol, node, node->storageQualifier, node->isStatic);
 		this->currentScope->addSymbolSource(symbolSource);
 		this->context->setSymbolSource(node, symbolSource);
 

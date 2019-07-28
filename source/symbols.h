@@ -100,6 +100,7 @@ struct SymbolSource
 struct SingleSymbolSource : SymbolSource
 {
 	StorageQualifier storageQualifier;
+	bool isStatic;
 
 	bool isSingleSymbolSource() override { return true; }
 	bool isDefine() override { return storageQualifier == StorageQualifier::Def; } 
@@ -184,13 +185,14 @@ void CatchAllSymbolSource::hookDependency(SymbolDependency* dependency)
 
 vector<SymbolSource*> s_symbolSources;
 
-DeclarationSymbolSource* createDeclarationSymbolSource(ASTContext* context, Symbol* symbol, AST::Node* node, StorageQualifier storageQualifier)
+DeclarationSymbolSource* createDeclarationSymbolSource(ASTContext* context, Symbol* symbol, AST::Node* node, StorageQualifier storageQualifier, bool isStatic)
 {
 	auto s = new DeclarationSymbolSource();
 	s->node = node;
 	s->symbol = symbol;
 	s->context = context;
 	s->storageQualifier = storageQualifier;
+	s->isStatic = isStatic;
 	s_symbolSources.push_back(s);
 	return s;
 }

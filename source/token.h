@@ -15,6 +15,7 @@ enum class TokenType
 	FloatLiteral,
 	Symbol,
 	At,
+	Static,
 	Var,
 	Const,
 	Def,
@@ -93,6 +94,7 @@ string toString(TokenType type)
 		case TokenType::FloatLiteral: return "Float Literal";
 		case TokenType::Symbol: return "Symbol";
 		case TokenType::At: return "At";
+		case TokenType::Static: return "Static";
 		case TokenType::Var: return "Var";
 		case TokenType::Const: return "Const";
 		case TokenType::Def: return "Def";
