@@ -60,7 +60,7 @@ struct FunctionGenerator
 			auto* val = m_context.createValueFromExpression(*cond->expr);
 			m_context.m_llvmBuilder.CreateCondBr(val, trueBlock, falseBlock);
 
-			auto func = m_context.m_llvmBuilder.GetInsertBlock()->getParent();
+			auto func = currentLlvmFunction();
 
 			// True branch
 			func->getBasicBlockList().push_back(trueBlock);
@@ -105,14 +105,14 @@ struct FunctionGenerator
 			auto* loopBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "loop_entry");
 			auto* nextBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "loop_next");
 
-			auto parentBlock = m_context.m_llvmBuilder.GetInsertBlock()->getParent();
+			auto func = currentLlvmFunction();
 
 			// Enter loop block
 			m_context.m_llvmBuilder.CreateBr(loopBlock);
 
 			// Loop block
 			{
-				parentBlock->getBasicBlockList().push_back(loopBlock);
+				func->getBasicBlockList().push_back(loopBlock);
 				m_context.m_llvmBuilder.SetInsertPoint(loopBlock);
 
 				ScopeInfo scopeInfo;
@@ -126,7 +126,7 @@ struct FunctionGenerator
 			}
 
 			// Next block
-			parentBlock->getBasicBlockList().push_back(nextBlock);
+			func->getBasicBlockList().push_back(nextBlock);
 			m_context.m_llvmBuilder.SetInsertPoint(nextBlock);			
 
 			break;
@@ -170,11 +170,13 @@ struct FunctionGenerator
 
 				if (!finalizerBlock->empty())
 				{
-					auto parentBlock = currentBlock->getParent();
-					parentBlock->getBasicBlockList().push_back(finalizerBlock);
+					auto func = currentLlvmFunction();
+					func->getBasicBlockList().push_back(finalizerBlock);
+					// Finalizer can spawn new blocks, make sure to track the current one
+					auto oldBlock = m_context.m_llvmBuilder.GetInsertBlock();
 					m_context.m_llvmBuilder.SetInsertPoint(currentBlock);
 					m_context.m_llvmBuilder.CreateBr(finalizerBlock);
-					m_context.m_llvmBuilder.SetInsertPoint(finalizerBlock);
+					m_context.m_llvmBuilder.SetInsertPoint(oldBlock);
 				}
 				else
 				{
@@ -229,11 +231,13 @@ struct FunctionGenerator
 
 				if (!finalizerBlock->empty())
 				{
-					auto parentBlock = currentBlock->getParent();
-					parentBlock->getBasicBlockList().push_back(finalizerBlock);
+					auto func = currentLlvmFunction();
+					func->getBasicBlockList().push_back(finalizerBlock);
+					// Finalizer can spawn new blocks, make sure to track the current one
+					auto oldBlock = m_context.m_llvmBuilder.GetInsertBlock();
 					m_context.m_llvmBuilder.SetInsertPoint(currentBlock);
 					m_context.m_llvmBuilder.CreateBr(finalizerBlock);
-					m_context.m_llvmBuilder.SetInsertPoint(finalizerBlock);
+					m_context.m_llvmBuilder.SetInsertPoint(oldBlock);
 				}
 				else
 				{
@@ -293,11 +297,13 @@ struct FunctionGenerator
 
 				if (!finalizerBlock->empty())
 				{
-					auto parentBlock = currentBlock->getParent();
-					parentBlock->getBasicBlockList().push_back(finalizerBlock);
+					auto func = currentLlvmFunction();
+					func->getBasicBlockList().push_back(finalizerBlock);
+					// Finalizer can spawn new blocks, make sure to track the current one
+					auto oldBlock = m_context.m_llvmBuilder.GetInsertBlock();
 					m_context.m_llvmBuilder.SetInsertPoint(currentBlock);
 					m_context.m_llvmBuilder.CreateBr(finalizerBlock);
-					m_context.m_llvmBuilder.SetInsertPoint(finalizerBlock);
+					m_context.m_llvmBuilder.SetInsertPoint(oldBlock);
 				}
 				else
 				{
@@ -376,11 +382,13 @@ struct FunctionGenerator
 			
 			if (!finalizerBlock->empty())
 			{
-				auto parentBlock = currentBlock->getParent();
-				parentBlock->getBasicBlockList().push_back(finalizerBlock);
+				auto func = currentLlvmFunction();
+				func->getBasicBlockList().push_back(finalizerBlock);
+				// Finalizer can spawn new blocks, make sure to track the current one
+				auto oldBlock = m_context.m_llvmBuilder.GetInsertBlock();
 				m_context.m_llvmBuilder.SetInsertPoint(currentBlock);
 				m_context.m_llvmBuilder.CreateBr(finalizerBlock);
-				m_context.m_llvmBuilder.SetInsertPoint(finalizerBlock);
+				m_context.m_llvmBuilder.SetInsertPoint(oldBlock);
 			}
 			else
 			{
@@ -391,10 +399,9 @@ struct FunctionGenerator
 
 	}
 
-	void generateFunction(IR::Function& irfunction)
+	void generateFunction()
 	{
-		assert(irfunction.backendValue);
-		auto* func = static_cast<llvm::Function*>(irfunction.backendValue);
+		auto* func = currentLlvmFunction();
 
 		auto entryBlock = llvm::BasicBlock::Create(m_context.m_llvmContext, "entry", func);
 		m_context.m_llvmBuilder.SetInsertPoint(entryBlock);
@@ -461,13 +468,21 @@ struct FunctionGenerator
 	}
 
 	ScopeInfo& currentScope() { assert(!m_scopeStack.empty()); return *m_scopeStack.back(); }
+	llvm::Function* currentLlvmFunction()
+	{
+		auto func = irfunction.backendValue;
+		assert(func);
+		return static_cast<llvm::Function*>(func);
+	}
 
-	FunctionGenerator(Context& context)
+	FunctionGenerator(Context& context, IR::Function& irfunction)
 		: m_context(context)
+		, irfunction(irfunction)
 	{
 	}
 
 	Context& m_context;
+	IR::Function& irfunction;
 	vector<ScopeInfo*> m_scopeStack;
 };
 
@@ -486,8 +501,8 @@ struct Generator
 
 	void generateFunctionBody(IR::Function& irfunction)
 	{
-		FunctionGenerator generator(m_context);
-		generator.generateFunction(irfunction);
+		FunctionGenerator generator(m_context, irfunction);
+		generator.generateFunction();
 	}
 
 	void generateConstant(IR::Constant& constant)
