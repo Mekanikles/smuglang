@@ -247,15 +247,30 @@ testIntEquality("testLoops(2)", testLoops(2), 20);
 ///////////////////////////////////////////////////////////////////////////////
 // Defers
 
-// TODO: This test needs some way of tracking defers.
-//	Also needs some way of tracking order of executed defers
 func testDefer(test : cint) -> cint
 {
-	var result = 0;
-	defer result = 66;
+	static var deferTracker : cint = 0;	
+	func affectTracker(test : cint) -> cint
+	{
+		defer 
+			if (test == 0) 
+				deferTracker = 44;
+			else if (test == 1)
+				deferTracker = 55;
+		defer deferTracker = 99;
+		deferTracker = -1;
+		return deferTracker;
+	};
 
-	return result;
+	var preDeferResult = affectTracker(test);
+	if (test == 3)
+		return preDeferResult;
+	else	
+		return deferTracker;
 };
 
-testIntEquality("testDefer(0)", testDefer(0), 0);
-testIntEquality("testDefer(1)", testDefer(1), 0);
+testIntEquality("testDefer(0)", testDefer(0), 44);
+testIntEquality("testDefer(1)", testDefer(1), 55);
+testIntEquality("testDefer(2)", testDefer(2), 99);
+testIntEquality("testDefer(3)", testDefer(3), -1);
+
