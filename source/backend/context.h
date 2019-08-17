@@ -28,7 +28,8 @@
 
 #include "core.h"
 #include "types.h"
-#include "ir.h"
+#include "ir/ir.h"
+#include "ir/irutils.h"
 #include "backend/value.h"
 
 namespace Backend
@@ -179,6 +180,15 @@ struct Context
 				this->m_structTypeMap[type.typeId()] = llvmStruct;
 			}
 			return llvmStruct;
+		}
+		else if (type.isArray())
+		{
+			const auto& array = type.getArray();
+			assert(array.isStaticLength());
+			auto size = array.staticLength;
+			auto type = resolveType(array.type);
+
+			return llvm::ArrayType::get(type, size);
 		}
 
 		assert("Cannot resolve type" && false);
@@ -428,7 +438,7 @@ struct Context
 			auto& p = type->getPrimitive();
 			if (p.isInteger())
 			{
-				long long l = literal.readValue<long long>();
+				i64 l = convertLiteralToInt64(literal);
 				literal.backendValue = createIntegerConstant((uint64_t)l, p.size, p.isSigned());
 			}
 			else if (p.isFloat())
@@ -485,8 +495,11 @@ struct Context
 				{
 					return m_llvmBuilder.CreateLoad(val.backendValue);
 				}
-				break;
 			}
+			case IR::Expression::ArrayAccess:
+			{
+				assert(false && "asdads");
+			}			
 			case IR::Expression::MemberAccess:
 			{
 				auto* maccess = static_cast<IR::MemberAccess*>(&expr);
@@ -501,19 +514,16 @@ struct Context
 
 				auto* val = m_llvmBuilder.CreateGEP(leftSidePtr, gepIndices, maccess->name);
 				return m_llvmBuilder.CreateLoad(val);
-				break;
 			}	
 			case IR::Expression::Literal:
 			{
 				auto* literal = static_cast<IR::Literal*>(&expr);
 				return createValueFromLiteral(*literal);
-				break;
 			}
 			case IR::Expression::Call:
 			{
 				auto* call = static_cast<IR::Call*>(&expr);
 				return createValueFromCall(*call);
-				break;
 			}
 			case IR::Expression::BinaryOp:
 			{
@@ -522,7 +532,6 @@ struct Context
 				auto* rightVal = createValueFromExpression(*binaryOp->rightExpr);
 
 				return createBinaryOp(binaryOp->getType(), binaryOp->opType, leftVal, rightVal);
-				break;
 			}
 			case IR::Expression::UnaryOp:
 			{
@@ -530,7 +539,6 @@ struct Context
 				auto* val = createValueFromExpression(*unaryOp->expr);
 
 				return createUnaryOp(unaryOp->getType(), unaryOp->opType, val);
-				break;
 			}		
 		}
 

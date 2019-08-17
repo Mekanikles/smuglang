@@ -587,7 +587,7 @@ struct Parser
 				*outNode = ma;
 			}
 			else if (accept(TokenType::OpenParenthesis))
-			{	
+			{
 				// Function call
 				auto call = createNode<AST::Call>();
 				call->expr = *outNode;
@@ -600,6 +600,21 @@ struct Parser
 				expect(TokenType::CloseParenthesis);
 
 				*outNode = call;
+			}
+			else if (accept(TokenType::OpenBracket))
+			{
+				// Array accessor
+				auto arrayAccess = createNode<AST::ArrayAccess>();
+				arrayAccess->expr = *outNode;
+
+				if (!parseExpression(&arrayAccess->indexExpr))
+				{
+					errorOnExpect("Expression expected");
+				}
+
+				expect(TokenType::CloseBracket);
+
+				*outNode = arrayAccess;
 			}
 			else
 			{

@@ -1,0 +1,5 @@
+
+var arr : #primitives.c.int[1000];
+
+arr[10] = 66;
+arr[2] = arr[10];

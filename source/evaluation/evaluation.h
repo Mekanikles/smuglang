@@ -7,7 +7,8 @@
 #include "symbols.h"
 #include "ast.h"
 #include "context.h"
-#include "ir.h"
+#include "ir/ir.h"
+#include "ir/irutils.h"
 #include "concretization.h"
 #include "backend/backend.h"
 #include "output.h"
@@ -85,9 +86,31 @@ struct ExpressionEvaluator
 				const IR::Constant& constant = ref.referenceable->asConstant();
 				return std::make_unique<IR::Literal>(constant.getType(), constant.literal->data);
 			}
+			case IR::Expression::ArrayAccess:
+			{
+				auto& arrAcc = static_cast<IR::ArrayAccess&>(expr);
+				assert(arrAcc.baseExpr);
+				assert(arrAcc.indexExpr);
+
+				auto baseExprLiteral = evaluate(*arrAcc.baseExpr);
+				auto indexExprLiteral = evaluate(*arrAcc.indexExpr);
+
+				if (baseExprLiteral->getType()->isTypeVariable())
+				{
+					const i64 length = convertLiteralToInt64(*indexExprLiteral);
+
+					auto& typeVar = arrAcc.baseExpr->getType()->getTypeVariable();
+					TypeRef arrayType = createStaticArrayType(typeVar.type.clone(), length);
+					return createTypeLiteral(createTypeVariable(std::move(arrayType)));
+				}
+				else
+				{
+					assert(false&& "ArrayAccess evaluation on non-types not supported yet");
+				}				
+			}			
 			case IR::Expression::MemberAccess:
 			{
-				assert(false);
+				assert(false && "MemberAccess evaluation not supported yet");
 			}
 			case IR::Expression::BinaryOp:
 			{

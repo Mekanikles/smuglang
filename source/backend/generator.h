@@ -1,7 +1,7 @@
 #pragma once
 
 #include "backend/context.h"
-#include "ir.h"
+#include "ir/ir.h"
 
 namespace Backend
 {

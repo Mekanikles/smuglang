@@ -4,7 +4,7 @@
 #include "output.h"
 #include "token.h"
 #include "ast.h"
-#include "ir.h"
+#include "ir/ir.h"
 #include "evaluation/evaluation.h"
 #include "functions.h"
 #include "declarationprocessor.h"
@@ -392,6 +392,28 @@ struct ASTProcessor : AST::Visitor
 	{
 		// Do not traverse subtree
 	}	
+
+	void visit(AST::ArrayAccess* node) override
+	{
+		if (this->context->processCheck(node))
+			return;
+
+		node->expr->accept(this);
+
+		if (node->indexExpr)
+			node->indexExpr->accept(this);
+
+		TypeRef& exprType = node->expr->getType(this->context);
+
+		if (exprType->isTypeVariable())
+		{
+			this->context->addTypeLiteral(node, createTypeVariable());
+		}
+		else
+		{
+			this->context->addTypeLiteral(node, exprType.clone());
+		};
+	}
 
 	void visit(AST::SymbolDeclaration* node) override
 	{

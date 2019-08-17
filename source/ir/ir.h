@@ -41,6 +41,7 @@ namespace IR
 		{
 			Literal,
 			Reference,
+			ArrayAccess,
 			MemberAccess,
 			BinaryOp,
 			UnaryOp,
@@ -263,6 +264,31 @@ namespace IR
 		}
 
 		virtual const TypeRef& getType() const override { return referenceable->getType(); }			
+	};
+
+	struct ArrayAccess : Expression
+	{
+		const TypeRef type;
+		unique<Expression> baseExpr;
+		unique<Expression> indexExpr;
+
+		ArrayAccess(const TypeRef& type, unique<Expression> baseExpr, unique<Expression> indexExpr)
+			: Expression(Expression::ArrayAccess)
+			, type(type)
+			, baseExpr(std::move(baseExpr))
+			, indexExpr(std::move(indexExpr))
+		{}
+
+		virtual string toString() const override
+		{
+			string s = "ArrayAccess";
+			return s;
+		}
+
+		virtual const TypeRef& getType() const override 
+		{
+			return type;
+		}		
 	};
 
 	struct MemberAccess : Expression

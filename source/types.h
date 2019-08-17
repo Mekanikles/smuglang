@@ -288,6 +288,18 @@ struct Type
 		return kind == Value && typeClass->type == TypeClass::Array;
 	}
 
+	const ArrayClass& getArray() const
+	{
+		assert(isArray());
+		return typeClass->as<ArrayClass>();
+	}
+
+	ArrayClass& getArray()
+	{
+		assert(isArray());
+		return typeClass->as<ArrayClass>();
+	}
+
 	bool isPointer() const 
 	{
 		return kind == Value && typeClass->type == TypeClass::Pointer;
@@ -676,6 +688,11 @@ struct ArrayClass : TypeClass
 		, arrayType(arrayType), type(std::move(type)), staticLength(staticLength)
 	{}
 
+	bool isStaticLength() const
+	{
+		return arrayType == Static;
+	}
+
 	virtual std::unique_ptr<TypeClass> clone() const override
 	{
 		return std::make_unique<ArrayClass>(arrayType, type.clone(), staticLength);
@@ -687,7 +704,10 @@ struct ArrayClass : TypeClass
 		if (arrayType == AnyArray)
 			s += "Array";
 		else if (arrayType == Static)
+		{
 			s += "Static Array";
+			s += " (length: " + std::to_string(staticLength) + ")";
+		}
 		else if (arrayType == Dynamic)
 			s += "Dynamic Array";
 		s += " of ";

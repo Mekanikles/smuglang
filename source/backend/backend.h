@@ -2,7 +2,7 @@
 
 #include "core.h"
 #include "value.h"
-#include "ir.h"
+#include "ir/ir.h"
 #include "types.h"
 
 #include "backend/context.h"

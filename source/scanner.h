@@ -545,6 +545,20 @@ public:
 				return true;
 			}
 
+			if (n == '[')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::OpenBracket);
+				return true;
+			}
+
+			if (n == ']')
+			{
+				m_inStream.ignore();
+				*outToken = Token(TokenType::CloseBracket);
+				return true;
+			}
+
 			if (n == '{')
 			{
 				m_inStream.ignore();

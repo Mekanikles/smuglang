@@ -39,6 +39,7 @@ namespace AST
 	struct EvalStatement;
 	struct DeferStatement;
 	struct ReturnStatement;
+	struct ArrayAccess;	
 	struct MemberAccess;
 	struct LoopStatement;
 	struct ContinueStatement;
@@ -79,6 +80,7 @@ namespace AST
 		virtual void visit(StructDeclaration* node) { visit((Declaration*)node);}
 		virtual void visit(Expression* node) { visit((Node*)node); }
 		virtual void visit(SymbolExpression* node) { visit((Expression*)node);}
+		virtual void visit(ArrayAccess* node) { visit((Expression*)node);}
 		virtual void visit(MemberAccess* node) { visit((Expression*)node);}
 		virtual void visit(StringLiteral* node) { visit((Expression*)node);}
 		virtual void visit(IntegerLiteral* node) { visit((Expression*)node); }
@@ -931,6 +933,36 @@ namespace AST
 		}		
 	};
 
+	struct ArrayAccess : public NodeImpl<ArrayAccess, Expression>
+	{
+		Expression* expr;
+		Expression* indexExpr;
+
+		ArrayAccess()
+		{}
+
+		string toString(ASTContext* context) override 
+		{ 
+			string s;
+			s = "ArrayAccess";
+			return s; 
+		}
+
+		TypeRef& getType(ASTContext* context) override
+		{
+			return context->getTypeLiteral(this);
+		}
+
+		const vector<Node*> getChildren() override
+		{
+			assert(expr);
+			auto ret =  vector<Node*>();
+			ret.push_back(expr);
+			ret.push_back(indexExpr);
+			return ret;
+		}
+	};
+
 	struct MemberAccess : public NodeImpl<MemberAccess, Expression>
 	{
 		Expression* expr;
@@ -968,7 +1000,7 @@ namespace AST
 			auto ret =  vector<Node*>();
 			ret.push_back(expr);
 			return ret;
-		}		
+		}
 	};
 
 	struct FunctionLiteral : public NodeImpl<FunctionLiteral, Expression>

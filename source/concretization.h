@@ -1,6 +1,6 @@
 #pragma once
 #include "core.h"
-#include "ir.h"
+#include "ir/ir.h"
 #include "token.h"
 #include "ast.h"
 #include "context.h"
@@ -26,12 +26,44 @@ struct ConcretizerContext
 	IR::Module* module;
 };
 
-unique<IR::Literal> createIntegerLiteral(const TypeRef& type, long long l)
+template<typename T>
+void writeIntValueToData(vector<u8>& data, i64 value)
 {
+	const T convertedValue = (T)value;
+	data.resize(sizeof(T));
+	memcpy(data.data(), &convertedValue, sizeof(T));
+}
+
+unique<IR::Literal> createIntegerLiteral(const TypeRef& type, i64 value)
+{
+	auto& primitive = type->getPrimitive();
+	assert(primitive.isConcrete() && primitive.isInteger());
+
 	vector<u8> data;
-	// TODO: Use type size instead and verify value is not truncated
-	data.resize(sizeof(l));
-	memcpy(data.data(), &l, sizeof(l));
+	if (primitive.Signed)
+	{
+		switch (primitive.size)
+		{
+			case 8: writeIntValueToData<i8>(data, value); break;
+			case 16: writeIntValueToData<i16>(data, value); break;
+			case 32: writeIntValueToData<i32>(data, value); break;
+			case 64: writeIntValueToData<i64>(data, value); break;
+			default:
+				assert("int size not supported in literals");
+		}
+	}
+	else
+	{
+		switch (primitive.size)
+		{
+			case 8: writeIntValueToData<u8>(data, value); break;
+			case 16: writeIntValueToData<u16>(data, value); break;
+			case 32: writeIntValueToData<u32>(data, value); break;
+			case 64: writeIntValueToData<u64>(data, value); break;
+			default:
+				assert("int size not supported in literals");
+		}
+	}
 
 	return createExpression<IR::Literal>(type, std::move(data));
 }
@@ -102,6 +134,24 @@ struct ExpressionConcretizer : AST::Visitor
 
 			expressionStack.push_back(createExpression<IR::Reference>(ref));
 		}
+	}
+
+	virtual void visit(AST::ArrayAccess* node) override
+	{
+		node->expr->accept(this);
+		// TODO: How to handle multiple value expressions?
+		assert(expressionStack.size() == 1);
+		auto expr = std::move(expressionStack.back());
+		expressionStack.pop_back();
+
+		node->indexExpr->accept(this);
+		// TODO: How to handle multiple value expressions?
+		assert(expressionStack.size() == 1);
+		auto indexExpr = std::move(expressionStack.back());
+		expressionStack.pop_back();
+
+		auto& type = node->getType(this->astContext);
+		expressionStack.push_back(createExpression<IR::ArrayAccess>(type, std::move(expr), std::move(indexExpr)));
 	}
 
 	virtual void visit(AST::MemberAccess* node) override
@@ -180,20 +230,20 @@ struct ExpressionConcretizer : AST::Visitor
 		}
 		else
 		{			
-			long int l;
+			i64 l;
 			if (node->ltype == AST::IntegerLiteral::Hexadecimal)
 			{
 				string s = &node->value[2];
-				l = std::stol(s, nullptr, 16);
+				l = std::stoll(s, nullptr, 16);
 			}
 			else if (node->ltype == AST::IntegerLiteral::Binary)
 			{
 				string s = &node->value[2];
-				l = std::stol(s, nullptr, 2);
+				l = std::stoll(s, nullptr, 2);
 			}	
 			else
 			{
-				l = std::stol(node->value, nullptr, 10);
+				l = std::stoll(node->value, nullptr, 10);
 			}
 
 			expressionStack.push_back(createIntegerLiteral(type, l));

@@ -6,6 +6,8 @@ enum class TokenType
 	Extern,
 	OpenParenthesis,
 	CloseParenthesis,
+	OpenBracket,
+	CloseBracket,
 	OpenBrace,
 	CloseBrace,
 	StringLiteral,
@@ -85,6 +87,8 @@ string toString(TokenType type)
 		case TokenType::Extern: return "Extern";
 		case TokenType::OpenParenthesis: return "Opening Parenthesis";
 		case TokenType::CloseParenthesis: return "Closing Parenthesis";
+		case TokenType::OpenBracket: return "Opening Bracket";
+		case TokenType::CloseBracket: return "Closing Bracket";
 		case TokenType::OpenBrace: return "Opening brace";
 		case TokenType::CloseBrace: return "Closing brace";
 		case TokenType::StringLiteral: return "String Literal";

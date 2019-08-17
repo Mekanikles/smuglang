@@ -11,7 +11,7 @@
 #include "functions.h"
 #include "parser.h"
 #include "backend/backend.h"
-#include "ir.h"
+#include "ir/ir.h"
 #include "output.h"
 #include "concretization.h"
 #include "llvmgenerator.h"
