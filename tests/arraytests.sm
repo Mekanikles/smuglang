@@ -1,5 +1,11 @@
 
+def cchar = #primitives.c.char;
+def cint = #primitives.c.int;
+extern printf : func(fmt : cchar*, args...) -> errCode : cint;	
+
 var arr : #primitives.c.int[1000];
 
 arr[10] = 66;
 arr[2] = arr[10];
+
+printf("Number should be 66, was: %i\n", arr[10]);

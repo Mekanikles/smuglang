@@ -380,6 +380,19 @@ struct Context
 				assert(valType->isPointerTy() && "Can only get ptr from ptr type");
 				return val.backendValue;
 			}	
+			case IR::Expression::ArrayAccess:
+			{
+				auto* arrAcc = static_cast<IR::ArrayAccess*>(&expr);
+				auto* basePtr = createPtrFromExpression(*arrAcc->baseExpr);
+
+				auto* indexVal = createValueFromExpression(*arrAcc->indexExpr);
+
+				llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_llvmContext), 0);
+				llvm::Value* gepIndices[] = { zero, indexVal };
+
+				auto* val = m_llvmBuilder.CreateGEP(basePtr, gepIndices, "arr_acc");
+				return val;
+			}			
 			case IR::Expression::MemberAccess:
 			{
 				auto* maccess = static_cast<IR::MemberAccess*>(&expr);
@@ -394,7 +407,6 @@ struct Context
 
 				auto* val = m_llvmBuilder.CreateGEP(leftSidePtr, gepIndices, maccess->name);
 				return val;
-				break;
 			}	
 			default:
 				assert(false && "Only variable pointers, for now");
@@ -498,7 +510,16 @@ struct Context
 			}
 			case IR::Expression::ArrayAccess:
 			{
-				assert(false && "asdads");
+				auto* arrAcc = static_cast<IR::ArrayAccess*>(&expr);
+				auto* basePtr = createPtrFromExpression(*arrAcc->baseExpr);
+
+				auto* indexVal = createValueFromExpression(*arrAcc->indexExpr);
+
+				llvm::Value* zero = llvm::ConstantInt::get(llvm::Type::getInt32Ty(m_llvmContext), 0);
+				llvm::Value* gepIndices[] = { zero, indexVal };
+
+				auto* val = m_llvmBuilder.CreateGEP(basePtr, gepIndices, "arr_acc");
+				return m_llvmBuilder.CreateLoad(val);
 			}			
 			case IR::Expression::MemberAccess:
 			{

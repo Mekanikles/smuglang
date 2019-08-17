@@ -411,7 +411,10 @@ struct ASTProcessor : AST::Visitor
 		}
 		else
 		{
-			this->context->addTypeLiteral(node, exprType.clone());
+			auto& array = exprType->getArray();	
+			// Hm, if we want type inference on array elements
+			//	we should not clone the type here
+			this->context->addTypeLiteral(node, array.type.clone());
 		};
 	}
 
@@ -562,9 +565,26 @@ struct ASTProcessor : AST::Visitor
 				}
 			}
 		}
+		else if (node->target->isArrayAccess())
+		{
+			AST::ArrayAccess* arrAcc = static_cast<AST::ArrayAccess*>(node->target);
+
+			TypeRef& arrBaseType = arrAcc->expr->getType(this->context);
+			assert(!arrBaseType->isTypeVariable() && "Cannot write to array access on type");
+			TypeRef& arrayElementType = arrAcc->getType(this->context);
+
+			// TODO: Should not be able to infer types for array access?
+			// Infer type from assignment
+			TypeRef& exprType = node->expr->getType(this->context);
+			const auto result = unifyTypes(arrayElementType, exprType);
+
+			// TODO: Handle implicit casts?
+			if (!result)
+				assert("Cannot unify types" && false);				
+		}	
 		else
 		{
-			assert(false && "Left of assignment needs to be member access or symbol expression");
+			assert(false && "Left of assignment needs to be supported expression");
 		}
 	}
 

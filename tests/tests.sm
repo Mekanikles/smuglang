@@ -143,6 +143,19 @@ testIntEquality("testCrossCall(1)", testCrossCall(1), 666);
 testIntEquality("testCrossCall(0)", testCrossCall(0), -1);
 
 ///////////////////////////////////////////////////////////////////////////////
+// Arrays
+
+func testStaticArray() -> cint
+{
+	var arr : #primitives.c.int[100];
+	arr[10] = 42;
+	arr[2] = arr[10];
+	return arr[2];
+};
+
+testIntEquality("testStaticArray()", testStaticArray(), 42);
+
+///////////////////////////////////////////////////////////////////////////////
 // Evals
 
 func testEval(test : u8) -> cint

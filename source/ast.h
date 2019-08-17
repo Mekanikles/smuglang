@@ -146,8 +146,9 @@ namespace AST
 	{
 		virtual TypeRef& getType(ASTContext* context) = 0;
 
-		virtual bool isSymbolExpression() { return false; }
-		virtual bool isMemberAccess() { return false; }
+		virtual bool isSymbolExpression() const { return false; }
+		virtual bool isArrayAccess() const { return false; }
+		virtual bool isMemberAccess() const { return false; }
 	};
 
 	void visitChildren(Expression* node, Visitor* v) { for (auto n : node->getChildren()) n->accept(v); }
@@ -608,7 +609,7 @@ namespace AST
 			: symbol(symbol)
 		{}	
 
-		bool isSymbolExpression() override { return true; }
+		bool isSymbolExpression() const override { return true; }
 
 		bool hasSymbol(ASTContext* context)
 		{
@@ -941,6 +942,8 @@ namespace AST
 		ArrayAccess()
 		{}
 
+		virtual bool isArrayAccess() const override { return true; }
+
 		string toString(ASTContext* context) override 
 		{ 
 			string s;
@@ -972,7 +975,7 @@ namespace AST
 		MemberAccess()
 		{}
 
-		virtual bool isMemberAccess() override
+		virtual bool isMemberAccess() const override
 		{
 			return true;
 		}
