@@ -188,7 +188,7 @@ UnificationResult createArgumentUnification(vector<TypeRef>& argTypes, vector<Ty
 			boundParam.type = argTypes[boundParam.argIndex];	
 		} 
 
-		auto paramResult = generateTypeUnification(boundParam.type, paramType);
+		auto paramResult = generateTypeUnification(boundParam.type, paramType, AllowChangeToBoth);
 		if (!paramResult)
 			return UnificationResult();
 

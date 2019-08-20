@@ -37,8 +37,15 @@ struct ASTContext
 		CatchAllSymbolSource* catchAllSource = nullptr;
 	};
 
+	struct CastInfo
+	{
+		TypeRef fromType;
+		TypeRef toType;
+	};
+
 	std::unordered_map<AST::Node*, NodeInfo> astNodeMap;
 	std::unordered_map<AST::Node*, TypeRef> typeLiterals;
+	std::unordered_map<AST::Node*, CastInfo> casts;
 
 	struct ExpressionAndContext
 	{
@@ -60,6 +67,19 @@ struct ASTContext
 		return true;
 	}
 
+	void addCast(AST::Node* node, TypeRef& fromType, TypeRef& toType)
+	{
+		CastInfo& castInfo = this->casts[node];
+		castInfo.fromType = fromType;
+		castInfo.toType = toType;
+	}
+
+	CastInfo& getCast(AST::Node* node)
+	{
+		assert(this->casts.find(node) != this->casts.end());
+		return this->casts[node];
+	}
+
 	void addTypeLiteral(AST::Node* node, TypeRef&& type)
 	{
 		this->typeLiterals[node] = std::move(type);
@@ -67,6 +87,7 @@ struct ASTContext
 
 	TypeRef& getTypeLiteral(AST::Node* node)
 	{
+		assert(this->typeLiterals.find(node) != this->typeLiterals.end());
 		return this->typeLiterals[node];
 	}
 

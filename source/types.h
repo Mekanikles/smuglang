@@ -1530,9 +1530,11 @@ struct UnificationResult
 {
 	enum ChangeStatusFlag
 	{
-		NoUnification = 0x00,
+		CannotUnify = 0x00,
 		LeftChanged = 0x01,
 		RightChanged =  0x02,
+		LeftNeedsCast = 0x04,
+		RightNeedsCast = 0x08
 	};
 
 	struct PendingChange
@@ -1541,11 +1543,18 @@ struct UnificationResult
 		TypeRef& target;
 	};
 
+	struct PendingCast
+	{
+		TypeRef& source;
+		TypeRef& target;
+	};
+
 	vector<PendingChange> pendingChanges;
+	vector<PendingCast> pendingCasts;	
 	uint status;
 
 	UnificationResult()
-		: status(NoUnification)
+		: status(CannotUnify)
 	{}
 
 	UnificationResult(ChangeStatusFlag statusFlag)
@@ -1557,9 +1566,19 @@ struct UnificationResult
 		pendingChanges.emplace_back(PendingChange{ source, target });
 	}
 
+	void addPendingCast(TypeRef& source, TypeRef& target)
+	{
+		pendingCasts.emplace_back(PendingCast{ source, target });
+	}
+
 	operator bool() const
 	{
-		return status != NoUnification;
+		return status != CannotUnify;
+	}
+
+	bool castNeeded() const
+	{
+		return status & (LeftNeedsCast | RightNeedsCast);
 	}
 
 	void merge(UnificationResult&& other)
@@ -1572,6 +1591,14 @@ struct UnificationResult
 		}
 
 		other.pendingChanges.clear();
+
+		pendingCasts.reserve(pendingCasts.size() + other.pendingCasts.size());
+		for (auto& cast : other.pendingCasts)
+		{
+			pendingCasts.emplace_back(std::move(cast));
+		}
+
+		other.pendingCasts.clear();		
 	}
 
 	void apply()
@@ -1581,7 +1608,17 @@ struct UnificationResult
 			change.source.mergeInto(change.target);
 		}
 		pendingChanges.clear();
+
+		// TODO: do something about casts?
+		assert(pendingCasts.empty());
 	}
+};
+
+enum UnificationRules
+{
+	AllowChangeToBoth,
+	DisallowLeftChange,
+	DisallowRightChange
 };
 
 UnificationResult createLeftChange(TypeRef& left, TypeRef& right)
@@ -1598,33 +1635,61 @@ UnificationResult createRightChange(TypeRef& left, TypeRef& right)
 	return result;
 }
 
-UnificationResult generateMultiTypeUnification(TypeRef& leftType, TypeRef& rightType);
 
-UnificationResult generateTypeUnification(TypeRef& leftType, TypeRef& rightType)
+UnificationResult createLeftCast(TypeRef& left, TypeRef& right)
+{
+	UnificationResult result(UnificationResult::LeftNeedsCast);
+	result.addPendingCast(left, right);
+	return result;	
+}
+
+UnificationResult createRightCast(TypeRef& left, TypeRef& right)
+{
+	UnificationResult result(UnificationResult::RightNeedsCast);
+	result.addPendingCast(right, left);
+	return result;		
+}
+
+UnificationResult generateMultiTypeUnification(TypeRef& leftType, TypeRef& rightType, UnificationRules rules);
+
+UnificationResult generateTypeUnification(TypeRef& leftType, TypeRef& rightType, UnificationRules rules)
 {
 	TypeRef& innerLeftType = leftType.stripTrivialWrapperTypes();
 	TypeRef& innerRightType = rightType.stripTrivialWrapperTypes();
 
-	if (innerLeftType == innerRightType || innerRightType.isSubType(innerLeftType))
+	if (innerLeftType == innerRightType)
 	{
-		return createLeftChange(innerLeftType, innerRightType);
+		if (rules == DisallowLeftChange)
+			return createRightChange(innerLeftType, innerRightType);
+		else
+			return createLeftChange(innerLeftType, innerRightType);
+	}
+	else if (innerRightType.isSubType(innerLeftType))
+	{
+		if (rules == DisallowLeftChange)
+			return createLeftCast(innerLeftType, innerRightType);
+		else
+			return createLeftChange(innerLeftType, innerRightType);
 	}
 	else if (innerLeftType.isSubType(innerRightType))
 	{
-		return createRightChange(innerLeftType, innerRightType);
+		if (rules == DisallowRightChange)
+			return createRightCast(innerLeftType, innerRightType);
+		else	
+			return createRightChange(innerLeftType, innerRightType);
 	}
 
-	return generateMultiTypeUnification(innerLeftType, innerRightType);
+	return generateMultiTypeUnification(innerLeftType, innerRightType, rules);
 }
 
-bool unifyTypes(TypeRef& leftType, TypeRef& rightType)
+bool unifyTypes(TypeRef& leftType, TypeRef& rightType, UnificationRules rules = AllowChangeToBoth)
 {
-	auto result = generateTypeUnification(leftType, rightType);
+	auto result = generateTypeUnification(leftType, rightType, rules);
 	result.apply();
 	return (bool)result;
 }
 
-UnificationResult generateMultiTypeUnification(TypeRef& leftType, TypeRef& rightType)
+UnificationResult generateMultiTypeUnification(TypeRef& leftType, TypeRef& rightType, UnificationRules rules)
 {
 	UnificationResult result;
 
@@ -1637,7 +1702,7 @@ UnificationResult generateMultiTypeUnification(TypeRef& leftType, TypeRef& right
 	{
 		for (TypeRef& rightSubType : rightMultiType.types)
 		{
-			auto subResult = generateTypeUnification(leftSubType, rightSubType);
+			auto subResult = generateTypeUnification(leftSubType, rightSubType, rules);
 			if (subResult)
 			{
 				result.merge(std::move(subResult));

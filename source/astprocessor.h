@@ -375,11 +375,14 @@ struct ASTProcessor : AST::Visitor
 
 			node->expr->accept(this);
 			TypeRef& exprType = node->expr->getType(this->context);
-			const auto result = unifyTypes(*m_expectedReturnTypeStack.back(), exprType);
+			TypeRef& expectedType = *m_expectedReturnTypeStack.back();
+			auto result = generateTypeUnification(exprType, expectedType, DisallowRightChange);
 
-			// TODO: Handle implicit casts?
 			if (!result)
 				assert("Cannot unify types for return statement" && false);
+
+			assert(!result.castNeeded());
+			result.apply();
 		}
 		else
 		{
@@ -550,14 +553,13 @@ struct ASTProcessor : AST::Visitor
 					auto* field = structType.getFieldByName(memberName);
 					assert(field && "No member found by specified name");
 
-					// TODO: Should not be able to infer types for struct members?
 					// Infer type from assignment
 					TypeRef& exprType = node->expr->getType(this->context);
-					const auto result = unifyTypes(field->type, exprType);
+					const auto result = unifyTypes(exprType, field->type, DisallowRightChange);
 
 					// TODO: Handle implicit casts?
 					if (!result)
-						assert("Cannot unify types" && false);	
+						assert("Cannot unify types" && false);
 				}
 				else
 				{
@@ -573,14 +575,13 @@ struct ASTProcessor : AST::Visitor
 			assert(!arrBaseType->isTypeVariable() && "Cannot write to array access on type");
 			TypeRef& arrayElementType = arrAcc->getType(this->context);
 
-			// TODO: Should not be able to infer types for array access?
 			// Infer type from assignment
 			TypeRef& exprType = node->expr->getType(this->context);
-			const auto result = unifyTypes(arrayElementType, exprType);
+			const auto result = unifyTypes(exprType, arrayElementType);
 
 			// TODO: Handle implicit casts?
 			if (!result)
-				assert("Cannot unify types" && false);				
+				assert("Cannot unify types" && false);	
 		}	
 		else
 		{
